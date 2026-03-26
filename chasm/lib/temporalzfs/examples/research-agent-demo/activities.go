@@ -13,9 +13,9 @@ import (
 )
 
 // Activities holds the shared store and implements the 5 research agent activities.
-// Each activity opens an isolated TemporalZFS partition, verifies that all files from
-// the previous step survived (demonstrating durability), writes new files, and creates
-// an MVCC snapshot. On retry, the FS state is intact — no intermediate state is lost.
+// Each activity opens an isolated TemporalZFS partition, reads prior state from the
+// previous step's snapshot (guaranteeing a consistent view even if a prior attempt
+// left partial writes in HEAD), writes new files, and creates a CoW snapshot.
 type Activities struct {
 	baseStore store.Store
 	stats     *RunStats            // shared stats for real-time dashboard updates
@@ -158,14 +158,22 @@ func (a *Activities) Summarize(ctx context.Context, params WorkflowParams) (Step
 	}
 	defer f.Close()
 
-	// Read source filenames — verifies step 1's files survived.
+	// Open step-1 snapshot for reads — guaranteed consistent view even if a
+	// prior attempt left partial writes in HEAD.
+	snapFS, err := f.OpenSnapshot("step-1-research")
+	if err != nil {
+		return StepResult{}, fmt.Errorf("open snapshot step-1-research: %w", err)
+	}
+	defer snapFS.Close()
+
+	// Read source filenames from snapshot — verifies step 1's files survived.
 	sourcesDir := "/research/" + params.TopicSlug + "/sources"
-	entries, err := f.ReadDir(sourcesDir)
+	entries, err := snapFS.ReadDir(sourcesDir)
 	if err != nil {
 		return StepResult{}, fmt.Errorf("readdir %s: %w", sourcesDir, err)
 	}
 
-	// On retry: step 1's source files are still here — TemporalZFS is durable.
+	// On retry: step 1's source files are still here — read from snapshot, not HEAD.
 	if activity.GetInfo(ctx).Attempt > 1 {
 		a.emitEvent(ctx, params, 1, "Summarize", "retrying")
 		a.onRetry(ctx, len(entries), "step-1-research")
@@ -205,11 +213,16 @@ func (a *Activities) FactCheck(ctx context.Context, params WorkflowParams) (Step
 	}
 	defer f.Close()
 
-	// Verify step 2's summary file survived.
+	// Open step-2 snapshot — read prior state from known-good point.
 	topicDir := "/research/" + params.TopicSlug
-	priorFiles := countFiles(f, topicDir)
+	snapFS, err := f.OpenSnapshot("step-2-summary")
+	if err != nil {
+		return StepResult{}, fmt.Errorf("open snapshot step-2-summary: %w", err)
+	}
+	priorFiles := countFiles(snapFS, topicDir)
+	snapFS.Close()
 
-	// On retry: summary + sources from prior steps are intact.
+	// On retry: summary + sources from prior steps verified via snapshot.
 	if activity.GetInfo(ctx).Attempt > 1 {
 		a.emitEvent(ctx, params, 2, "FactCheck", "retrying")
 		a.onRetry(ctx, priorFiles, "step-2-summary")
@@ -243,11 +256,16 @@ func (a *Activities) FinalReport(ctx context.Context, params WorkflowParams) (St
 	}
 	defer f.Close()
 
-	// Verify prior steps' files survived.
+	// Open step-3 snapshot — read prior state from known-good point.
 	topicDir := "/research/" + params.TopicSlug
-	priorFiles := countFiles(f, topicDir)
+	snapFS, err := f.OpenSnapshot("step-3-factcheck")
+	if err != nil {
+		return StepResult{}, fmt.Errorf("open snapshot step-3-factcheck: %w", err)
+	}
+	priorFiles := countFiles(snapFS, topicDir)
+	snapFS.Close()
 
-	// On retry: sources + summary + fact-check from prior steps are intact.
+	// On retry: sources + summary + fact-check verified via snapshot.
 	if activity.GetInfo(ctx).Attempt > 1 {
 		a.emitEvent(ctx, params, 3, "FinalReport", "retrying")
 		a.onRetry(ctx, priorFiles, "step-3-factcheck")
@@ -281,11 +299,16 @@ func (a *Activities) PeerReview(ctx context.Context, params WorkflowParams) (Ste
 	}
 	defer f.Close()
 
-	// Verify prior steps' files survived.
+	// Open step-4 snapshot — read prior state from known-good point.
 	topicDir := "/research/" + params.TopicSlug
-	priorFiles := countFiles(f, topicDir)
+	snapFS, err := f.OpenSnapshot("step-4-report")
+	if err != nil {
+		return StepResult{}, fmt.Errorf("open snapshot step-4-report: %w", err)
+	}
+	priorFiles := countFiles(snapFS, topicDir)
+	snapFS.Close()
 
-	// On retry: all artifacts from prior steps are intact.
+	// On retry: all artifacts from prior steps verified via snapshot.
 	if activity.GetInfo(ctx).Attempt > 1 {
 		a.emitEvent(ctx, params, 4, "PeerReview", "retrying")
 		a.onRetry(ctx, priorFiles, "step-4-report")
