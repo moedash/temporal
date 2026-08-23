@@ -121,6 +121,8 @@ Stream (CHASM component; size is O(1) regardless of stream length)
 
 Payload bytes go to the stream's own branch and never enter the CHASM tree.
 
+A stream is not one branch but a sequence of them, one per fixed-size offset bucket. `history_node` partitions on `tree_id` alone, which is safe for Workflow History because history is capped and unsafe for a stream because it is not. Rolling to a new tree every `bucket_size` offsets keeps any one Cassandra partition bounded, and because the bucket is `offset / bucket_size` and the tree ID is derived from it, there is still no index to store.
+
 That last sentence is the design's main claim. It means the component does not grow with the stream, there is no segment-index to blow up mutable state, and **there is no dependency on CHASM partial reads** (`OSS-4917` and `OSS-4918`, both still `To Do`). The history-node store already does paged range reads; that is its job.
 
 ### 3.3 Guarantees
@@ -129,6 +131,7 @@ That last sentence is the design's main claim. It means the component does not g
 - **Exactly-once write**: an acknowledged append appears exactly once, under producer retries, shard failover, and concurrent producers.
 - **Durable before acknowledged.** No fire-and-forget tier. Durability is the reason to be on Temporal at all.
 - **Readers see a prefix.** A reader never sees a gap and never sees an item that a later reader will not see.
+- **Missing data is reported as loss, never as emptiness.** If committed data is gone, a read returns `DataLoss` rather than a short page. Silently reporting an empty stream is the worst failure a durable stream can have, because the consumer concludes the producer had nothing to say.
 - **At-least-once delivery to the reader, made exactly-once by the reader's cursor.** The reader owns its offset, so a duplicate poll is idempotent. In-workflow consumption is exactly-once outright, because the delivered range is recorded (§4.3).
 - **The server never sees plaintext.** Items are opaque blobs on the write path, in storage, and on the read path. The payload codec runs entirely in the SDK. This falls out of using the raw append and range-read paths, which never deserialize.
 - **Multiple topics per stream**, filtered at subscribe time, so cross-topic ordering is preserved for callers who want it.
@@ -217,7 +220,8 @@ Two properties fall out of putting the boundary at the workflow task:
 - **Close** is explicit, and automatic when the owning execution completes. Close seals the stream; it does not delete it. The owner link is on the business ID, so it survives continue-as-new.
 - **Retention** works like a workflow's. A closed stream stays readable through retention, then `DeleteHistoryBranch` reclaims it.
 - **Truncate** advances `BaseOffset` and calls `TrimHistoryBranch`. A reader below `BaseOffset` gets a distinguishable error carrying `BaseOffset`, so it can jump forward rather than fail. Cap-driven truncation is evaluated inline at the end of a successful append rather than by a background sweeper, and it is pinned by any registered in-workflow consumer's cursor.
-- **Continue-as-new** needs no handling. The stream is not in the workflow's history, so there is nothing to duplicate or drop.
+- **Continue-as-new.** A standalone stream needs no handling. An **attached** stream lives in a run that is about to be superseded, so its bounded state is copied to the successor and the old child is marked as redirecting to the new run. A long poll in flight follows the redirect and keeps its offset, since offsets are global across runs.
+- **Reset** rewinds the workflow but never the stream, because consumers may already have read past the reset point. The reset run inherits the *current* head, not the head as of the reset point. An append racing a reset conflicts on the current-run condition, so exactly one of them wins and the other retries.
 
 ## 6. Positioning and the throughput ceiling
 
@@ -263,6 +267,8 @@ Substantiating this table against a real workload is the point of the prototype.
 - **A pluggable external backend.** This is Option 7, and it is a legitimate product option with a working prototype behind it. It is not this design, because it moves durability outside Temporal, which the Native Streams 1-pager currently rules out as a principle. The two are not exclusive though: our read contract is append plus read-from-offset, the same contract Option 7's pluggable store expects, so a Temporal-native stream could sit behind Option 7's SDK model as one provider among several. `design-comparison.md` §4 argues that sequence is better than a fork.
 
 ## 9. Dependencies and risks
+
+**An event-sourcing boundary extension, needing sign-off.** Stream control state lives in CHASM and is not reconstructible from public Workflow History. That is deliberate and it is what keeps items out of history, but it is an exception to Temporal's event-sourcing model rather than an application of it: public history stays sufficient to reconstruct everything workflow code can observe, while stream control is auxiliary state that survives alongside it. This needs explicit History and CHASM owner approval and a `docs/architecture` note, not just a design review.
 
 **The one framework change.** `ChasmTree` (`service/history/interfaces/chasm_tree.go:19-53`) gives a component no way to contribute append-log batches at transaction close. `UpdateWorkflowExecutionRequest.UpdateWorkflowEvents` is already `[]*WorkflowEvents`, each carrying its own `BranchToken`, so multi-branch appends in one transaction are structurally supported; the tree just cannot reach them. This hook is what makes Paths A and B single-round-trip. It has an owner outside this project (Yichao, CHASM) and should be raised in week one. If it slips, both paths still work as two persistence calls with the same invariant and one extra round trip.
 

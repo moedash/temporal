@@ -188,7 +188,49 @@ There is a further advantage that only becomes visible next to Max's design. Bec
 
 ---
 
-## 6. What our design has that neither does
+## 6. The Codex design
+
+A fourth design, at `github.com/temporalio/temporal/streaming-{high-level,detailed}-design.md`. It is a design document, not running code, and it is by far the closest to ours: bounded CHASM control plane, append-only collection data plane, no stream events in Workflow History, stateless consumers with client-held cursors, long-poll on the CHASM notifier, durable-before-visible, and the same append-then-CAS visibility rule with transaction-chain selection. It reaches those independently, which is worth something on its own.
+
+Three differences of substance:
+
+- **It is workflow-attached only.** Standalone streams are an explicit non-goal, on the grounds that a standalone stream turns a Workflow publisher into a cross-execution write needing an outbox. We support both, and reach the same conclusion by a different route: a Workflow publishing to a stream it does not own uses the RPC, not a command, so no cross-execution transaction arises.
+- **It does bucket 1 only.** Pushing into a consuming Workflow is a non-goal, so there is no Path C equivalent.
+- **It uses a dedicated persistence facet**, like Johann's, rather than reusing `history_node`.
+
+### The flaw it found in ours
+
+Its §7.3 requires a bounded physical partition, with `partition_id = offset / partition_message_count`. Checking that against our design: `history_node` in Cassandra is `PRIMARY KEY ((tree_id), branch_id, node_id, txn_id)`, so **the partition key is `tree_id` alone**. Every node of a tree lives in one partition.
+
+That is safe for Workflow History because history is capped by `HistorySizeLimitError` and `HistoryCountLimitError`. It is not safe for a stream, which the 1-pager explicitly wants unbounded. Reusing `history_node` as-is inherits a partition layout whose safety depends on a cap we are deliberately removing. Large Cassandra partitions degrade compaction and read latency well before anything fails outright.
+
+We had not noticed this. It is the most useful thing in the document.
+
+The fix keeps the `history_node` reuse and stays O(1): roll to a new tree every `bucketSize` offsets, with `bucket = offset / bucketSize` and the tree ID derived deterministically from `(streamID, bucket)` via `uuid.NewSHA1`. No index, because the mapping is arithmetic. Reads spanning a boundary issue one range read per bucket, and whole-bucket truncation becomes `DeleteHistoryBranch` rather than per-row tombstones, which is the same benefit Codex gets from buckets.
+
+Bucketing does not weaken the transaction-chain protection, though the argument is not obvious and needs a test. Bucket boundaries are offset-aligned, so any stale node is either the bucket's first node, where it shares a node ID with the real first node and loses on transaction ID, or it is preceded within its bucket by valid nodes, where the chain rule applies as it does within a single tree.
+
+### The other gaps it exposed
+
+- **Continue-as-new for an attached stream.** Ours says continue-as-new needs no handling. That is true for a standalone stream and false for an attached one, where the component lives in a run that is about to be superseded. Codex copies the bounded state into the successor and marks the old child `REDIRECTED` with the new run ID, so an in-flight long poll follows the chain without losing its cursor. We had no answer.
+- **Reset.** Ours says the workflow rewinds and the stream does not, which is the right conclusion with none of the mechanism. Codex carries the latest stream state forward into the reset snapshot rather than the state at the reset point, and works through the append-versus-reset race on the current-execution condition. Ours had nothing on the race.
+- **Missing data reads as data loss, not as an empty stream** (invariant 3.2.6). Ours would return an empty range if branch data vanished, which is the worst possible failure for a durable stream. We get this more cheaply than Codex does, because our control state already holds the frontier: if a read returns fewer nodes than `HeadOffset` implies, that is `DataLoss`. Codex needs a separate manifest for it because their equivalent state can be rebuilt from history.
+- **Different content under a retried sequence must be rejected** (invariant 3.4.3). Ours returns the recorded offsets on a sequence match without comparing content, so a client bug silently drops data.
+- **The event-sourcing boundary needs explicit sign-off.** Both designs make stream control non-replayable auxiliary CHASM state. Codex names that as an architecture exception requiring History and CHASM owner approval plus a `docs/architecture` update. Ours does the same thing without flagging it as a governance item.
+
+### Where we disagree
+
+Codex defers group commit until measurement proves it necessary; we took it from Johann. Johann's own back-of-envelope says it is load-bearing on Cassandra, and Cassandra is out of prototype scope, so deferring the implementation while keeping the design is the honest position. Moving ours to deferred.
+
+On the facet, Codex's §7.1 gives five reasons for a dedicated store. Bucketing answers two of them (bounded partitions, truncation on buckets rather than branches). One does not apply to us, since our tree is not tied to a run. We verified the raw paths do not assume History Events. The remaining reason, different replication and garbage-collection ownership metadata, is real and deferred. So the facet case is weaker after bucketing, but not zero, and it is the strongest remaining argument against our storage choice.
+
+### What we do not take
+
+The manifest `PREPARED` / `ATTACHED` / `CLOSED` state machine and the quarantined-child sentinel. The invariant behind them is right and we are adopting it; the machinery exists to solve a problem we do not have, because our head authority is not reconstructible from history. Adding a two-phase manifest attachment would put a retryable failure window into the middle of every first append for a diagnostic we can get by comparing a read against the frontier.
+
+---
+
+## 7. What our design has that the others do not
 
 Stated plainly so it can be attacked:
 
@@ -202,7 +244,7 @@ And the honest counterweight: **ours is a design, theirs are working code.** Joh
 
 ---
 
-## 7. Changes we are making
+## 8. Changes we are making
 
 Applied to both design documents.
 
@@ -222,8 +264,16 @@ Applied to both design documents.
 | 12 | State the codec property: the server never sees plaintext. | Johann §3a |
 | 13 | Explicit flush control message from the producer, so a consumer does not wait out an idle timeout. | Option 7 |
 | 14 | Per-topic sequence number carried alongside the global offset. | Option 7 |
+| 15 | **Offset bucketing.** Roll to a new history-node tree every N offsets so a Cassandra partition stays bounded. Fixes a real flaw. | Codex §7.3 |
+| 16 | Continue-as-new for an attached stream: copy bounded state to the successor and mark the old child redirected so pollers follow the chain. | Codex §11.1 |
+| 17 | Reset carry-forward: the reset run inherits the current head, not the head at the reset point, with the append-versus-reset race resolved on the current-execution condition. | Codex §11.2 |
+| 18 | A missing committed node is `DataLoss`, never an empty stream. | Codex invariant 3.2.6 |
+| 19 | Reject a retried sequence carrying different content rather than returning the recorded offsets. | Codex invariant 3.4.3 |
+| 20 | Treat the event-sourcing boundary extension as a named review gate needing History and CHASM owner sign-off. | Codex §6.4 |
+| 21 | Move group commit from the first cut to deferred; keep the design, drop it from the build. | Codex §18.3 |
+| 22 | Stream and topic names must never be used as metric tags. | Codex §16.1 |
 
-## 8. What we are deliberately not taking
+## 9. What we are deliberately not taking
 
 - **A pluggable external backend.** Complementary product option, not this design. Our read API shape would let it sit behind the same client API later.
 - **A dedicated `stream_segments` facet.** Section 5 is the argument.
@@ -231,7 +281,7 @@ Applied to both design documents.
 - **Push-based in-workflow delivery via signals.** Superseded by the Bellevue no-user-dedup requirement.
 - **Marker annotation grammar with runs and segments.** Not needed when the delivery boundary is the workflow task boundary.
 
-## 9. What would change our mind
+## 10. What would change our mind
 
 - The persistence argument in §5 has now been checked with running tests (`common/persistence/tests/history_store_stream_log.go`, passing on SQLite and Postgres): blobs round-trip opaquely on a non-run branch, and the transaction-ID chain drops a stale node from a shrinking retry on both the parsing and raw read paths. A negative control confirms the test is not passing vacuously. So the specific objection quoted in §5 does not hold on OSS storage.
 - What that does **not** cover is the SaaS layer. `saas-temporal/walker/` overrides `HistoryBranchUtil`, so minting branches whose tree ID is not a run ID still needs a read of that code. If it turns out to be blocked there, the fallback is Johann's dedicated facet, and most of the rest of our design carries over unchanged.

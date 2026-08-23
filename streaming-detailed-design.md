@@ -94,6 +94,14 @@ message StreamState {
   // Bumped on ownership change so a stale producer's write fails.
   int64 owner_epoch = 7;
 
+  // Immutable once set. Offsets are bucketed into separate history-node trees
+  // so no Cassandra partition grows with the stream; see 3.1a.
+  int64 bucket_size = 11;
+
+  // Set when a successor run takes ownership, so an in-flight poll can follow
+  // the chain instead of stalling on a superseded run; see 9a.
+  string redirect_run_id = 12;
+
   // producer_id -> last accepted (seq, first_offset). Bounded by producer count.
   map<string, ProducerCursor> producers = 8;
   // Registered in-workflow consumers; bounds truncation. Bounded by subscriber count.
@@ -106,6 +114,9 @@ message ProducerCursor {
   int64 seq = 1;
   int64 first_offset = 2;   // replayed on a duplicate append
   int64 count = 3;
+  // Distinguishes a genuine retry from a client reusing a sequence with
+  // different content, which must be rejected rather than deduplicated.
+  bytes content_hash = 6;
   // Set by FinishWriting. Ends this producer's writes without closing
   // the stream for anyone else.
   bool fenced = 4;
@@ -168,15 +179,37 @@ branchToken, err := shard.GetExecutionManager().GetHistoryBranchUtil().NewHistor
 
 The OSS implementation (`common/persistence/history_branch_util.go:49`) ignores namespace, workflow, and run, and returns `{TreeId, BranchId, Ancestors}`. Passing them anyway keeps the SaaS override (Walker) able to do whatever it needs. See §11.
 
+### 3.1a Offset bucketing
+
+`history_node` in Cassandra is `PRIMARY KEY ((tree_id), branch_id, node_id, txn_id)`, so the partition key is `tree_id` alone and every node of a tree shares one partition. That is safe for Workflow History because history is capped by `HistorySizeLimitError` and `HistoryCountLimitError`. A stream is deliberately uncapped, so a single tree per stream would grow a Cassandra partition without bound.
+
+So a stream is not one tree. It is a sequence of trees, one per fixed-size offset bucket:
+
+```
+bucket   = offset / bucket_size
+treeID   = uuid.NewSHA1(streamNamespaceUUID, []byte(streamID + "/" + bucket))
+branchID = uuid.NewSHA1(streamNamespaceUUID, []byte(streamID + "/" + bucket + "/b"))
+```
+
+Both are derived arithmetically, so there is no index to store and no index to grow. `bucket_size` is chosen by the server at creation and is immutable for the stream's life, because changing it would renumber existing offsets.
+
+Consequences:
+
+- A batch never crosses a bucket boundary. Split at the boundary before staging.
+- A read spanning buckets issues one range read per bucket and concatenates.
+- Whole-bucket truncation is `DeleteHistoryBranch` on that bucket's token, which reclaims a whole partition instead of leaving per-row tombstones. Partial truncation inside the live bucket just advances `base_offset`.
+
+**Bucketing does not weaken the chain rule of §3.5**, but the argument is worth stating because it is not obvious. Reads restart the transaction chain per tree, so in principle a stale node could be accepted as a bucket's first node. It cannot, because bucket boundaries are offset-aligned: a stale node is either the bucket's first node, in which case it shares a node ID with the real first node and loses on transaction ID, or it is preceded within its bucket by valid nodes, in which case the chain rule applies exactly as it does within one tree. This needs a test, listed in §15.
+
 ### 3.2 Offset to node ID
 
 `serializeAppendRawHistoryNodesRequest` rejects `nodeID <= 0` with "eventID cannot be less than 1" (`common/persistence/history_manager.go:429-433`). So:
 
 ```
-nodeID = offset + 1
+nodeID = (offset % bucket_size) + 1
 ```
 
-API offsets start at 0. This mapping is internal and must never leak into the wire protocol.
+API offsets start at 0 and are global across buckets. The node ID is bucket-relative, which is why the `+ 1` and the modulo both matter. This mapping is internal and must never leak into the wire protocol.
 
 ### 3.3 Append
 
@@ -266,7 +299,7 @@ AddMessages(namespace, stream_id, producer_id?, seq?, expected_offset?, owner_ep
 Handler calls `chasm.UpdateComponent(ctx, ref, (*Stream).AddMessages, req)`. Inside the transition, in this order:
 
 1. `Closed` -> `FailedPrecondition` with reason `StreamClosed`.
-2. **Dedup.** If `producer_id` set and `producers[producer_id].seq >= seq`, return the recorded `first_offset` and `count` without appending. Idempotent retry.
+2. **Dedup.** If `producer_id` is set and `producers[producer_id].seq == seq`, compare `content_hash`. Matching content returns the recorded `first_offset` and `count` without appending. **Differing content is rejected** with `InvalidArgument`, because silently returning the old offsets would drop the caller's data and look like success. A stale or skipped sequence is rejected with the last accepted sequence in the error details so the caller can resynchronise.
 3. **Write fence.** If `producers[producer_id].fenced` -> `FailedPrecondition` with reason `ProducerFinished`.
 4. **Ownership fence.** If `owner_epoch` supplied and below `state.owner_epoch`, return `FailedPrecondition` with reason `ProducerFenced`.
 5. **Compare-and-append.** If `expected_offset` supplied and it differs from `head_offset`, return `AlreadyExists` carrying `head_offset` so the caller can resynchronise.
@@ -277,7 +310,9 @@ Handler calls `chasm.UpdateComponent(ctx, ref, (*Stream).AddMessages, req)`. Ins
 
 Acknowledge after the transaction commits. `first_offset` is the offset of the first message; the caller derives per-message offsets by position.
 
-### 4.1a Group commit
+### 4.1a Group commit (designed, deferred)
+
+**Not in the first cut.** The serialized one-transition-per-append path is easier to reason about and to prove, and the case for group commit rests on Cassandra numbers we are not measuring in this prototype. The design is recorded here so the public offset contract does not have to change when it lands.
 
 A stream linearizes through one CHASM execution, so its ceiling is the transition rate on that execution. On Cassandra a transition is a lightweight transaction, and per-partition LWT throughput is the binding constraint.
 
@@ -315,7 +350,8 @@ Topic filtering forces the server to decode the batch envelope (not the payloads
 
 1. `from_offset < base_offset` -> `OutOfRange` with reason `Truncated`, carrying `base_offset` so the reader can jump forward rather than fail.
 2. `from_offset > head_offset` -> `InvalidArgument`.
-3. `from_offset < head_offset`: serve. Tail cache first (§6); on miss, `ReadRawHistoryBranch`. Trim to `max_items` and `max_bytes`. Return.
+3. `from_offset < head_offset`: serve. Tail cache first (§6); on miss, `ReadRawHistoryBranch` across the buckets the range spans. Trim to `max_items` and `max_bytes`. Return.
+   **If the read returns fewer messages than `[from_offset, head_offset)` implies and the shortfall is at or above `base_offset`, return `DataLoss`, never a short or empty page.** Committed data that has gone missing is the worst failure a durable stream can have, and reporting it as an empty stream lets a consumer conclude the producer simply had nothing to say. The frontier in the component is what makes this checkable without a separate manifest.
 4. `from_offset == head_offset` and `closed`: return empty with `closed = true`.
 5. `from_offset == head_offset`, not closed, `wait_new_messages`: long-poll (§4.4).
 6. Otherwise return empty immediately.
@@ -517,6 +553,42 @@ That is the single intentional exception to "publishing never wakes a workflow".
 
 ---
 
+## 8a. Run transitions for an attached stream
+
+A standalone stream is unaffected by anything the workflow does. An attached stream lives in the workflow's execution, so a run transition moves it, and a reader addressed at the old run has to be able to follow.
+
+### 8a.1 Continue-as-new, retry, cron
+
+Successor creation already persists the old-run mutation and the new-run snapshot as one update. The stream rides that:
+
+1. Apply any `AddStreamMessages` commands before the closing command. A stream command after a closing command is invalid.
+2. Copy the bounded state into an equivalent child under the successor root, preserving stream ID, first execution run ID, `base_offset`, `head_offset`, `last_txn_id`, `bucket_size`, and the producer map.
+3. Set `redirect_run_id` on the old child to the successor's run ID.
+4. Persist old mutation, new snapshot, staged log appends, and the current-run pointer together.
+
+Continue-as-new does not close the stream, and an append in the same workflow task as the continue-as-new is carried at its post-append head.
+
+A poll holding a reference to the old run sees `redirect_run_id` set, follows it, and keeps its offset. Offsets are global across runs, so nothing about the cursor changes. The old child stays as a redirect target through retention, which is what stops an in-flight long poll from stalling on a superseded run.
+
+### 8a.2 Reset
+
+Reset rebuilds workflow state from an earlier point. It must not rewind the stream, because consumers may already have read past that point, and offsets never decrease.
+
+Stream commands emit no history events, so replay cannot reconstruct stream state. Reset therefore carries it forward explicitly:
+
+1. Take the current execution's lock through the existing reset path.
+2. Rebuild the target mutable state from history.
+3. Read the current run's stream children under that lock.
+4. Replace any replay-derived stream children in the reset snapshot with copies of the **current** state, not the state as of the reset point.
+5. Mark the replaced run's streams redirected to the reset run.
+6. Commit through the existing conflict-resolution request.
+
+An append racing a reset conflicts on the current run's database condition, so one of them retries. If the append commits first, the reset copies the advanced head. If the reset commits first, the append follows the redirect and lands on the reset run. There is no interleaving in which the reset becomes current with a head older than an acknowledged append.
+
+Work repeated after a reset appends new messages at new offsets. The server does not try to detect that they are semantically the same as earlier ones; the producer metadata is there so the application can.
+
+---
+
 ## 9. Lifecycle
 
 | Operation | Mechanism |
@@ -530,7 +602,8 @@ That is the single intentional exception to "publishing never wakes a workflow".
 | Truncate, explicit | `TrimHistoryBranch` plus advancing `base_offset`, bounded by §8.4 |
 | Truncate, cap-driven | `max_items` / `max_bytes` evaluated inline at the end of a successful append (§4.1 step 9). No sweeper: the append transition is already writing, so folding the check into it costs nothing and keeps the cap tight |
 | Retention | Side-effect task at `close_time + retention`, then `DeleteHistoryBranch` and `chasm.DeleteExecution` |
-| Continue-as-new | No handling required; the stream is not in the workflow's history |
+| Continue-as-new | Standalone: nothing to do. Attached: copy state to the successor and redirect the old child (§8a.1) |
+| Reset | Carry the current head forward, do not rewind (§8a.2) |
 
 Close seals, it does not delete. A closed stream stays readable through retention, which is what removes the shutdown handshake that Workflow Streams needs today.
 
@@ -556,6 +629,11 @@ Archival is out of scope, matching non-workflow CHASM executions today, which ta
 | Batch exceeds `transactionSizeLimit` | Split across nodes inside the transition, before commit. |
 | One member of a group commit fails validation | Rejected individually; the rest of the group commits (§4.1a). |
 | Subscribed workflow's task carries no new messages | An empty range is still recorded, so replay reproduces the observation (§8.2). |
+| Retried sequence carries different content | Rejected with `InvalidArgument`. Never deduplicated into a silent data drop (§4.1). |
+| Committed node missing under the frontier | `DataLoss`, never a short page (§4.2). |
+| Poll addressed at a run that continued as new | Follows `redirect_run_id` and keeps its offset (§8a.1). |
+| Append races a reset | Conflicts on the current-run condition; one side retries and follows the redirect (§8a.2). |
+| Stream outgrows one Cassandra partition | Cannot happen; offsets roll to a new tree every `bucket_size` (§3.1a). |
 
 ---
 
@@ -588,6 +666,7 @@ This needs a read of `saas-temporal/walker/` and a conversation with that team b
 | `stream.longPollTimeout` | 20s | Matches history long-poll convention |
 | `stream.longPollBuffer` | 3s | Deadline buffer |
 | `stream.maxBatchBytes` | 2MB | Bounded by `transactionSizeLimit` |
+| `stream.bucketSize` | 100000 | Messages per history-node tree (§3.1a). Immutable per stream once created; changing the default affects new streams only |
 | `stream.maxMessagesPerPoll` | 1000 | Read page bound |
 | `stream.maxBytesPerPoll` | 4MB | Read page bound |
 | `stream.tailCacheBytesPerStream` | 1MB | Fan-out cache |
@@ -612,6 +691,9 @@ The claims in the high-level design are unmeasured, so the prototype has to emit
 | append to reader-receipt latency, p50 and p99 | the 100ms batching bar |
 | tail-cache hit rate | tests the fan-out claim |
 | stream count, bytes, and items per namespace | capacity planning and, later, pricing |
+| long-poll wakes per delivered message | the CHASM notifier is execution-scoped, so an attached stream's pollers wake on unrelated workflow changes. Wake amplification is a real risk and needs measuring, not assuming |
+
+**Stream and topic names must never be metric tags.** They are user-supplied and unbounded, so tagging on them is a cardinality incident waiting to happen.
 
 ---
 
@@ -633,13 +715,15 @@ The claims in the high-level design are unmeasured, so the prototype has to emit
 **Storage-level** (against the real `history_node` store, `common/persistence/tests`):
 - **The shrinking-retry case from §3.5.** Write nodes at 100 and 110 under `T1`, then node 100 alone under `T2`, advance the frontier to 105, write node 105 under `T3`, and assert a read of `[100, 120)` never returns the node at 110. This is the single most important test in the suite: it is the case that decides whether reusing `history_node` is sound, and it is the objection an external reviewer will raise first.
 - `TrimHistoryBranch` with the committed frontier reclaims orphans and leaves the valid chain intact.
+- **Bucket-boundary staleness.** The §3.5 shrinking-retry layout, arranged so the abandoned attempt straddles a bucket boundary and the stale node is the first node of the next bucket. Asserts the chain rule still rejects it once the frontier moves past. This is the test behind the claim in §3.1a that bucketing is safe, and it is the one most likely to surprise us.
 
 **Functional** (`tests/stream_test.go`, against SQLite and Postgres):
 - Produce and consume end to end, single and many subscribers.
 - Long-poll wakes on append and returns empty on soft timeout.
 - Reader below `base_offset` gets `OutOfRange` with a usable floor.
 - Stream stays readable after the owning workflow closes.
-- Continue-as-new leaves the stream unaffected.
+- Continue-as-new: a poll in flight across the boundary follows the redirect and returns a contiguous offset sequence with no gap and no repeat.
+- Reset: the reset run inherits the current head, and an append racing the reset ends up on exactly one of them.
 - Paths A and C using `tests/testcore/taskpoller.go:29`, whose `WorkflowTaskHandler func(task) ([]*commandpb.Command, error)` lets a test emit `AddStreamMessages` and read the attached slice directly. **No SDK fork is needed to prove either path.**
 
 **Durability:**
