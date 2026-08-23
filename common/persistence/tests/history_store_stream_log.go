@@ -95,10 +95,10 @@ func (s *HistoryEventsSuite) eventIDsOf(events []*historypb.HistoryEvent) []int6
 	return ids
 }
 
-// The store must round-trip a node blob it cannot parse. A stream stores
-// application payloads here, so any attempt to interpret the bytes as history
-// events would reject them.
-func (s *HistoryEventsSuite) TestStreamLog_BlobIsOpaque() {
+// TestStreamLogBlobIsOpaque checks the store round-trips a node blob it cannot
+// parse. A stream keeps application payloads here, so any attempt to interpret
+// the bytes as history events would reject them.
+func (s *HistoryEventsSuite) TestStreamLogBlobIsOpaque() {
 	branchToken := s.newLogBranch()
 
 	payload := []byte("not a History proto \x00\x01\x02 arbitrary stream bytes")
@@ -115,15 +115,16 @@ func (s *HistoryEventsSuite) TestStreamLog_BlobIsOpaque() {
 	s.Equal(payload, blobs[0].Data)
 }
 
-// A retry that writes fewer nodes than the attempt it replaces leaves a stale
-// node past the retry's extent. Once later appends move the frontier beyond it,
-// clipping the read range no longer hides it, so the store's transaction-ID
-// chain has to reject it.
+// TestStreamLogShrinkingRetryDropsStaleNode covers the case where a retry writes
+// fewer nodes than the attempt it replaces, leaving a stale node past the
+// retry's extent. Once later appends move the frontier beyond it, clipping the
+// read range no longer hides it, so the store's transaction-ID chain has to
+// reject it.
 //
 // Layout: node 1 commits, then a failed attempt writes nodes 11 and 13, then a
 // smaller retry writes node 11 alone, then node 12 commits. Node 13 is stale
 // and now sits below the frontier.
-func (s *HistoryEventsSuite) TestStreamLog_ShrinkingRetryDropsStaleNode() {
+func (s *HistoryEventsSuite) TestStreamLogShrinkingRetryDropsStaleNode() {
 	branchToken := s.newLogBranch()
 
 	committed := s.newHistoryEvents([]int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 100, 0)
@@ -157,10 +158,11 @@ func (s *HistoryEventsSuite) TestStreamLog_ShrinkingRetryDropsStaleNode() {
 	s.Equal([]int64{1, 11, 12}, nodeIDs, "raw reads must drop the stale node too")
 }
 
-// Trimming against the committed frontier reclaims the stale nodes without
-// disturbing the valid chain. This is what lets a stream clean up after a failed
-// append promptly instead of waiting on a background scavenger.
-func (s *HistoryEventsSuite) TestStreamLog_TrimReclaimsStaleNodes() {
+// TestStreamLogTrimReclaimsStaleNodes checks that trimming against the committed
+// frontier reclaims stale nodes without disturbing the valid chain. This is what
+// lets a stream clean up after a failed append promptly instead of waiting on a
+// background scavenger.
+func (s *HistoryEventsSuite) TestStreamLogTrimReclaimsStaleNodes() {
 	branchToken := s.newLogBranch()
 
 	committed := s.newHistoryEvents([]int64{1, 2, 3}, 100, 0)
