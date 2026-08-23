@@ -226,6 +226,8 @@ with the contract stated in its own comment at `:1063-1066`: "event batches with
 
 **Requirement this places on us:** transaction IDs must come from the shard's monotonic generator, never from a per-stream counter, and each attempt must take a fresh one. Reusing a transaction ID across attempts breaks the chain rule.
 
+**Verified.** `TestStreamLog_ShrinkingRetryDropsStaleNode` in `common/persistence/tests/history_store_stream_log.go` builds exactly the layout above and asserts the stale node is absent from both `ReadHistoryBranch` and `ReadRawHistoryBranch`. Passing on SQLite and Postgres. The raw assertion is the load-bearing one: `ReadHistoryBranch` has a contiguity check that independently catches a leak, and a stream never goes through it.
+
 There is no window in which a reader sees a gap, and no window in which two readers disagree about a prefix.
 
 ### 3.6 Orphan reclamation
@@ -650,7 +652,7 @@ The benchmark is the deliverable that makes the September 14 decision possible. 
 | Stage | Content | Notes |
 |---|---|---|
 | 0 | Baseline harness and measurements | Nothing to compare against without it |
-| 0b | **Storage-level spike** | Prove blob opacity and the §3.5 shrinking-retry case directly against `history_node`, before writing any component code. Roughly a day, and it de-risks the whole persistence argument. If it fails, the fallback is a dedicated facet and most of the rest of the design carries over |
+| 0b | **Storage-level spike** | **Done.** `common/persistence/tests/history_store_stream_log.go`, passing on SQLite and Postgres, with a negative control. Blob opacity and the §3.5 shrinking-retry case both hold |
 | 1 | Component, log helpers, unit tests | |
 | 1b | CHASM transaction hook (§5) | Raise with the CHASM owner in week one; has a fallback |
 | 2 | RPC surface and wiring | `service/frontend/service.go:507`, `service/frontend/fx.go`, `common/api/metadata.go`, `service/frontend/configs/quotas.go` |

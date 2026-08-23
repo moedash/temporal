@@ -188,6 +188,7 @@ Applied to both design documents.
 
 ## 9. What would change our mind
 
-- If reusing `history_node` turns out to be blocked by something in the SaaS storage layer (`saas-temporal/walker/` overrides `HistoryBranchUtil`), the fallback is Johann's dedicated facet, and most of the rest of our design carries over unchanged.
+- The persistence argument in §5 has now been checked with running tests (`common/persistence/tests/history_store_stream_log.go`, passing on SQLite and Postgres): blobs round-trip opaquely on a non-run branch, and the transaction-ID chain drops a stale node from a shrinking retry on both the parsing and raw read paths. A negative control confirms the test is not passing vacuously. So the specific objection quoted in §5 does not hold on OSS storage.
+- What that does **not** cover is the SaaS layer. `saas-temporal/walker/` overrides `HistoryBranchUtil`, so minting branches whose tree ID is not a run ID still needs a read of that code. If it turns out to be blocked there, the fallback is Johann's dedicated facet, and most of the rest of our design carries over unchanged.
 - If orphan volume under real retry rates is worse than the eager trim can keep up with, the sweeper comes back.
 - If measured LWT cost per publish does not come out at 1, the whole persistence argument needs rechecking.

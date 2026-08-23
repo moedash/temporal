@@ -266,7 +266,12 @@ Substantiating this table against a real workload is the point of the prototype.
 
 **The one framework change.** `ChasmTree` (`service/history/interfaces/chasm_tree.go:19-53`) gives a component no way to contribute append-log batches at transaction close. `UpdateWorkflowExecutionRequest.UpdateWorkflowEvents` is already `[]*WorkflowEvents`, each carrying its own `BranchToken`, so multi-branch appends in one transaction are structurally supported; the tree just cannot reach them. This hook is what makes Paths A and B single-round-trip. It has an owner outside this project (Yichao, CHASM) and should be raised in week one. If it slips, both paths still work as two persistence calls with the same invariant and one extra round trip.
 
-**Blob framing.** The design assumes the raw history-node paths (`AppendRawHistoryNodes` / `ReadRawHistoryBranch`) treat the blob as opaque. If any surrounding machinery insists on `historypb.History` framing, items get wrapped in a synthetic event. This needs verifying before implementation starts, and it is cheap to verify.
+**Blob framing and orphan rejection: verified.** Both properties the storage choice rests on now have running tests (`common/persistence/tests/history_store_stream_log.go`), passing on SQLite and Postgres:
+
+- an arbitrary non-proto blob round-trips byte-identical on a branch whose tree ID is not a run ID;
+- a stale node left by a shrinking retry is dropped once the frontier moves past it, on both the parsing and the raw read path.
+
+The second was checked with a negative control: giving the stale node a higher transaction ID makes the test fail, so it is not passing vacuously. One detail that changes nothing but is worth knowing: the contiguity check that catches the bad case lives on the parsing path, which a stream does not use, so for streams the transaction-ID chain is the only defence. It holds, and the raw-path assertion covers it.
 
 **Walker.** OSS `NewHistoryBranch` ignores namespace, workflow, and run, but the interface accepts them because the SaaS storage layer uses them. Minting branches that are not tied to a run needs a check against `saas-temporal/walker/` before this goes past prototype.
 
