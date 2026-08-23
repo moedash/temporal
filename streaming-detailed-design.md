@@ -52,6 +52,18 @@ message StreamMessage {
   // (workflow_id, run_id, original_run_id, attempt). Off by default.
   map<string, temporal.api.common.v1.Payload> metadata = 2;
   string topic = 3;
+  // Position within this topic. The global offset orders the whole stream;
+  // this lets a consumer reason about one topic without decoding the rest.
+  int64 topic_sequence = 4;
+  // Ordinary payload, or an in-band control marker such as a flush.
+  StreamMessageKind kind = 5;
+}
+
+enum StreamMessageKind {
+  STREAM_MESSAGE_KIND_UNSPECIFIED = 0;
+  STREAM_MESSAGE_KIND_DATA = 1;
+  // Producer signalling a delivery boundary; see 4.1b.
+  STREAM_MESSAGE_KIND_FLUSH = 2;
 }
 
 // One append is one batch, and one batch is one history node.
@@ -279,6 +291,16 @@ Combined with clients batching several items into one call, this is what keeps a
 
 `producer_id` and `expected_offset` are alternative idempotency mechanisms. `producer_id` suits a retrying activity; `expected_offset` suits a caller that already tracks position. Supplying neither gives at-least-once, which is a valid choice for a caller that does not care.
 
+### 4.1b Flush
+
+A producer can append a `STREAM_MESSAGE_KIND_FLUSH` marker to say "the turn is finished, deliver what you have". It carries no payload and consumes one offset like any other message.
+
+It matters for Path C. Without it, a consumer that has drained the current slice has no way to distinguish "the producer is still generating" from "the producer is done", and the only remaining signal is a timeout. An LLM turn has a natural end, the producer knows when it happens, and making it say so removes a tuning knob rather than adding one.
+
+The server does not interpret flush beyond delivering it. Whether a flush ends an iteration is the consuming application's decision, which keeps the semantics out of the server and matches leaving topic meaning to the application.
+
+Note this is a delivery hint, not a lifecycle event. It is weaker than `FinishWriting` (which fences a producer) and much weaker than `CloseStream` (which seals the stream). All three exist because they answer different questions: "this turn is done", "I am done", "the stream is done".
+
 ### 4.2 `PollMessages`
 
 ```
@@ -474,6 +496,14 @@ This is the one place where a consumer constrains the stream, and it is unavoida
 
 The interlock covers deliberate truncation. It cannot cover retention expiry on a stream whose consumer outlives it, or out-of-band deletion. If replay finds a recorded range below `base_offset`, the workflow task **fails retryably** with a distinct error rather than raising a nondeterminism error. The distinction matters operationally: a nondeterminism error looks like a code bug and gets triaged as one, while "the stream data this workflow needs is gone" is an infrastructure condition with a different fix. An operator can restore or extend retention and the workflow proceeds.
 
+### 8.4a The alternative: holding the task open
+
+Option 7 in the canonical options doc solves the same problem by keeping the workflow task open and reading an external store directly inside it, completing when the stream is idle or a flush arrives. It is cheaper, because no data enters Temporal, and it needs no server work.
+
+The structural difference is where the delivery boundary sits. Ours is the workflow task boundary, which is already durable and already recorded, so replay reproduces it for free. Option 7's boundary is wherever the reader happened to be when the task ended, so it has to be reconstructed: stream-empty markers, and per its own prototype's ADR-018, the number of drains as well, because `wait_condition` evaluates once per activation.
+
+The cost of our choice is a workflow task per slice instead of one long task. The benefit is bounded task duration, which keeps us clear of the workflow-task timeout question (gap K3, still open) and avoids pinning a worker slot for the length of an LLM response. `design-comparison.md` §4 has the full comparison.
+
 ### 8.5 Bounded attachment and the wake exception
 
 The attached slice is capped by **both** `stream.maxConsumeBytesPerTask` and `stream.maxConsumeItemsPerTask`. Bytes alone is not enough: a burst of many tiny messages stays under a byte cap while producing a slice large enough to make one task's drain unboundedly long. Whichever limit binds first, attach a prefix, record only that range, and schedule a follow-up workflow task.
@@ -564,6 +594,7 @@ This needs a read of `saas-temporal/walker/` and a conversation with that team b
 | `stream.tailCacheBytesPerShard` | 256MB | Aggregate bound |
 | `stream.maxConsumeBytesPerTask` | 1MB | Path C attachment bound |
 | `stream.maxConsumeItemsPerTask` | 1000 | Path C attachment bound; binds where messages are tiny |
+| `stream.deliverOnFlush` | true | Cut a Path C slice at a flush marker rather than only at the size bounds |
 | `stream.maxGroupCommitSize` | 16 | Appends coalesced into one transition (§4.1a) |
 | `stream.maxSubscribersPerStream` | 0 | 0 = unbounded; present as a safety valve |
 

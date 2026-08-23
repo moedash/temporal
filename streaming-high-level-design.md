@@ -181,7 +181,7 @@ The marginal cost of publishing is one extra blob in a write that was already ha
 
 ### 4.3 Path C: the workflow consumes a stream
 
-This is the case the 2026-07-23 discussion recorded as having no proposed solution, and the Bellevue session deferred. The design admits an answer.
+The 2026-07-23 sync recorded no proposed solution for this and the Bellevue session deferred it. That has since changed: **Option 7** in the [canonical options doc](https://app.notion.com/p/3b28fc567738812f8c67ca3ebdf9ce38), added from the 2026-08-14 call, targets bucket 2 by holding a workflow task open and reading an external store directly. So what follows is an alternative to Option 7, not the only answer on the table. `design-comparison.md` §4 puts the two side by side.
 
 **Record the cursor in history, not the data.**
 
@@ -260,7 +260,7 @@ Substantiating this table against a real workload is the point of the prototype.
 - **A non-durable tier for token deltas.** Splitting durable application events from ephemeral deltas reintroduces exactly the tuning knob we are trying to remove. If the cost work lands, the split is unnecessary.
 - **Automatic rewind handling.** On workflow retry or reset the stream keeps appending; the rewind surfaces as item metadata. Hiding it from the user would be worse than exposing it.
 - **Cross-shard atomic publish** to a stream the producer does not own. Producers use the RPC, which is already idempotent by offset. Two-phase commit only becomes necessary if the publish must be atomic with the *producer's own* state transition, and token streaming does not need that.
-- **A pluggable external backend.** A legitimate product option for customers who want a different price for volume, and Max's prototype shows it works. It is not this design, because it moves durability outside Temporal. Our read API is offset plus long-poll, which is the shape a backend adapter would expose, so the two could sit behind one client API later.
+- **A pluggable external backend.** This is Option 7, and it is a legitimate product option with a working prototype behind it. It is not this design, because it moves durability outside Temporal, which the Native Streams 1-pager currently rules out as a principle. The two are not exclusive though: our read contract is append plus read-from-offset, the same contract Option 7's pluggable store expects, so a Temporal-native stream could sit behind Option 7's SDK model as one provider among several. `design-comparison.md` §4 argues that sequence is better than a fork.
 
 ## 9. Dependencies and risks
 
