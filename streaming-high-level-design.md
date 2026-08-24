@@ -7,7 +7,7 @@
 | Project | D1, Native streaming (Win the Agent Loop) |
 | Author | Moe Dashti |
 | Date | 2026-08-23 |
-| Companion | `streaming-detailed-design.md`, `design-comparison.md`, `streaming-baseline-results.md` |
+| Companion | `streaming-detailed-design.md`, `design-comparison.md`, `streaming-benchmark-results.md` |
 
 This is a clean-room design, derived from Temporal's storage invariants. It was written without reading the earlier prototypes. Those have since been compared against it in `design-comparison.md`, and the changes that comparison produced are folded in here.
 
@@ -255,7 +255,17 @@ Per 100ms batch, steady state. The middle column is what we measure in Stage 0, 
 | Cost of the Nth subscriber | an Update per poll | a memcopy |
 | Conditional writes per batch | 2 or more | 1, divided by the group-commit size |
 
-The left-hand column is now measured rather than asserted; see `streaming-baseline-results.md`. At one subscriber, moving the current pattern from 2s to 100ms batching costs 20x the history events per message and 19x the persistence operations per message. The figures to beat are **1.53 persistence operations and 2.25 history events per message at 100ms**, with no subscriber ceiling and no per-execution read budget.
+**Both columns are now measured**; see `streaming-benchmark-results.md`. Over the same workload at 100ms batching:
+
+| | Workflow Streams | Native |
+|---|---|---|
+| persistence ops per message, 1 subscriber | 1.52 | **0.50** |
+| persistence ops per message, 25 subscribers | 11.30 | **0.55** |
+| workflow history bytes per message | 379 to 706 | **0** |
+| delivered, 25 subscribers | 19% | **100%** |
+| p99, 25 subscribers | 11.2s | **104ms** |
+
+The number that matters most is not the ratio but the shape: the native cost per message barely moves between 1 and 25 subscribers, because reads cost no persistence operations at all. The current pattern's rises sevenfold over the same range.
 
 ## 8. Non-goals
 
