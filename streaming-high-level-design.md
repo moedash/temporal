@@ -7,7 +7,7 @@
 | Project | D1, Native streaming (Win the Agent Loop) |
 | Author | Moe Dashti |
 | Date | 2026-08-23 |
-| Companion | `streaming-detailed-design.md`, `design-comparison.md` |
+| Companion | `streaming-detailed-design.md`, `design-comparison.md`, `streaming-baseline-results.md` |
 
 This is a clean-room design, derived from Temporal's storage invariants. It was written without reading the earlier prototypes. Those have since been compared against it in `design-comparison.md`, and the changes that comparison produced are folded in here.
 
@@ -22,7 +22,8 @@ Today the answer is **Workflow Streams** (Public Preview): an Activity batches o
 - Batching intervals sit at seconds, not milliseconds, to amortise per-item overhead.
 - Items land in the workflow's Event History, so they count against the 50MB cap, are re-read on every replay, and are duplicated or dropped across continue-as-new.
 - `MaximumSignalsPerExecution` defaults to 10000 (`common/dynamicconfig/constants.go:2630`). A token-per-signal stream exhausts that inside one long response.
-- At most 10 concurrent subscribers.
+- At most 10 concurrent subscribers, which is `history.maxInFlightUpdates`. Measured, it does not degrade gracefully: 25 subscribers deliver 44% of receipts with a 40s p99.
+- A second ceiling that has not been discussed: `history.maxTotalUpdates` is 2000 **per workflow execution**, and every poll spends one. At 100ms batching, five subscribers exhaust a workflow's lifetime read budget in under a minute, forcing continue-as-new for reasons that have nothing to do with the application.
 - The stream is unreadable once the workflow closes, so producer and consumer have to coordinate a shutdown.
 - Cost. Customers describe it as a non-starter, and several run Redis alongside Temporal instead.
 
@@ -254,7 +255,7 @@ Per 100ms batch, steady state. The middle column is what we measure in Stage 0, 
 | Cost of the Nth subscriber | an Update per poll | a memcopy |
 | Conditional writes per batch | 2 or more | 1, divided by the group-commit size |
 
-Substantiating this table against a real workload is the point of the prototype. The claim to test is that 100ms batching becomes practical, which is the bar the Native Streams 1-pager sets.
+The left-hand column is now measured rather than asserted; see `streaming-baseline-results.md`. At one subscriber, moving the current pattern from 2s to 100ms batching costs 20x the history events per message and 19x the persistence operations per message. The figures to beat are **1.53 persistence operations and 2.25 history events per message at 100ms**, with no subscriber ceiling and no per-execution read budget.
 
 ## 8. Non-goals
 
