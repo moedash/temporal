@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+import "temporal/api/common/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+enum StreamMessageKind {
+  STREAM_MESSAGE_KIND_UNSPECIFIED = 0;
+  STREAM_MESSAGE_KIND_DATA = 1;
+  // Producer signalling a delivery boundary. Carries no body and consumes an
+  // offset like any other message. A consumer uses it to end a turn without
+  // waiting out an idle timeout.
+  STREAM_MESSAGE_KIND_FLUSH = 2;
+}
+
+message StreamMessage {
+  temporal.api.common.v1.Payload body = 1;
+  // Producer-supplied provenance. The server does not populate this today.
+  map<string, temporal.api.common.v1.Payload> metadata = 2;
+  string topic = 3;
+  // Position within this topic. The global offset orders the whole stream;
+  // this lets a consumer reason about one topic without decoding the rest.
+  int64 topic_sequence = 4;
+  StreamMessageKind kind = 5;
+}
+
+// One append is one batch, and one batch is one log node. The server stores
+// this serialized and opaque; it decodes only to trim a partial first page or
+// to apply a topic filter.
+message StreamMessageBatch {
+  repeated StreamMessage messages = 1;
+}

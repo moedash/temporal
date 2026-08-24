@@ -8,6 +8,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm/lib/stream"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 )
@@ -178,4 +179,95 @@ func (s *HistoryEventsSuite) TestStreamLogTrimReclaimsStaleNodes() {
 
 	events := s.listHistoryEvents(s.ShardID, branchToken, common.FirstEventID, 5)
 	s.Equal([]int64{1, 2, 3, 4}, s.eventIDsOf(events))
+}
+
+// The bucketing scheme in chasm/lib/stream splits a stream across one tree per
+// fixed-size offset range, so a storage partition cannot grow with the stream.
+// That also means a read restarts the transaction chain at every bucket, and
+// the claim that this is still safe is the one worth testing rather than
+// asserting: it is the same class of claim that turned out to be wrong about
+// partition growth in the first place.
+
+func (s *HistoryEventsSuite) streamAppend(
+	collectionID string,
+	bucketSize int64,
+	firstOffset int64,
+	count int64,
+	txnID int64,
+	prevTxnID int64,
+	body string,
+) {
+	blob := &commonpb.DataBlob{
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		Data:         []byte(body),
+	}
+	err := stream.WriteAppend(s.Ctx, s.store, s.ShardID, testStreamNamespaceID, collectionID, stream.LogAppend{
+		Bucket:      stream.BucketOf(firstOffset, bucketSize),
+		NodeID:      stream.NodeIDOf(firstOffset, bucketSize),
+		TxnID:       txnID,
+		PrevTxnID:   prevTxnID,
+		Blob:        blob,
+		IsNewBucket: stream.NodeIDOf(firstOffset, bucketSize) == 1,
+	})
+	s.NoError(err)
+}
+
+func (s *HistoryEventsSuite) streamRead(
+	collectionID string,
+	bucketSize int64,
+	from int64,
+	to int64,
+) []string {
+	blobs, _, err := stream.ReadRange(
+		s.Ctx, s.store, s.ShardID, testStreamNamespaceID, collectionID, bucketSize, from, to, 0)
+	s.NoError(err)
+	out := make([]string, len(blobs))
+	for i, b := range blobs {
+		out[i] = string(b.Data)
+	}
+	return out
+}
+
+const testStreamNamespaceID = "0b9d2c3a-1f4e-4a7b-9c8d-5e6f70819203"
+
+// TestStreamLogBucketedReadSpansTrees checks that a range read stitches buckets
+// together, since each bucket is a separate tree and a caller only ever sees
+// global offsets.
+func (s *HistoryEventsSuite) TestStreamLogBucketedReadSpansTrees() {
+	collectionID := uuid.NewString()
+	const bucketSize = 4
+
+	s.streamAppend(collectionID, bucketSize, 0, 4, 100, 0, "bucket0")
+	s.streamAppend(collectionID, bucketSize, 4, 4, 200, 100, "bucket1")
+	s.streamAppend(collectionID, bucketSize, 8, 2, 300, 200, "bucket2")
+
+	s.Equal([]string{"bucket0", "bucket1", "bucket2"}, s.streamRead(collectionID, bucketSize, 0, 10))
+	s.Equal([]string{"bucket1"}, s.streamRead(collectionID, bucketSize, 4, 8))
+}
+
+// TestStreamLogBucketBoundaryDropsStaleNode is the bucket-aware form of
+// TestStreamLogShrinkingRetryDropsStaleNode. An abandoned append straddles a
+// bucket boundary, so the stale node lands in a tree whose chain a reader
+// starts fresh. It must still be rejected once the frontier moves past it.
+func (s *HistoryEventsSuite) TestStreamLogBucketBoundaryDropsStaleNode() {
+	collectionID := uuid.NewString()
+	const bucketSize = 4
+
+	s.streamAppend(collectionID, bucketSize, 0, 3, 100, 0, "committed")
+
+	// Abandoned attempt: tail of bucket 0 plus the head of bucket 1.
+	s.streamAppend(collectionID, bucketSize, 3, 1, 200, 100, "stale-bucket0")
+	s.streamAppend(collectionID, bucketSize, 4, 2, 201, 200, "stale-bucket1")
+
+	// Retry covers only bucket 0, so the bucket 1 node is orphaned.
+	s.streamAppend(collectionID, bucketSize, 3, 1, 300, 100, "retry")
+
+	// A later append reaches into bucket 1, moving the frontier past the orphan.
+	s.streamAppend(collectionID, bucketSize, 4, 2, 400, 300, "real-bucket1")
+
+	s.Equal(
+		[]string{"committed", "retry", "real-bucket1"},
+		s.streamRead(collectionID, bucketSize, 0, 6),
+		"the orphaned bucket 1 node must not surface once the frontier passes it",
+	)
 }
