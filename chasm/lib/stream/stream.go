@@ -124,6 +124,10 @@ func (s *Stream) AddMessages(
 	if len(req.Messages) == 0 {
 		return AddMessagesResult{}, serviceerror.NewInvalidArgument("no messages to append")
 	}
+	if len(req.Messages) > MaxMessagesPerBatch {
+		return AddMessagesResult{}, serviceerror.NewInvalidArgumentf(
+			"batch of %d exceeds the limit of %d messages", len(req.Messages), MaxMessagesPerBatch)
+	}
 
 	blob, err := marshalBatch(req.Messages)
 	if err != nil {
@@ -175,6 +179,9 @@ func (s *Stream) AddMessages(
 	s.State.HeadOffset = first + count
 	s.State.LastTxnId = txnID
 	if req.ProducerID != "" {
+		if s.State.Producers == nil {
+			s.State.Producers = make(map[string]*streampb.ProducerCursor)
+		}
 		s.State.Producers[req.ProducerID] = &streampb.ProducerCursor{
 			Seq:         req.Sequence,
 			FirstOffset: first,
@@ -232,6 +239,9 @@ func (s *Stream) checkProducer(req AddMessagesRequest, hash []byte) (*AddMessage
 func (s *Stream) FinishWriting(_ chasm.MutableContext, producerID string) error {
 	if producerID == "" {
 		return serviceerror.NewInvalidArgument("producer id is required")
+	}
+	if s.State.Producers == nil {
+		s.State.Producers = make(map[string]*streampb.ProducerCursor)
 	}
 	cursor := s.State.Producers[producerID]
 	if cursor == nil {

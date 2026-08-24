@@ -152,12 +152,22 @@ func ReadRange(
 		minOffset := max(fromOffset, bucketStart)
 		maxOffset := min(toOffset, bucketEnd)
 
+		// A node ID is the first offset of its batch, so a read starting inside
+		// a batch must begin at the node that contains it, not at the node ID
+		// the offset maps to. Batch size is bounded on write, which bounds how
+		// far back to start. Messages before fromOffset are dropped by the
+		// caller.
+		startNode := NodeIDOf(minOffset, bucketSize) - MaxMessagesPerBatch + 1
+		if startNode < 1 {
+			startNode = 1
+		}
+
 		var token2 []byte
 		for {
 			resp, err := execMgr.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 				ShardID:       shardID,
 				BranchToken:   token,
-				MinEventID:    NodeIDOf(minOffset, bucketSize),
+				MinEventID:    startNode,
 				MaxEventID:    NodeIDOf(maxOffset-1, bucketSize) + 1,
 				PageSize:      pageSize,
 				NextPageToken: token2,
