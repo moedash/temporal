@@ -8,6 +8,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/shard"
@@ -33,6 +35,8 @@ type handler struct {
 	// one process, which holds because these RPCs route to the shard owner.
 	appendMu sync.Mutex
 	appendLk map[string]*sync.Mutex
+
+	tail *tailCache
 }
 
 func newHandler(shardController shard.Controller, logger log.Logger) *handler {
@@ -40,11 +44,16 @@ func newHandler(shardController shard.Controller, logger log.Logger) *handler {
 		shardController: shardController,
 		logger:          logger,
 		appendLk:        make(map[string]*sync.Mutex),
+		tail:            newTailCache(tailCacheBytesPerStream, tailCacheMaxStreams),
 	}
 }
 
+func streamKey(namespaceID, streamID string) string {
+	return namespaceID + "/" + streamID
+}
+
 func (h *handler) lockStream(namespaceID, streamID string) func() {
-	key := namespaceID + "/" + streamID
+	key := streamKey(namespaceID, streamID)
 	h.appendMu.Lock()
 	mu, ok := h.appendLk[key]
 	if !ok {
@@ -163,6 +172,16 @@ func (h *handler) AddMessages(
 		return nil, err
 	}
 
+	// Only after the commit. A write whose commit failed can be superseded by a
+	// retry carrying different bytes at the same offsets, and caching it would
+	// serve those bytes to a reader that must never see them.
+	if !result.Deduplicated {
+		for _, op := range preview.Appends {
+			h.tail.put(streamKey(req.GetNamespaceId(), in.GetStreamId()),
+				result.FirstOffset, result.NextOffset, op.Blob)
+		}
+	}
+
 	return &streampb.AddMessagesResponse{
 		FrontendResponse: &streampb.AddMessagesOutput{
 			FirstOffset:  result.FirstOffset,
@@ -204,13 +223,22 @@ func (h *handler) PollMessages(
 		return nil, err
 	}
 
-	state, err := chasm.ReadComponent(ctx,
-		refFor(req.GetNamespaceId(), in.GetStreamId()), (*Stream).snapshot, struct{}{})
+	ref := refFor(req.GetNamespaceId(), in.GetStreamId())
+	from := in.GetFromOffset()
+
+	state, err := chasm.ReadComponent(ctx, ref, (*Stream).snapshot, struct{}{})
 	if err != nil {
 		return nil, err
 	}
 
-	from := in.GetFromOffset()
+	// Blocking is only worth it once the reader is genuinely caught up.
+	if in.GetWaitNewMessages() && from == state.GetHeadOffset() && !state.GetClosed() {
+		state, err = h.waitForMessages(ctx, ref, from, state)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if from < state.GetBaseOffset() {
 		return nil, serviceerror.NewFailedPreconditionf(
 			"offset %d has been truncated, the stream starts at %d", from, state.GetBaseOffset())
@@ -235,11 +263,17 @@ func (h *handler) PollMessages(
 		maxMessages = defaultMaxMessagesPerPoll
 	}
 
-	blobs, startOffsets, err := ReadRange(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
-		req.GetNamespaceId(), state.GetCollectionId(), state.GetBucketSize(),
-		from, state.GetHeadOffset(), 0)
-	if err != nil {
-		return nil, err
+	// The frontier always comes from the component, so the cache can only save
+	// a read, never widen what the reader is allowed to see.
+	key := streamKey(req.GetNamespaceId(), in.GetStreamId())
+	blobs, startOffsets, cached := h.tail.get(key, from, state.GetHeadOffset())
+	if !cached {
+		blobs, startOffsets, err = ReadRange(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
+			req.GetNamespaceId(), state.GetCollectionId(), state.GetBucketSize(),
+			from, state.GetHeadOffset(), 0)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	messages, next, err := collectMessages(blobs, startOffsets, from, state.GetHeadOffset(),
@@ -255,6 +289,45 @@ func (h *handler) PollMessages(
 	out.Messages = messages
 	out.NextOffset = next
 	return &streampb.PollMessagesResponse{FrontendResponse: out}, nil
+}
+
+// waitForMessages blocks until the head passes the reader's offset or the
+// stream closes. On the server's long-poll timeout it returns the state it last
+// saw, so the caller gets an empty response and polls again rather than an
+// error it would have to distinguish from a real failure.
+func (h *handler) waitForMessages(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	from int64,
+	current *streampb.StreamState,
+) (*streampb.StreamState, error) {
+	pollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollTimeout, longPollBuffer)
+	defer cancel()
+
+	state, _, err := chasm.PollComponent(pollCtx, ref,
+		func(s *Stream, _ chasm.Context, offset int64) (*streampb.StreamState, bool, error) {
+			// Monotonic, as PollComponent requires: the head only advances and
+			// closed never clears.
+			satisfied := s.State.GetHeadOffset() > offset || s.State.GetClosed()
+			if !satisfied {
+				return nil, false, nil
+			}
+			return common.CloneProto(s.State), true, nil
+		}, from)
+	if err != nil {
+		if pollCtx.Err() != nil && ctx.Err() == nil {
+			// Our long-poll budget expired, not the caller's. Hand back the
+			// state we already had so the reader gets an empty response and
+			// polls again, rather than an error it has to tell apart from a
+			// real failure.
+			return current, nil
+		}
+		return nil, err
+	}
+	if state == nil {
+		return current, nil
+	}
+	return state, nil
 }
 
 // collectMessages decodes the batches covering a range and trims to the

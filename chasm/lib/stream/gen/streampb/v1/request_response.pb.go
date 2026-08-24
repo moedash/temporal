@@ -404,9 +404,13 @@ type PollMessagesInput struct {
 	MaxMessages int32                  `protobuf:"varint,4,opt,name=max_messages,json=maxMessages,proto3" json:"max_messages,omitempty"`
 	// Filters by exact topic. Offsets are assigned over the unfiltered stream, so
 	// next_offset advances past filtered-out messages too.
-	Topics        []string `protobuf:"bytes,5,rep,name=topics,proto3" json:"topics,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Topics []string `protobuf:"bytes,5,rep,name=topics,proto3" json:"topics,omitempty"`
+	// When set and the reader is caught up, block until something arrives, the
+	// stream closes, or the server's long-poll timeout elapses. A timeout returns
+	// an empty response rather than an error, so the caller simply polls again.
+	WaitNewMessages bool `protobuf:"varint,6,opt,name=wait_new_messages,json=waitNewMessages,proto3" json:"wait_new_messages,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *PollMessagesInput) Reset() {
@@ -472,6 +476,13 @@ func (x *PollMessagesInput) GetTopics() []string {
 		return x.Topics
 	}
 	return nil
+}
+
+func (x *PollMessagesInput) GetWaitNewMessages() bool {
+	if x != nil {
+		return x.WaitNewMessages
+	}
+	return false
 }
 
 type PollMessagesOutput struct {
@@ -1727,14 +1738,15 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x1f\n" +
 	"\vproducer_id\x18\x03 \x01(\tR\n" +
 	"producerId\"\x15\n" +
-	"\x13FinishWritingOutput\"\xaa\x01\n" +
+	"\x13FinishWritingOutput\"\xd6\x01\n" +
 	"\x11PollMessagesInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x1f\n" +
 	"\vfrom_offset\x18\x03 \x01(\x03R\n" +
 	"fromOffset\x12!\n" +
 	"\fmax_messages\x18\x04 \x01(\x05R\vmaxMessages\x12\x16\n" +
-	"\x06topics\x18\x05 \x03(\tR\x06topics\"\x88\x02\n" +
+	"\x06topics\x18\x05 \x03(\tR\x06topics\x12*\n" +
+	"\x11wait_new_messages\x18\x06 \x01(\bR\x0fwaitNewMessages\"\x88\x02\n" +
 	"\x12PollMessagesOutput\x12T\n" +
 	"\bmessages\x18\x01 \x03(\v28.temporal.server.chasm.lib.stream.proto.v1.StreamMessageR\bmessages\x12\x1f\n" +
 	"\vnext_offset\x18\x02 \x01(\x03R\n" +

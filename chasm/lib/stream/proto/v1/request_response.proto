@@ -64,6 +64,11 @@ message PollMessagesInput {
   // Filters by exact topic. Offsets are assigned over the unfiltered stream, so
   // next_offset advances past filtered-out messages too.
   repeated string topics = 5;
+
+  // When set and the reader is caught up, block until something arrives, the
+  // stream closes, or the server's long-poll timeout elapses. A timeout returns
+  // an empty response rather than an error, so the caller simply polls again.
+  bool wait_new_messages = 6;
 }
 
 message PollMessagesOutput {

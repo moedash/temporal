@@ -307,3 +307,112 @@ func TestStreamBatchSizeIsBounded(t *testing.T) {
 	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", tooMany...)})
 	require.ErrorContains(t, err, "exceeds the limit")
 }
+
+func (s *streamTestEnv) pollWait(
+	ctx context.Context, streamID string, from int64,
+) (*streampb.PollMessagesOutput, error) {
+	resp, err := s.client.PollMessages(ctx, &streampb.PollMessagesRequest{
+		FrontendRequest: &streampb.PollMessagesInput{
+			Namespace: s.ns, StreamId: streamID, FromOffset: from, WaitNewMessages: true,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetFrontendResponse(), nil
+}
+
+func TestStreamLongPollWakesOnAppend(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-longpoll-append"
+	s.create(ctx, t, id)
+
+	type result struct {
+		out *streampb.PollMessagesOutput
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		out, err := s.pollWait(ctx, id, 0)
+		done <- result{out, err}
+	}()
+
+	// The poll is parked on an empty stream; the append is what releases it.
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "a")})
+	require.NoError(t, err)
+
+	select {
+	case r := <-done:
+		require.NoError(t, r.err)
+		require.Equal(t, []string{"a"}, bodies(r.out.GetMessages()))
+		require.Equal(t, int64(1), r.out.GetNextOffset())
+	case <-time.After(25 * time.Second):
+		t.Fatal("long poll did not wake on append")
+	}
+}
+
+func TestStreamLongPollWakesOnClose(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-longpoll-close"
+	s.create(ctx, t, id)
+
+	done := make(chan *streampb.PollMessagesOutput, 1)
+	go func() {
+		out, err := s.pollWait(ctx, id, 0)
+		if err == nil {
+			done <- out
+		}
+	}()
+
+	_, err := s.client.CloseStream(ctx, &streampb.CloseStreamRequest{
+		FrontendRequest: &streampb.CloseStreamInput{Namespace: s.ns, StreamId: id},
+	})
+	require.NoError(t, err)
+
+	// Closing has to release a parked reader, otherwise a consumer of a
+	// finished stream waits out the full timeout for no reason.
+	select {
+	case out := <-done:
+		require.True(t, out.GetClosed())
+		require.Empty(t, out.GetMessages())
+	case <-time.After(25 * time.Second):
+		t.Fatal("long poll did not wake on close")
+	}
+}
+
+func TestStreamLongPollReturnsEmptyOnTimeout(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-longpoll-timeout"
+	s.create(ctx, t, id)
+
+	// A timeout is an empty response, not an error: the caller polls again
+	// rather than distinguishing a quiet stream from a failure.
+	start := time.Now()
+	out, err := s.pollWait(ctx, id, 0)
+	require.NoError(t, err)
+	require.Empty(t, out.GetMessages())
+	require.Equal(t, int64(0), out.GetNextOffset())
+	require.False(t, out.GetClosed())
+	require.Greater(t, time.Since(start), 5*time.Second, "the poll should have parked, not returned immediately")
+}
+
+func TestStreamLongPollReturnsImmediatelyWhenBehind(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-longpoll-behind"
+	s.create(ctx, t, id)
+
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "a", "b")})
+	require.NoError(t, err)
+
+	// Waiting is only for a reader that is caught up. One that is behind must
+	// not be parked behind data that already exists.
+	start := time.Now()
+	out, err := s.pollWait(ctx, id, 0)
+	require.NoError(t, err)
+	require.Equal(t, []string{"a", "b"}, bodies(out.GetMessages()))
+	require.Less(t, time.Since(start), 5*time.Second)
+}
