@@ -1,0 +1,171 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+import "chasm/lib/stream/proto/v1/message.proto";
+import "chasm/lib/stream/proto/v1/stream_state.proto";
+import "temporal/api/common/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+// The frontend-facing shapes are defined here rather than in the public API
+// because streams have no public API yet. Keeping them in a nested
+// frontend_request mirrors the other CHASM libraries, so promoting them later
+// is a package move rather than a redesign.
+
+message CreateStreamInput {
+  string namespace = 1;
+  string stream_id = 2;
+  StreamLifecycle lifecycle = 3;
+}
+
+message CreateStreamOutput {
+  string run_id = 1;
+}
+
+message AddMessagesInput {
+  string namespace = 1;
+  string stream_id = 2;
+  repeated StreamMessage messages = 3;
+
+  // Idempotency, all optional. Supply a producer identity and sequence, or an
+  // expected offset, or neither and accept at-least-once.
+  string producer_id = 4;
+  int64 sequence = 5;
+  // Guarded by use_expected_offset because proto3 optional is not supported
+  // by this repo's helper generator.
+  int64 expected_offset = 6;
+  bool use_expected_offset = 8;
+
+  int64 owner_epoch = 7;
+}
+
+message AddMessagesOutput {
+  int64 first_offset = 1;
+  int64 next_offset = 2;
+  int64 count = 3;
+  // True when a retry matched a recorded sequence and nothing was appended.
+  bool deduplicated = 4;
+}
+
+message FinishWritingInput {
+  string namespace = 1;
+  string stream_id = 2;
+  string producer_id = 3;
+}
+
+message FinishWritingOutput {}
+
+message PollMessagesInput {
+  string namespace = 1;
+  string stream_id = 2;
+  int64 from_offset = 3;
+  int32 max_messages = 4;
+  // Filters by exact topic. Offsets are assigned over the unfiltered stream, so
+  // next_offset advances past filtered-out messages too.
+  repeated string topics = 5;
+}
+
+message PollMessagesOutput {
+  repeated StreamMessage messages = 1;
+  int64 next_offset = 2;
+  int64 head_offset = 3;
+  bool closed = 4;
+  temporal.api.common.v1.Payload close_reason = 5;
+}
+
+message DescribeStreamInput {
+  string namespace = 1;
+  string stream_id = 2;
+}
+
+message DescribeStreamOutput {
+  StreamState state = 1;
+}
+
+message CloseStreamInput {
+  string namespace = 1;
+  string stream_id = 2;
+  temporal.api.common.v1.Payload reason = 3;
+}
+
+message CloseStreamOutput {}
+
+message TruncateStreamInput {
+  string namespace = 1;
+  string stream_id = 2;
+  int64 new_base_offset = 3;
+}
+
+message TruncateStreamOutput {}
+
+message DeleteStreamInput {
+  string namespace = 1;
+  string stream_id = 2;
+}
+
+message DeleteStreamOutput {}
+
+message CreateStreamRequest {
+  string namespace_id = 1;
+  CreateStreamInput frontend_request = 2;
+}
+message CreateStreamResponse {
+  CreateStreamOutput frontend_response = 1;
+}
+
+message AddMessagesRequest {
+  string namespace_id = 1;
+  AddMessagesInput frontend_request = 2;
+}
+message AddMessagesResponse {
+  AddMessagesOutput frontend_response = 1;
+}
+
+message FinishWritingRequest {
+  string namespace_id = 1;
+  FinishWritingInput frontend_request = 2;
+}
+message FinishWritingResponse {
+  FinishWritingOutput frontend_response = 1;
+}
+
+message PollMessagesRequest {
+  string namespace_id = 1;
+  PollMessagesInput frontend_request = 2;
+}
+message PollMessagesResponse {
+  PollMessagesOutput frontend_response = 1;
+}
+
+message DescribeStreamRequest {
+  string namespace_id = 1;
+  DescribeStreamInput frontend_request = 2;
+}
+message DescribeStreamResponse {
+  DescribeStreamOutput frontend_response = 1;
+}
+
+message CloseStreamRequest {
+  string namespace_id = 1;
+  CloseStreamInput frontend_request = 2;
+}
+message CloseStreamResponse {
+  CloseStreamOutput frontend_response = 1;
+}
+
+message TruncateStreamRequest {
+  string namespace_id = 1;
+  TruncateStreamInput frontend_request = 2;
+}
+message TruncateStreamResponse {
+  TruncateStreamOutput frontend_response = 1;
+}
+
+message DeleteStreamRequest {
+  string namespace_id = 1;
+  DeleteStreamInput frontend_request = 2;
+}
+message DeleteStreamResponse {
+  DeleteStreamOutput frontend_response = 1;
+}
