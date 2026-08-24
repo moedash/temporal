@@ -89,10 +89,18 @@ func (h *handler) lockStream(namespaceID, streamID string) func() {
 	return mu.Unlock
 }
 
+// refFor builds a reference to a stream. A supplied run ID lets the engine skip
+// resolving the current run, which is otherwise a persistence lookup on every
+// call and dominates the cost of an otherwise cheap read.
 func refFor(namespaceID, streamID string) chasm.ComponentRef {
+	return refForRun(namespaceID, streamID, "")
+}
+
+func refForRun(namespaceID, streamID, runID string) chasm.ComponentRef {
 	return chasm.NewComponentRef[*Stream](chasm.ExecutionKey{
 		NamespaceID: namespaceID,
 		BusinessID:  streamID,
+		RunID:       runID,
 	})
 }
 
@@ -164,7 +172,7 @@ func (h *handler) AddMessages(
 		return nil, err
 	}
 
-	ref := refFor(req.GetNamespaceId(), in.GetStreamId())
+	ref := refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId())
 	state, err := chasm.ReadComponent(ctx, ref, (*Stream).snapshot, struct{}{})
 	if err != nil {
 		return nil, err
@@ -270,7 +278,7 @@ func (h *handler) PollMessages(
 		return nil, err
 	}
 
-	ref := refFor(req.GetNamespaceId(), in.GetStreamId())
+	ref := refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId())
 	from := in.GetFromOffset()
 
 	state, err := chasm.ReadComponent(ctx, ref, (*Stream).snapshot, struct{}{})

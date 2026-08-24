@@ -131,7 +131,10 @@ type AddMessagesInput struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	StreamId  string                 `protobuf:"bytes,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
-	Messages  []*StreamMessage       `protobuf:"bytes,3,rep,name=messages,proto3" json:"messages,omitempty"`
+	// Optional. Supplying it skips resolving the stream's current run, which is
+	// a persistence lookup on every call. CreateStream returns it.
+	RunId    string           `protobuf:"bytes,9,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Messages []*StreamMessage `protobuf:"bytes,3,rep,name=messages,proto3" json:"messages,omitempty"`
 	// Idempotency, all optional. Supply a producer identity and sequence, or an
 	// expected offset, or neither and accept at-least-once.
 	ProducerId string `protobuf:"bytes,4,opt,name=producer_id,json=producerId,proto3" json:"producer_id,omitempty"`
@@ -185,6 +188,13 @@ func (x *AddMessagesInput) GetNamespace() string {
 func (x *AddMessagesInput) GetStreamId() string {
 	if x != nil {
 		return x.StreamId
+	}
+	return ""
+}
+
+func (x *AddMessagesInput) GetRunId() string {
+	if x != nil {
+		return x.RunId
 	}
 	return ""
 }
@@ -397,11 +407,13 @@ func (*FinishWritingOutput) Descriptor() ([]byte, []int) {
 }
 
 type PollMessagesInput struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Namespace   string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	StreamId    string                 `protobuf:"bytes,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
-	FromOffset  int64                  `protobuf:"varint,3,opt,name=from_offset,json=fromOffset,proto3" json:"from_offset,omitempty"`
-	MaxMessages int32                  `protobuf:"varint,4,opt,name=max_messages,json=maxMessages,proto3" json:"max_messages,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	StreamId  string                 `protobuf:"bytes,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	// Optional, as on AddMessagesInput.
+	RunId       string `protobuf:"bytes,7,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	FromOffset  int64  `protobuf:"varint,3,opt,name=from_offset,json=fromOffset,proto3" json:"from_offset,omitempty"`
+	MaxMessages int32  `protobuf:"varint,4,opt,name=max_messages,json=maxMessages,proto3" json:"max_messages,omitempty"`
 	// Filters by exact topic. Offsets are assigned over the unfiltered stream, so
 	// next_offset advances past filtered-out messages too.
 	Topics []string `protobuf:"bytes,5,rep,name=topics,proto3" json:"topics,omitempty"`
@@ -453,6 +465,13 @@ func (x *PollMessagesInput) GetNamespace() string {
 func (x *PollMessagesInput) GetStreamId() string {
 	if x != nil {
 		return x.StreamId
+	}
+	return ""
+}
+
+func (x *PollMessagesInput) GetRunId() string {
+	if x != nil {
+		return x.RunId
 	}
 	return ""
 }
@@ -1983,10 +2002,11 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12X\n" +
 	"\tlifecycle\x18\x03 \x01(\v2:.temporal.server.chasm.lib.stream.proto.v1.StreamLifecycleR\tlifecycle\"+\n" +
 	"\x12CreateStreamOutput\x12\x15\n" +
-	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\xda\x02\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\xf1\x02\n" +
 	"\x10AddMessagesInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
-	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12T\n" +
+	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x15\n" +
+	"\x06run_id\x18\t \x01(\tR\x05runId\x12T\n" +
 	"\bmessages\x18\x03 \x03(\v28.temporal.server.chasm.lib.stream.proto.v1.StreamMessageR\bmessages\x12\x1f\n" +
 	"\vproducer_id\x18\x04 \x01(\tR\n" +
 	"producerId\x12\x1a\n" +
@@ -2006,10 +2026,11 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x1f\n" +
 	"\vproducer_id\x18\x03 \x01(\tR\n" +
 	"producerId\"\x15\n" +
-	"\x13FinishWritingOutput\"\xd6\x01\n" +
+	"\x13FinishWritingOutput\"\xed\x01\n" +
 	"\x11PollMessagesInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
-	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x1f\n" +
+	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x15\n" +
+	"\x06run_id\x18\a \x01(\tR\x05runId\x12\x1f\n" +
 	"\vfrom_offset\x18\x03 \x01(\x03R\n" +
 	"fromOffset\x12!\n" +
 	"\fmax_messages\x18\x04 \x01(\x05R\vmaxMessages\x12\x16\n" +

@@ -26,6 +26,9 @@ message CreateStreamOutput {
 message AddMessagesInput {
   string namespace = 1;
   string stream_id = 2;
+  // Optional. Supplying it skips resolving the stream's current run, which is
+  // a persistence lookup on every call. CreateStream returns it.
+  string run_id = 9;
   repeated StreamMessage messages = 3;
 
   // Idempotency, all optional. Supply a producer identity and sequence, or an
@@ -59,6 +62,8 @@ message FinishWritingOutput {}
 message PollMessagesInput {
   string namespace = 1;
   string stream_id = 2;
+  // Optional, as on AddMessagesInput.
+  string run_id = 7;
   int64 from_offset = 3;
   int32 max_messages = 4;
   // Filters by exact topic. Offsets are assigned over the unfiltered stream, so

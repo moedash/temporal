@@ -38,10 +38,11 @@ func runNativeStream(t *testing.T, p streamBaselineParams) streamBaselineResult 
 
 	ns := env.Namespace().String()
 	streamID := fmt.Sprintf("bench-%s", p.name)
-	_, err = client.CreateStream(ctx, &streampb.CreateStreamRequest{
+	created, err := client.CreateStream(ctx, &streampb.CreateStreamRequest{
 		FrontendRequest: &streampb.CreateStreamInput{Namespace: ns, StreamId: streamID},
 	})
 	require.NoError(t, err)
+	runID := created.GetFrontendResponse().GetRunId()
 
 	// Started after creation so cluster and namespace setup do not inflate the
 	// per-message figures, matching the baseline.
@@ -62,11 +63,11 @@ func runNativeStream(t *testing.T, p streamBaselineParams) streamBaselineResult 
 		go func(idx int) {
 			defer consumers.Done()
 			latencies[idx], counts[idx] = runNativeConsumer(
-				consumerCtx, client, ns, streamID, sentAt, &receivedTotal, &pollRejections)
+				consumerCtx, client, ns, streamID, runID, sentAt, &receivedTotal, &pollRejections)
 		}(i)
 	}
 
-	res.messagesSent = runNativeProducer(ctx, t, client, ns, streamID, p, sentAt, &res)
+	res.messagesSent = runNativeProducer(ctx, t, client, ns, streamID, runID, p, sentAt, &res)
 
 	want := int64(res.messagesSent) * int64(p.subscribers)
 	if !waitForDrain(ctx, &receivedTotal, want, 15*time.Second) {
@@ -103,7 +104,7 @@ func runNativeProducer(
 	ctx context.Context,
 	t *testing.T,
 	client streampb.StreamServiceClient,
-	ns, streamID string,
+	ns, streamID, runID string,
 	p streamBaselineParams,
 	sentAt *sync.Map,
 	res *streamBaselineResult,
@@ -132,7 +133,7 @@ func runNativeProducer(
 		sequence++
 		_, err := client.AddMessages(ctx, &streampb.AddMessagesRequest{
 			FrontendRequest: &streampb.AddMessagesInput{
-				Namespace: ns, StreamId: streamID, Messages: batch,
+				Namespace: ns, StreamId: streamID, RunId: runID, Messages: batch,
 				ProducerId: "bench", Sequence: sequence,
 			},
 		})
@@ -168,7 +169,7 @@ func runNativeProducer(
 func runNativeConsumer(
 	ctx context.Context,
 	client streampb.StreamServiceClient,
-	ns, streamID string,
+	ns, streamID, runID string,
 	sentAt *sync.Map,
 	receivedTotal *atomic.Int64,
 	rejections *atomic.Int64,
@@ -179,7 +180,7 @@ func runNativeConsumer(
 	for ctx.Err() == nil {
 		resp, err := client.PollMessages(ctx, &streampb.PollMessagesRequest{
 			FrontendRequest: &streampb.PollMessagesInput{
-				Namespace: ns, StreamId: streamID,
+				Namespace: ns, StreamId: streamID, RunId: runID,
 				FromOffset: lastSeen, WaitNewMessages: true,
 			},
 		})
