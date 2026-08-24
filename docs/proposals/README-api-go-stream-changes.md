@@ -1,37 +1,56 @@
-# The `go.temporal.io/api` changes Paths A and C need
+# The API changes Paths A and C need
 
-Stages 5 and 6 of AI-198 cannot be built without changing the public API module. This records exactly what changes, why, and what blocks applying them, so the next attempt does not rediscover it.
+Stages 5 and 6 of AI-198 cannot be built without changing the public API, because the `Command.attributes` oneof is closed and has no extension point. This records what changes and how the change is built.
 
-**Status: applied.** The branch lives at `moedash/api` on `moe/AI-198-stream-commands`, and this repo pins it by pseudo-version through a `replace` in `go.mod`. `api-go-stream-changes.patch` is the proto-only diff against `temporalio/api` at `e80f8e2`, kept so the change can be proposed upstream without the vendoring noise.
+## Two repositories, not one
 
-## What the patch adds
+This tripped me up, so it is worth stating plainly.
+
+- **`temporalio/api`** holds the `.proto` files and nothing else. It has no `go.mod` and generates no Go. That is by design, not an omission.
+- **`temporalio/api-go`** is the Go module `go.temporal.io/api`. It carries `temporalio/api` as a git submodule at `proto/api` and regenerates from it with `make update-proto`.
+
+Changing the API means a branch on each: protos in `api`, regenerated output in `api-go` with its submodule pointed at that branch.
+
+| Repository | Branch | Contents |
+|---|---|---|
+| `moedash/api` | `moe/AI-198-stream-protos` | 65 lines of proto, nothing else |
+| `moedash/api-go` | `moe/AI-198-stream-commands` | Regenerated module, submodule pointed at the above |
+
+The server pins `moedash/api-go` by pseudo-version through a `replace` in `go.mod`.
+
+## What the protos add
 
 | Change | Why |
 |---|---|
-| `temporal/api/stream/v1/message.proto` with `StreamMessage`, `StreamSlice`, `StreamCursor` | The public shapes. The library's own copies under `chasm/lib/stream/proto` are server-internal and no SDK can import them |
+| `temporal/api/stream/v1/message.proto` with `StreamMessage`, `StreamSlice`, `StreamCursor` | The public shapes. The library's copies under `chasm/lib/stream/proto` are server-internal and no SDK can import them |
 | `COMMAND_TYPE_ADD_STREAM_MESSAGES = 19` | Path A: a workflow publishing to its own stream |
-| `AddStreamMessagesCommandAttributes` at field 20 of the `Command` oneof | The `attributes` oneof is closed and has no extension point, so this is the only way |
+| `AddStreamMessagesCommandAttributes` at field 20 of the `Command` oneof | The oneof is closed, so this is the only way |
 | `stream_slices` on `PollWorkflowTaskQueueResponse` | Path C: the slice reaches the worker out of band, so payloads never enter History |
-| `stream_cursors` on `WorkflowTaskCompletedEventAttributes` | Path C: only the offset range is recorded, on an event that already exists once per task, so consumption adds no events at all |
+| `stream_cursors` on `WorkflowTaskCompletedEventAttributes` | Path C: only the offset range is recorded, on an event that already exists once per task |
 
-Note there is **no new event type**. That is deliberate: putting the range on `WorkflowTaskCompleted` is what makes recording an empty range free, and an empty range has to be recorded on every task where a subscription is active (see `streaming-detailed-design.md` §8.2).
+There is **no new event type**, deliberately. Putting the range on `WorkflowTaskCompleted` is what makes recording an empty range free, and an empty range must be recorded on every task where a subscription is active (see `streaming-detailed-design.md` §8.2).
 
-## What it took to build a fork
+## Regenerating
 
-Worth recording, because none of it is obvious and all of it cost time.
+In an `api-go` checkout with submodules, with the `proto/api` submodule on the proto branch:
 
-**A clean clone cannot generate.** `buf.gen.yaml` runs a `go-helpers` plugin from `./protoc-gen-go-helpers`, a directory absent from the repository, and there is no `go.mod`. Both live in the published module, so the fork takes them from there.
+```
+make grpc-install mockgen-install   # needs pnpm for the nexus plugin
+make update-proto
+```
 
-**Plain `buf generate` produces a module the server cannot compile against.** It leaves the `CommandType_` prefix on enum constants, while the published module has them bare. The stripping is done by `protogen`'s const rewriter (`cmd/protogen/const_rewriter.go`), so generation has to go through `protogen` rather than `buf` directly.
+Two steps were skipped here and their output taken from upstream unchanged, since nothing in this change touches nexus:
 
-**The pipeline does not emit everything the module ships.** Missing after a full generate: `operatorservicemock`, `proxy`, `serviceerror`, `temporalnexus`, `temporalproto`, `workflowservicemock`, the grpc-gateway `.pb.gw.go` files, and a few hand-written `.go` files sitting beside generated ones such as `common/v1/payload_json.go`. All are taken from the published module unchanged, since none are touched by the stream changes.
+- `nexus-gen` and `system-nexus` need `pnpm`, which was not set up. They produce `workflowservice/v1/workflowservicenexus` and `systemnexus`.
 
-**The generated output is reshaped.** Go is emitted under `temporal/api/...` and flattened to the module root by the Makefile's `fix-path`. Flattening before generating breaks the next generation, because the copied `.proto` files then collide with the originals as duplicate definitions.
+Running `go-grpc` on its own is not enough. `make clean` removes the mocks and proxy, and only the full `proto` target puts them back, so the module ends up missing `workflowservicemock`, `operatorservicemock`, and the proxy.
 
-## Verifying it
+The wider diff across generated files in the `api-go` branch is `protoc-gen-go` version drift from regenerating, not a change in shape.
 
-`tests/api_fork_test.go` round-trips all three new shapes through proto marshalling rather than merely compiling against them. A field added without its descriptor compiles fine and silently drops on the wire, which is the failure this guards.
+## Verifying
 
-## What is not blocked
+`tests/api_fork_test.go` round-trips all three new shapes through proto marshalling rather than merely compiling against them. A field added without its descriptor compiles fine and silently drops on the wire, which is the failure that guards against.
 
-Path B, an off-shard producer with client consumers, needs none of this and is what the benchmark measures. It is also the path LLM token streaming actually takes, since tokens come from an activity rather than from workflow code.
+## What is not blocked by any of this
+
+Path B, an off-shard producer with client consumers, needs none of it and is what the benchmark measures. It is also the path LLM token streaming actually takes, since tokens come from an activity rather than from workflow code.
