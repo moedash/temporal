@@ -14,6 +14,7 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	chasmstream "go.temporal.io/server/chasm/lib/stream"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
@@ -146,6 +147,7 @@ var Module = fx.Options(
 	chasmworkflow.Module,
 	chasmcallback.Module,
 	activity.FrontendModule,
+	chasmstream.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 )
@@ -158,6 +160,7 @@ func NewServiceProvider(
 	handler Handler,
 	adminHandler *AdminHandler,
 	operatorHandler *OperatorHandlerImpl,
+	streamHandler *chasmstream.FrontendHandler,
 	versionChecker *VersionChecker,
 	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
@@ -173,6 +176,7 @@ func NewServiceProvider(
 		handler,
 		adminHandler,
 		operatorHandler,
+		streamHandler,
 		versionChecker,
 		visibilityMgr,
 		logger,

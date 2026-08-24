@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -77,6 +78,29 @@ func NewStream(_ chasm.MutableContext, req NewStreamRequest) (*Stream, error) {
 			Consumers:    make(map[string]*streampb.ConsumerCursor),
 		},
 	}, nil
+}
+
+// ContextMetadata satisfies chasm.RootComponent. A stream carries no metadata
+// worth propagating to the request context.
+func (s *Stream) ContextMetadata(_ chasm.Context) map[string]string {
+	return nil
+}
+
+// Terminate seals the stream so a forced shutdown does not leave it accepting
+// writes. Data already appended stays readable, because consumers may have read
+// it and the stream is append-only.
+func (s *Stream) Terminate(
+	mctx chasm.MutableContext,
+	req chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	reason := &commonpb.Payload{Data: []byte(req.Reason)}
+	return chasm.TerminateComponentResponse{}, s.Close(mctx, reason)
+}
+
+// snapshot returns a copy of the frontier for read paths. It is a copy because
+// the caller reads it outside the transition that produced it.
+func (s *Stream) snapshot(_ chasm.Context, _ struct{}) (*streampb.StreamState, error) {
+	return common.CloneProto(s.State), nil
 }
 
 func (s *Stream) LifecycleState(_ chasm.Context) chasm.LifecycleState {

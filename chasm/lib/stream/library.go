@@ -2,6 +2,8 @@ package stream
 
 import (
 	"go.temporal.io/server/chasm"
+	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -16,15 +18,32 @@ var (
 
 type library struct {
 	chasm.UnimplementedLibrary
+	handler *handler
 }
 
-var Library = &library{}
+func newLibrary(h *handler) *library {
+	return &library{handler: h}
+}
 
-func (l *library) Name() string {
+// componentOnlyLibrary registers the component without the service, which is
+// what the frontend needs in order to serialize component references.
+type componentOnlyLibrary struct {
+	chasm.UnimplementedLibrary
+}
+
+func newComponentOnlyLibrary() *componentOnlyLibrary {
+	return &componentOnlyLibrary{}
+}
+
+func (l *componentOnlyLibrary) Name() string {
 	return libraryName
 }
 
-func (l *library) Components() []*chasm.RegistrableComponent {
+func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
+	return components()
+}
+
+func components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Stream](
 			componentName,
@@ -33,6 +52,18 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 	}
 }
 
+func (l *library) Name() string {
+	return libraryName
+}
+
+func (l *library) Components() []*chasm.RegistrableComponent {
+	return components()
+}
+
 func (l *library) Tasks() []*chasm.RegistrableTask {
 	return nil
+}
+
+func (l *library) RegisterServices(server *grpc.Server) {
+	streampb.RegisterStreamServiceServer(server, l.handler)
 }
