@@ -2,7 +2,7 @@
 
 Stages 5 and 6 of AI-198 cannot be built without changing the public API module. This records exactly what changes, why, and what blocks applying them, so the next attempt does not rediscover it.
 
-`api-go-stream-changes.patch` applies cleanly to `temporalio/api` at `e80f8e2`.
+**Status: applied.** The branch lives at `moedash/api` on `moe/AI-198-stream-commands`, and this repo pins it by pseudo-version through a `replace` in `go.mod`. `api-go-stream-changes.patch` is the proto-only diff against `temporalio/api` at `e80f8e2`, kept so the change can be proposed upstream without the vendoring noise.
 
 ## What the patch adds
 
@@ -16,13 +16,21 @@ Stages 5 and 6 of AI-198 cannot be built without changing the public API module.
 
 Note there is **no new event type**. That is deliberate: putting the range on `WorkflowTaskCompleted` is what makes recording an empty range free, and an empty range has to be recorded on every task where a subscription is active (see `streaming-detailed-design.md` §8.2).
 
-## What blocks it
+## What it took to build a fork
 
-**Generation does not work from a clean clone.** `buf.gen.yaml` runs a `go-helpers` plugin from `./protoc-gen-go-helpers`, a directory that is not in the repository, and the repository has no `go.mod`. The published module is a reshaped artifact: generated Go is emitted under `temporal/api/...` and then flattened to the module root by the Makefile's `fix-path`. So a fork needs the generation toolchain sorted out before it produces anything importable.
+Worth recording, because none of it is obvious and all of it cost time.
 
-**A local `replace` would not be enough.** It would make this branch unbuildable for anyone without the same checkout at the same path, which defeats the point of a prototype meant to be reviewed.
+**A clean clone cannot generate.** `buf.gen.yaml` runs a `go-helpers` plugin from `./protoc-gen-go-helpers`, a directory absent from the repository, and there is no `go.mod`. Both live in the published module, so the fork takes them from there.
 
-The unblock is a branch pushed to `temporalio/api` and pinned by pseudo-version. That is a change to a shared repository and needs a decision from someone who owns it, not a unilateral push.
+**Plain `buf generate` produces a module the server cannot compile against.** It leaves the `CommandType_` prefix on enum constants, while the published module has them bare. The stripping is done by `protogen`'s const rewriter (`cmd/protogen/const_rewriter.go`), so generation has to go through `protogen` rather than `buf` directly.
+
+**The pipeline does not emit everything the module ships.** Missing after a full generate: `operatorservicemock`, `proxy`, `serviceerror`, `temporalnexus`, `temporalproto`, `workflowservicemock`, the grpc-gateway `.pb.gw.go` files, and a few hand-written `.go` files sitting beside generated ones such as `common/v1/payload_json.go`. All are taken from the published module unchanged, since none are touched by the stream changes.
+
+**The generated output is reshaped.** Go is emitted under `temporal/api/...` and flattened to the module root by the Makefile's `fix-path`. Flattening before generating breaks the next generation, because the copied `.proto` files then collide with the originals as duplicate definitions.
+
+## Verifying it
+
+`tests/api_fork_test.go` round-trips all three new shapes through proto marshalling rather than merely compiling against them. A field added without its descriptor compiles fine and silently drops on the wire, which is the failure this guards.
 
 ## What is not blocked
 
