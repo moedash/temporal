@@ -10,6 +10,7 @@ var HistoryModule = fx.Module(
 	"stream-history",
 	fx.Provide(
 		newHandler,
+		newRetentionTaskHandler,
 		newLibrary,
 	),
 	fx.Invoke(func(l *library, registry *chasm.Registry) error {

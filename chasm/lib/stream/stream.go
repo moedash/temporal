@@ -2,6 +2,7 @@ package stream
 
 import (
 	"crypto/sha256"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -10,6 +11,7 @@ import (
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Stream is a durable, offset-addressed append-only sequence. It holds only the
@@ -62,6 +64,10 @@ type AddMessagesResult struct {
 	// Staged nodes for the caller to persist before the frontier is observable.
 	// Empty when deduplicated.
 	Appends []LogAppend
+
+	// Buckets the message cap pushed below the readable floor. Safe to delete
+	// once this transition commits, never before.
+	ReclaimableBuckets []int64
 }
 
 func NewStream(_ chasm.MutableContext, req NewStreamRequest) (*Stream, error) {
@@ -94,7 +100,7 @@ func (s *Stream) Terminate(
 	req chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
 	reason := &commonpb.Payload{Data: []byte(req.Reason)}
-	return chasm.TerminateComponentResponse{}, s.Close(mctx, reason)
+	return chasm.TerminateComponentResponse{}, s.closeAndSchedule(mctx, reason)
 }
 
 // snapshot returns a copy of the frontier for read paths. It is a copy because
@@ -191,10 +197,11 @@ func (s *Stream) AddMessages(
 	}
 
 	return AddMessagesResult{
-		FirstOffset: first,
-		NextOffset:  s.State.HeadOffset,
-		Count:       count,
-		Appends:     []LogAppend{appendOp},
+		FirstOffset:        first,
+		NextOffset:         s.State.HeadOffset,
+		Count:              count,
+		Appends:            []LogAppend{appendOp},
+		ReclaimableBuckets: s.applyCap(),
 	}, nil
 }
 
@@ -255,33 +262,81 @@ func (s *Stream) FinishWriting(_ chasm.MutableContext, producerID string) error 
 // Close seals the stream. It does not delete it: a closed stream stays readable
 // through retention, which is what removes the shutdown handshake the current
 // signal-based implementation forces on users.
-func (s *Stream) Close(_ chasm.MutableContext, reason *commonpb.Payload) error {
+// Close returns when retention deletion should be scheduled, or the zero time
+// if the stream was already closed or has no retention configured. Scheduling
+// is the caller's job, which keeps the component a pure state transition and
+// testable without a live context.
+func (s *Stream) Close(now time.Time, reason *commonpb.Payload) time.Time {
 	if s.State.Closed {
-		return nil
+		return time.Time{}
 	}
 	s.State.Closed = true
 	s.State.CloseReason = reason
+	s.State.CloseTime = timestamppb.New(now)
+
+	retention := s.State.GetLifecycle().GetRetention().AsDuration()
+	if retention <= 0 {
+		return time.Time{}
+	}
+	return now.Add(retention)
+}
+
+// closeAndSchedule is the transition form: close, then arm retention if the
+// stream asked for it.
+func (s *Stream) closeAndSchedule(mctx chasm.MutableContext, reason *commonpb.Payload) error {
+	if at := s.Close(mctx.Now(s), reason); !at.IsZero() {
+		mctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: at}, &streampb.StreamRetentionTask{})
+	}
 	return nil
 }
 
 // Truncate advances the readable floor. It cannot pass a registered in-workflow
 // consumer, because that consumer's history records an offset range it must
 // still be able to re-read on replay.
-func (s *Stream) Truncate(_ chasm.MutableContext, newBase int64) error {
+func (s *Stream) Truncate(_ chasm.MutableContext, newBase int64) ([]int64, error) {
 	if newBase < s.State.BaseOffset {
-		return serviceerror.NewInvalidArgumentf(
+		return nil, serviceerror.NewInvalidArgumentf(
 			"cannot truncate backwards from %d to %d", s.State.BaseOffset, newBase)
 	}
 	if newBase > s.State.HeadOffset {
-		return serviceerror.NewInvalidArgumentf(
+		return nil, serviceerror.NewInvalidArgumentf(
 			"cannot truncate past head offset %d", s.State.HeadOffset)
 	}
 	if pin, ok := s.consumerPin(); ok && newBase > pin {
-		return serviceerror.NewFailedPreconditionf(
+		return nil, serviceerror.NewFailedPreconditionf(
 			"cannot truncate past offset %d, which an active consumer still needs", pin)
 	}
+	reclaimable := ReclaimableBuckets(s.State.BaseOffset, newBase, s.State.BucketSize)
 	s.State.BaseOffset = newBase
-	return nil
+	return reclaimable, nil
+}
+
+// applyCap advances the readable floor when the stream is over its message cap.
+// Evaluated at the end of a successful append rather than by a sweeper: the
+// append transition is already writing, so folding the check into it costs
+// nothing and keeps the cap tight instead of eventually true.
+func (s *Stream) applyCap() []int64 {
+	maxItems := s.State.GetLifecycle().GetMaxItems()
+	if maxItems <= 0 {
+		return nil
+	}
+	readable := s.State.HeadOffset - s.State.BaseOffset
+	if readable <= maxItems {
+		return nil
+	}
+	newBase := s.State.HeadOffset - maxItems
+	if pin, ok := s.consumerPin(); ok && newBase > pin {
+		// A workflow consumer still needs this range, so the cap yields to it.
+		// Storage grows rather than a consumer losing data it recorded a cursor
+		// for and must be able to re-read on replay.
+		newBase = pin
+	}
+	if newBase <= s.State.BaseOffset {
+		return nil
+	}
+	reclaimable := ReclaimableBuckets(s.State.BaseOffset, newBase, s.State.BucketSize)
+	s.State.BaseOffset = newBase
+	return reclaimable
 }
 
 // consumerPin is the lowest offset any active in-workflow consumer still needs.

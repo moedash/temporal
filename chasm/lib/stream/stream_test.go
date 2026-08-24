@@ -2,11 +2,13 @@ package stream
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func newTestStream(t *testing.T, bucketSize int64) *Stream {
@@ -153,7 +155,7 @@ func TestFinishWritingFencesOneProducerOnly(t *testing.T) {
 
 func TestCloseRejectsFurtherAppends(t *testing.T) {
 	s := newTestStream(t, 100)
-	require.NoError(t, s.Close(nil, nil))
+	s.Close(time.Now(), nil)
 
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), TxnID: 1})
 	require.Error(t, err)
@@ -196,12 +198,15 @@ func TestTruncateRespectsConsumerPin(t *testing.T) {
 
 	// A workflow consumer's history records an offset range it must be able to
 	// re-read on replay, so truncation cannot pass it.
-	require.Error(t, s.Truncate(nil, 3))
-	require.NoError(t, s.Truncate(nil, 2))
+	_, err = s.Truncate(nil, 3)
+	require.Error(t, err)
+	_, err = s.Truncate(nil, 2)
+	require.NoError(t, err)
 	require.Equal(t, int64(2), s.State.BaseOffset)
 
 	s.State.Consumers["wf-1"].Active = false
-	require.NoError(t, s.Truncate(nil, 4))
+	_, err = s.Truncate(nil, 4)
+	require.NoError(t, err)
 }
 
 func TestTruncateBounds(t *testing.T) {
@@ -209,9 +214,12 @@ func TestTruncateBounds(t *testing.T) {
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b"), TxnID: 1})
 	require.NoError(t, err)
 
-	require.NoError(t, s.Truncate(nil, 1))
-	require.Error(t, s.Truncate(nil, 0), "truncation must not go backwards")
-	require.Error(t, s.Truncate(nil, 3), "truncation must not pass the head")
+	_, err = s.Truncate(nil, 1)
+	require.NoError(t, err)
+	_, err = s.Truncate(nil, 0)
+	require.Error(t, err, "truncation must not go backwards")
+	_, err = s.Truncate(nil, 3)
+	require.Error(t, err, "truncation must not pass the head")
 }
 
 func TestBucketArithmetic(t *testing.T) {
@@ -224,4 +232,63 @@ func TestBucketArithmetic(t *testing.T) {
 	require.Equal(t, int64(10), NodeIDOf(9, 10))
 	require.Equal(t, int64(1), NodeIDOf(10, 10))
 	require.Equal(t, int64(20), BucketStart(2, 10))
+}
+
+func TestReclaimableBuckets(t *testing.T) {
+	// Only buckets lying entirely below the floor are reclaimable, so nothing a
+	// reader can still ask for is ever dropped.
+	require.Empty(t, ReclaimableBuckets(0, 3, 4))
+	require.Equal(t, []int64{0}, ReclaimableBuckets(0, 4, 4))
+	require.Equal(t, []int64{0, 1}, ReclaimableBuckets(0, 8, 4))
+	require.Equal(t, []int64{1}, ReclaimableBuckets(4, 8, 4))
+	require.Empty(t, ReclaimableBuckets(4, 5, 4))
+}
+
+func TestCapTruncatesInline(t *testing.T) {
+	s := newTestStream(t, 4)
+	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 4}
+
+	for i := range 4 {
+		_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b"), TxnID: int64(i + 1)})
+		require.NoError(t, err)
+	}
+
+	// Eight appended, four retained, so the floor sits at 4 and bucket 0 is
+	// entirely below it.
+	require.Equal(t, int64(8), s.State.HeadOffset)
+	require.Equal(t, int64(4), s.State.BaseOffset)
+}
+
+func TestCapYieldsToAConsumerPin(t *testing.T) {
+	s := newTestStream(t, 100)
+	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
+	s.State.Consumers["wf-1"] = &streampb.ConsumerCursor{
+		WorkflowId: "wf-1", Offset: 1, Active: true,
+	}
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	require.NoError(t, err)
+
+	// The cap wants a floor of 2, but a workflow consumer recorded a cursor at 1
+	// and must be able to re-read from there on replay. Storage grows rather
+	// than that consumer losing data.
+	require.Equal(t, int64(1), s.State.BaseOffset)
+}
+
+func TestCloseSchedulesRetentionOnlyWhenConfigured(t *testing.T) {
+	now := time.Now()
+
+	plain := newTestStream(t, 100)
+	require.True(t, plain.Close(now, nil).IsZero(), "no retention configured, nothing to schedule")
+
+	withRetention := newTestStream(t, 100)
+	withRetention.State.Lifecycle = &streampb.StreamLifecycle{
+		Retention: durationpb.New(time.Hour),
+	}
+	at := withRetention.Close(now, nil)
+	require.Equal(t, now.Add(time.Hour), at)
+	require.NotNil(t, withRetention.State.CloseTime)
+
+	// Closing twice must not re-arm deletion.
+	require.True(t, withRetention.Close(now, nil).IsZero())
 }

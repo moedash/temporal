@@ -11,7 +11,9 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/proto"
 )
@@ -71,6 +73,26 @@ func refFor(namespaceID, streamID string) chasm.ComponentRef {
 		NamespaceID: namespaceID,
 		BusinessID:  streamID,
 	})
+}
+
+// reclaim deletes buckets that a committed truncation put out of reach. It runs
+// after the commit, so a failure here leaves storage to reclaim later rather
+// than data a reader can still ask for but no longer find.
+func (h *handler) reclaim(
+	ctx context.Context,
+	shardCtx historyi.ShardContext,
+	namespaceID, collectionID string,
+	buckets []int64,
+) {
+	for _, b := range buckets {
+		if err := DeleteBucket(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
+			namespaceID, collectionID, b); err != nil {
+			h.logger.Warn("failed to reclaim a truncated stream bucket",
+				tag.NewStringTag("collection-id", collectionID),
+				tag.NewInt64("bucket", b),
+				tag.Error(err))
+		}
+	}
 }
 
 func (h *handler) CreateStream(
@@ -181,6 +203,7 @@ func (h *handler) AddMessages(
 				result.FirstOffset, result.NextOffset, op.Blob)
 		}
 	}
+	h.reclaim(ctx, shardCtx, req.GetNamespaceId(), state.GetCollectionId(), result.ReclaimableBuckets)
 
 	return &streampb.AddMessagesResponse{
 		FrontendResponse: &streampb.AddMessagesOutput{
@@ -398,7 +421,7 @@ func (h *handler) CloseStream(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
 		func(s *Stream, mctx chasm.MutableContext, reason *commonpb.Payload) (struct{}, error) {
-			return struct{}{}, s.Close(mctx, reason)
+			return struct{}{}, s.closeAndSchedule(mctx, reason)
 		},
 		in.GetReason(),
 	)
@@ -413,16 +436,31 @@ func (h *handler) TruncateStream(
 	req *streampb.TruncateStreamRequest,
 ) (*streampb.TruncateStreamResponse, error) {
 	in := req.GetFrontendRequest()
-	_, _, err := chasm.UpdateComponent(
+
+	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
+		namespace.ID(req.GetNamespaceId()), in.GetStreamId())
+	if err != nil {
+		return nil, err
+	}
+
+	reclaimable, _, err := chasm.UpdateComponent(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
-		func(s *Stream, mctx chasm.MutableContext, newBase int64) (struct{}, error) {
-			return struct{}{}, s.Truncate(mctx, newBase)
+		func(s *Stream, mctx chasm.MutableContext, newBase int64) ([]int64, error) {
+			return s.Truncate(mctx, newBase)
 		},
 		in.GetNewBaseOffset(),
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(reclaimable) > 0 {
+		state, err := chasm.ReadComponent(ctx,
+			refFor(req.GetNamespaceId(), in.GetStreamId()), (*Stream).snapshot, struct{}{})
+		if err == nil {
+			h.reclaim(ctx, shardCtx, req.GetNamespaceId(), state.GetCollectionId(), reclaimable)
+		}
 	}
 	return &streampb.TruncateStreamResponse{FrontendResponse: &streampb.TruncateStreamOutput{}}, nil
 }

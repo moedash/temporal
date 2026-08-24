@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+// Fires at close_time plus retention. A closed stream stays readable until
+// then, which is what removes the shutdown handshake the signal-based
+// implementation forces on producers and consumers.
+message StreamRetentionTask {}

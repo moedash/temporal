@@ -190,3 +190,36 @@ func ReadRange(
 	}
 	return blobs, startOffsets, nil
 }
+
+// DeleteBucket removes a whole bucket's tree. Reclaiming a truncated stream one
+// bucket at a time is the point of bucketing: a partition is dropped outright
+// rather than leaving a tombstone per message.
+func DeleteBucket(
+	ctx context.Context,
+	execMgr persistence.ExecutionManager,
+	shardID int32,
+	namespaceID string,
+	collectionID string,
+	bucket int64,
+) error {
+	token, err := branchToken(execMgr.GetHistoryBranchUtil(), namespaceID, collectionID, bucket)
+	if err != nil {
+		return err
+	}
+	return execMgr.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
+		ShardID:     shardID,
+		BranchToken: token,
+	})
+}
+
+// ReclaimableBuckets lists buckets that lie entirely below the readable floor
+// and can therefore be deleted. A bucket is only reclaimable once every offset
+// it holds is unreadable, so this can never drop data a reader may still ask
+// for.
+func ReclaimableBuckets(previousBase, newBase, bucketSize int64) []int64 {
+	var out []int64
+	for b := BucketOf(previousBase, bucketSize); BucketStart(b+1, bucketSize) <= newBase; b++ {
+		out = append(out, b)
+	}
+	return out
+}

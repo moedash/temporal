@@ -416,3 +416,61 @@ func TestStreamLongPollReturnsImmediatelyWhenBehind(t *testing.T) {
 	require.Equal(t, []string{"a", "b"}, bodies(out.GetMessages()))
 	require.Less(t, time.Since(start), 5*time.Second)
 }
+
+func TestStreamCapTruncatesAndReclaims(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-cap"
+
+	_, err := s.client.CreateStream(ctx, &streampb.CreateStreamRequest{
+		FrontendRequest: &streampb.CreateStreamInput{
+			Namespace: s.ns, StreamId: id,
+			Lifecycle: &streampb.StreamLifecycle{MaxItems: 4},
+		},
+	})
+	require.NoError(t, err)
+
+	for _, batch := range [][]string{{"a", "b"}, {"c", "d"}, {"e", "f"}} {
+		_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", batch...)})
+		require.NoError(t, err)
+	}
+
+	// Six appended against a cap of four, so the floor advanced without anyone
+	// asking. Reading from the floor still works and returns exactly what the
+	// cap retained.
+	got := s.poll(ctx, t, id, 2)
+	require.Equal(t, []string{"c", "d", "e", "f"}, bodies(got.GetMessages()))
+
+	// Below the floor is a distinguishable error, not silence.
+	_, err = s.client.PollMessages(ctx, &streampb.PollMessagesRequest{
+		FrontendRequest: &streampb.PollMessagesInput{Namespace: s.ns, StreamId: id, FromOffset: 0},
+	})
+	require.ErrorContains(t, err, "truncated")
+}
+
+func TestStreamClosedStaysReadable(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-closed-readable"
+	s.create(ctx, t, id)
+
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "a", "b")})
+	require.NoError(t, err)
+	_, err = s.client.CloseStream(ctx, &streampb.CloseStreamRequest{
+		FrontendRequest: &streampb.CloseStreamInput{Namespace: s.ns, StreamId: id},
+	})
+	require.NoError(t, err)
+
+	// Close seals, it does not delete. A consumer can finish draining without
+	// coordinating a shutdown with the producer, which is the handshake the
+	// signal-based implementation forces today.
+	got := s.poll(ctx, t, id, 0)
+	require.Equal(t, []string{"a", "b"}, bodies(got.GetMessages()))
+	require.True(t, got.GetClosed())
+
+	desc, err := s.client.DescribeStream(ctx, &streampb.DescribeStreamRequest{
+		FrontendRequest: &streampb.DescribeStreamInput{Namespace: s.ns, StreamId: id},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, desc.GetFrontendResponse().GetState().GetCloseTime())
+}

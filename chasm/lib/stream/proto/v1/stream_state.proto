@@ -3,6 +3,7 @@ syntax = "proto3";
 package temporal.server.chasm.lib.stream.proto.v1;
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
@@ -40,6 +41,9 @@ message StreamState {
   // Set when a successor run takes ownership, so an in-flight poll can follow
   // the chain instead of stalling on a superseded run.
   string redirect_run_id = 12;
+
+  // Wall-clock close time, used to schedule retention deletion.
+  google.protobuf.Timestamp close_time = 13;
 }
 
 message ProducerCursor {
@@ -63,7 +67,9 @@ message ConsumerCursor {
 }
 
 message StreamLifecycle {
+  // How long a closed stream stays readable before it is deleted.
   google.protobuf.Duration retention = 1;
+  // Cap on readable messages. Older whole buckets are reclaimed once the floor
+  // passes them, so a capped stream has bounded storage.
   int64 max_items = 2;
-  int64 max_bytes = 3;
 }
