@@ -1,0 +1,133 @@
+diff --git a/temporal/api/command/v1/message.proto b/temporal/api/command/v1/message.proto
+index ee83911..f28d98c 100644
+--- a/temporal/api/command/v1/message.proto
++++ b/temporal/api/command/v1/message.proto
+@@ -14,6 +14,7 @@ import "google/protobuf/duration.proto";
+ import "temporal/api/enums/v1/workflow.proto";
+ import "temporal/api/enums/v1/command_type.proto";
+ import "temporal/api/common/v1/message.proto";
++import "temporal/api/stream/v1/message.proto";
+ import "temporal/api/failure/v1/message.proto";
+ import "temporal/api/taskqueue/v1/message.proto";
+ import "temporal/api/workflow/v1/message.proto";
+@@ -324,5 +325,14 @@ message Command {
+ 
+         ScheduleNexusOperationCommandAttributes schedule_nexus_operation_command_attributes = 18;
+         RequestCancelNexusOperationCommandAttributes request_cancel_nexus_operation_command_attributes = 19;
++        AddStreamMessagesCommandAttributes add_stream_messages_command_attributes = 20;
+     }
+ }
++
++// Appends to a stream the Workflow owns. Applied inside the Workflow Task's own
++// commit, so it emits no History Event and does not schedule further work.
++message AddStreamMessagesCommandAttributes {
++    // Empty means the Workflow's default output stream.
++    string stream_id = 1;
++    repeated temporal.api.stream.v1.StreamMessage messages = 2;
++}
+diff --git a/temporal/api/enums/v1/command_type.proto b/temporal/api/enums/v1/command_type.proto
+index 067d953..91edd67 100644
+--- a/temporal/api/enums/v1/command_type.proto
++++ b/temporal/api/enums/v1/command_type.proto
+@@ -29,4 +29,5 @@ enum CommandType {
+     COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES = 16;
+     COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION = 17;
+     COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION = 18;
++    COMMAND_TYPE_ADD_STREAM_MESSAGES = 19;
+ }
+diff --git a/temporal/api/history/v1/message.proto b/temporal/api/history/v1/message.proto
+index 0211c6f..cc2badb 100644
+--- a/temporal/api/history/v1/message.proto
++++ b/temporal/api/history/v1/message.proto
+@@ -17,6 +17,7 @@ import "temporal/api/enums/v1/failed_cause.proto";
+ import "temporal/api/enums/v1/update.proto";
+ import "temporal/api/enums/v1/workflow.proto";
+ import "temporal/api/common/v1/message.proto";
++import "temporal/api/stream/v1/message.proto";
+ import "temporal/api/deployment/v1/message.proto";
+ import "temporal/api/failure/v1/message.proto";
+ import "temporal/api/taskqueue/v1/message.proto";
+@@ -369,6 +370,12 @@ message WorkflowTaskCompletedEventAttributes {
+     // execution. UNSPECIFIED means the task was completed by an unversioned worker. This value
+     // updates workflow execution's `versioning_info.behavior`.
+     temporal.api.enums.v1.VersioningBehavior versioning_behavior = 8;
++
++    // Offset ranges this Workflow Task consumed from streams it subscribes to.
++    // Recorded on every task where a subscription is active, including when it
++    // observed nothing: an empty range is a fact replay must reproduce, and
++    // omitting it would let replay deliver messages the Workflow did not have.
++    repeated temporal.api.stream.v1.StreamCursor stream_cursors = 20;
+     // The Worker Deployment Version that completed this task. Must be set if `versioning_behavior`
+     // is set. This value updates workflow execution's `versioning_info.version`.
+     // Deprecated. Replaced with `deployment_version`.
+diff --git a/temporal/api/stream/v1/message.proto b/temporal/api/stream/v1/message.proto
+new file mode 100644
+index 0000000..67286cb
+--- /dev/null
++++ b/temporal/api/stream/v1/message.proto
+@@ -0,0 +1,42 @@
++syntax = "proto3";
++
++package temporal.api.stream.v1;
++
++option go_package = "go.temporal.io/api/stream/v1;stream";
++option java_package = "io.temporal.api.stream.v1";
++option java_multiple_files = true;
++option java_outer_classname = "MessageProto";
++option ruby_package = "Temporalio::Api::Stream::V1";
++option csharp_namespace = "Temporalio.Api.Stream.V1";
++
++import "temporal/api/common/v1/message.proto";
++
++message StreamMessage {
++    temporal.api.common.v1.Payload body = 1;
++    map<string, temporal.api.common.v1.Payload> metadata = 2;
++    string topic = 3;
++    int64 topic_sequence = 4;
++}
++
++// A contiguous range of a stream delivered to a Workflow Task, along with the
++// offsets it covers. The offsets are what History records; the messages
++// themselves are never written to History.
++message StreamSlice {
++    string stream_id = 1;
++    string run_id = 2;
++    // Inclusive.
++    int64 from_offset = 3;
++    // Exclusive. Equal to from_offset when the subscription observed nothing,
++    // which is a fact replay has to reproduce rather than an absence of one.
++    int64 to_offset = 4;
++    repeated StreamMessage messages = 5;
++}
++
++// The offsets a Workflow Task consumed, without the payloads. Recorded on
++// WorkflowTaskCompleted so History grows with Workflow Tasks rather than with
++// messages.
++message StreamCursor {
++    string stream_id = 1;
++    int64 from_offset = 2;
++    int64 to_offset = 3;
++}
+diff --git a/temporal/api/workflowservice/v1/request_response.proto b/temporal/api/workflowservice/v1/request_response.proto
+index c3dd957..b396de5 100644
+--- a/temporal/api/workflowservice/v1/request_response.proto
++++ b/temporal/api/workflowservice/v1/request_response.proto
+@@ -24,6 +24,7 @@ import "temporal/api/enums/v1/activity.proto";
+ import "temporal/api/enums/v1/nexus.proto";
+ import "temporal/api/activity/v1/message.proto";
+ import "temporal/api/common/v1/message.proto";
++import "temporal/api/stream/v1/message.proto";
+ import "temporal/api/history/v1/message.proto";
+ import "temporal/api/workflow/v1/message.proto";
+ import "temporal/api/command/v1/message.proto";
+@@ -383,6 +384,10 @@ message PollWorkflowTaskQueueResponse {
+     //   3. If every group has some pending polls, assign the next poll to a group randomly
+     //     according to the weights.
+     temporal.api.taskqueue.v1.PollerGroupsInfo poller_groups_info = 19;
++
++    // Stream data attached to this task. Delivered out of band so the payloads
++    // never enter History; only the offset ranges are recorded there.
++    repeated temporal.api.stream.v1.StreamSlice stream_slices = 20;
+ }
+ 
+ message RespondWorkflowTaskCompletedRequest {
