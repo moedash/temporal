@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	chasmstream "go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -473,4 +474,35 @@ func TestStreamClosedStaysReadable(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, desc.GetFrontendResponse().GetState().GetCloseTime())
+}
+
+func TestStreamListStreams(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+
+	created := []string{"list-a", "list-b", "list-c"}
+	for _, id := range created {
+		s.create(ctx, t, id)
+	}
+
+	// Visibility is written by a task after the create commits, so this is
+	// eventually consistent by design rather than by accident.
+	await.RequireTrue(t, func() bool {
+		resp, err := s.client.ListStreams(ctx, &streampb.ListStreamsRequest{
+			FrontendRequest: &streampb.ListStreamsInput{Namespace: s.ns},
+		})
+		if err != nil {
+			return false
+		}
+		found := make(map[string]bool)
+		for _, e := range resp.GetFrontendResponse().GetStreams() {
+			found[e.GetStreamId()] = true
+		}
+		for _, id := range created {
+			if !found[id] {
+				return false
+			}
+		}
+		return true
+	}, 20*time.Second, 250*time.Millisecond)
 }

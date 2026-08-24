@@ -4,9 +4,11 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // FrontendHandler serves StreamService on the frontend. It resolves the
@@ -137,4 +139,44 @@ func (h *FrontendHandler) DeleteStream(
 	return h.client.DeleteStream(ctx, &streampb.DeleteStreamRequest{
 		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
 	})
+}
+
+// ListStreams answers from visibility rather than from any one stream, so it
+// does not route to a shard and is served here rather than on the history side.
+func (h *FrontendHandler) ListStreams(
+	ctx context.Context, req *streampb.ListStreamsRequest,
+) (*streampb.ListStreamsResponse, error) {
+	in := req.GetFrontendRequest()
+	if in.GetNamespace() == "" {
+		return nil, serviceerror.NewInvalidArgument("namespace is required")
+	}
+
+	pageSize := int(in.GetPageSize())
+	if pageSize <= 0 || pageSize > maxListPageSize {
+		pageSize = maxListPageSize
+	}
+
+	resp, err := chasm.ListExecutions[*Stream, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
+		NamespaceName: in.GetNamespace(),
+		PageSize:      pageSize,
+		NextPageToken: in.GetNextPageToken(),
+		Query:         in.GetQuery(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]*streampb.StreamListEntry, 0, len(resp.Executions))
+	for _, e := range resp.Executions {
+		entries = append(entries, &streampb.StreamListEntry{
+			StreamId: e.BusinessID,
+			RunId:    e.RunID,
+		})
+	}
+	return &streampb.ListStreamsResponse{
+		FrontendResponse: &streampb.ListStreamsOutput{
+			Streams:       entries,
+			NextPageToken: resp.NextPageToken,
+		},
+	}, nil
 }

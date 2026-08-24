@@ -1115,6 +1115,191 @@ func (this *TruncateStreamResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ListStreamsInput to the protobuf v3 wire format
+func (val *ListStreamsInput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListStreamsInput from the protobuf v3 wire format
+func (val *ListStreamsInput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListStreamsInput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListStreamsInput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListStreamsInput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListStreamsInput
+	switch t := that.(type) {
+	case *ListStreamsInput:
+		that1 = t
+	case ListStreamsInput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type StreamListEntry to the protobuf v3 wire format
+func (val *StreamListEntry) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StreamListEntry from the protobuf v3 wire format
+func (val *StreamListEntry) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StreamListEntry) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StreamListEntry values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StreamListEntry) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StreamListEntry
+	switch t := that.(type) {
+	case *StreamListEntry:
+		that1 = t
+	case StreamListEntry:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ListStreamsOutput to the protobuf v3 wire format
+func (val *ListStreamsOutput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListStreamsOutput from the protobuf v3 wire format
+func (val *ListStreamsOutput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListStreamsOutput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListStreamsOutput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListStreamsOutput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListStreamsOutput
+	switch t := that.(type) {
+	case *ListStreamsOutput:
+		that1 = t
+	case ListStreamsOutput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ListStreamsRequest to the protobuf v3 wire format
+func (val *ListStreamsRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListStreamsRequest from the protobuf v3 wire format
+func (val *ListStreamsRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListStreamsRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListStreamsRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListStreamsRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListStreamsRequest
+	switch t := that.(type) {
+	case *ListStreamsRequest:
+		that1 = t
+	case ListStreamsRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ListStreamsResponse to the protobuf v3 wire format
+func (val *ListStreamsResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListStreamsResponse from the protobuf v3 wire format
+func (val *ListStreamsResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListStreamsResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListStreamsResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListStreamsResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListStreamsResponse
+	switch t := that.(type) {
+	case *ListStreamsResponse:
+		that1 = t
+	case ListStreamsResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type DeleteStreamRequest to the protobuf v3 wire format
 func (val *DeleteStreamRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

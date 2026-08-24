@@ -27,6 +27,7 @@ const (
 	StreamService_DescribeStream_FullMethodName = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/DescribeStream"
 	StreamService_CloseStream_FullMethodName    = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/CloseStream"
 	StreamService_TruncateStream_FullMethodName = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/TruncateStream"
+	StreamService_ListStreams_FullMethodName    = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/ListStreams"
 	StreamService_DeleteStream_FullMethodName   = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/DeleteStream"
 )
 
@@ -41,6 +42,9 @@ type StreamServiceClient interface {
 	DescribeStream(ctx context.Context, in *DescribeStreamRequest, opts ...grpc.CallOption) (*DescribeStreamResponse, error)
 	CloseStream(ctx context.Context, in *CloseStreamRequest, opts ...grpc.CallOption) (*CloseStreamResponse, error)
 	TruncateStream(ctx context.Context, in *TruncateStreamRequest, opts ...grpc.CallOption) (*TruncateStreamResponse, error)
+	// Served on the frontend only: it queries visibility rather than a stream,
+	// so there is no business ID to route on and nothing for a shard to answer.
+	ListStreams(ctx context.Context, in *ListStreamsRequest, opts ...grpc.CallOption) (*ListStreamsResponse, error)
 	DeleteStream(ctx context.Context, in *DeleteStreamRequest, opts ...grpc.CallOption) (*DeleteStreamResponse, error)
 }
 
@@ -115,6 +119,15 @@ func (c *streamServiceClient) TruncateStream(ctx context.Context, in *TruncateSt
 	return out, nil
 }
 
+func (c *streamServiceClient) ListStreams(ctx context.Context, in *ListStreamsRequest, opts ...grpc.CallOption) (*ListStreamsResponse, error) {
+	out := new(ListStreamsResponse)
+	err := c.cc.Invoke(ctx, StreamService_ListStreams_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *streamServiceClient) DeleteStream(ctx context.Context, in *DeleteStreamRequest, opts ...grpc.CallOption) (*DeleteStreamResponse, error) {
 	out := new(DeleteStreamResponse)
 	err := c.cc.Invoke(ctx, StreamService_DeleteStream_FullMethodName, in, out, opts...)
@@ -135,6 +148,9 @@ type StreamServiceServer interface {
 	DescribeStream(context.Context, *DescribeStreamRequest) (*DescribeStreamResponse, error)
 	CloseStream(context.Context, *CloseStreamRequest) (*CloseStreamResponse, error)
 	TruncateStream(context.Context, *TruncateStreamRequest) (*TruncateStreamResponse, error)
+	// Served on the frontend only: it queries visibility rather than a stream,
+	// so there is no business ID to route on and nothing for a shard to answer.
+	ListStreams(context.Context, *ListStreamsRequest) (*ListStreamsResponse, error)
 	DeleteStream(context.Context, *DeleteStreamRequest) (*DeleteStreamResponse, error)
 	mustEmbedUnimplementedStreamServiceServer()
 }
@@ -163,6 +179,9 @@ func (UnimplementedStreamServiceServer) CloseStream(context.Context, *CloseStrea
 }
 func (UnimplementedStreamServiceServer) TruncateStream(context.Context, *TruncateStreamRequest) (*TruncateStreamResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TruncateStream not implemented")
+}
+func (UnimplementedStreamServiceServer) ListStreams(context.Context, *ListStreamsRequest) (*ListStreamsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListStreams not implemented")
 }
 func (UnimplementedStreamServiceServer) DeleteStream(context.Context, *DeleteStreamRequest) (*DeleteStreamResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteStream not implemented")
@@ -306,6 +325,24 @@ func _StreamService_TruncateStream_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _StreamService_ListStreams_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListStreamsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamServiceServer).ListStreams(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamService_ListStreams_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamServiceServer).ListStreams(ctx, req.(*ListStreamsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _StreamService_DeleteStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteStreamRequest)
 	if err := dec(in); err != nil {
@@ -358,6 +395,10 @@ var StreamService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TruncateStream",
 			Handler:    _StreamService_TruncateStream_Handler,
+		},
+		{
+			MethodName: "ListStreams",
+			Handler:    _StreamService_ListStreams_Handler,
 		},
 		{
 			MethodName: "DeleteStream",

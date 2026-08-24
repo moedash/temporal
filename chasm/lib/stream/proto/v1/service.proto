@@ -44,6 +44,13 @@ service StreamService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  // Served on the frontend only: it queries visibility rather than a stream,
+  // so there is no business ID to route on and nothing for a shard to answer.
+  rpc ListStreams(ListStreamsRequest) returns (ListStreamsResponse) {
+    option (temporal.server.api.routing.v1.routing).random = true;
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   rpc DeleteStream(DeleteStreamRequest) returns (DeleteStreamResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;

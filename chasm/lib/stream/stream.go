@@ -25,6 +25,11 @@ type Stream struct {
 	chasm.UnimplementedComponent
 
 	State *streampb.StreamState
+
+	// Present so streams are listable. Operators need to find them the same way
+	// they find workflows, and without this the only way to reach a stream is
+	// to already know its ID.
+	Visibility chasm.Field[*chasm.Visibility]
 }
 
 type NewStreamRequest struct {
@@ -70,12 +75,13 @@ type AddMessagesResult struct {
 	ReclaimableBuckets []int64
 }
 
-func NewStream(_ chasm.MutableContext, req NewStreamRequest) (*Stream, error) {
+func NewStream(ctx chasm.MutableContext, req NewStreamRequest) (*Stream, error) {
 	bucketSize := req.BucketSize
 	if bucketSize <= 0 {
 		bucketSize = DefaultBucketSize
 	}
 	return &Stream{
+		Visibility: chasm.NewComponentField(ctx, chasm.NewVisibility(ctx)),
 		State: &streampb.StreamState{
 			CollectionId: req.CollectionID,
 			BucketSize:   bucketSize,

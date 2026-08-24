@@ -465,6 +465,9 @@ func (h *handler) TruncateStream(
 	return &streampb.TruncateStreamResponse{FrontendResponse: &streampb.TruncateStreamOutput{}}, nil
 }
 
+// ListStreams is intentionally not implemented here. It queries visibility, so
+// it has no business ID to route on and the frontend answers it directly.
+
 func (h *handler) DeleteStream(
 	ctx context.Context,
 	req *streampb.DeleteStreamRequest,

@@ -27,3 +27,6 @@ const (
 	tailCacheBytesPerStream = 1 << 20
 	tailCacheMaxStreams     = 4096
 )
+
+// maxListPageSize bounds a visibility page when the caller does not.
+const maxListPageSize = 1000

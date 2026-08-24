@@ -167,6 +167,31 @@ message TruncateStreamResponse {
   TruncateStreamOutput frontend_response = 1;
 }
 
+message ListStreamsInput {
+  string namespace = 1;
+  int32 page_size = 2;
+  bytes next_page_token = 3;
+  string query = 4;
+}
+
+message StreamListEntry {
+  string stream_id = 1;
+  string run_id = 2;
+}
+
+message ListStreamsOutput {
+  repeated StreamListEntry streams = 1;
+  bytes next_page_token = 2;
+}
+
+message ListStreamsRequest {
+  string namespace_id = 1;
+  ListStreamsInput frontend_request = 2;
+}
+message ListStreamsResponse {
+  ListStreamsOutput frontend_response = 1;
+}
+
 message DeleteStreamRequest {
   string namespace_id = 1;
   DeleteStreamInput frontend_request = 2;

@@ -11,14 +11,20 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// Built directly rather than through NewStream: these exercise state
+// transitions, and NewStream also wires a visibility field that needs a live
+// context. Construction through the real path is covered end to end in
+// tests/stream_test.go.
 func newTestStream(t *testing.T, bucketSize int64) *Stream {
 	t.Helper()
-	s, err := NewStream(nil, NewStreamRequest{
-		CollectionID: "col-1",
-		BucketSize:   bucketSize,
-	})
-	require.NoError(t, err)
-	return s
+	return &Stream{
+		State: &streampb.StreamState{
+			CollectionId: "col-1",
+			BucketSize:   bucketSize,
+			Producers:    make(map[string]*streampb.ProducerCursor),
+			Consumers:    make(map[string]*streampb.ConsumerCursor),
+		},
+	}
 }
 
 func msgs(bodies ...string) []*streampb.StreamMessage {
