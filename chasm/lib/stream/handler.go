@@ -10,6 +10,7 @@ import (
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -21,8 +22,9 @@ import (
 type handler struct {
 	streampb.UnimplementedStreamServiceServer
 
-	shardController shard.Controller
-	logger          log.Logger
+	shardController   shard.Controller
+	namespaceRegistry namespace.Registry
+	logger            log.Logger
 
 	// Appends to one stream are serialized here. The node has to be durable
 	// before the frontier advances, which means writing it outside the
@@ -41,17 +43,36 @@ type handler struct {
 	tail *tailCache
 }
 
-func newHandler(shardController shard.Controller, logger log.Logger) *handler {
+func newHandler(
+	shardController shard.Controller,
+	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+) *handler {
 	return &handler{
-		shardController: shardController,
-		logger:          logger,
-		appendLk:        make(map[string]*sync.Mutex),
-		tail:            newTailCache(tailCacheBytesPerStream, tailCacheMaxStreams),
+		shardController:   shardController,
+		namespaceRegistry: namespaceRegistry,
+		logger:            logger,
+		appendLk:          make(map[string]*sync.Mutex),
+		tail:              newTailCache(tailCacheBytesPerStream, tailCacheMaxStreams),
 	}
 }
 
 func streamKey(namespaceID, streamID string) string {
 	return namespaceID + "/" + streamID
+}
+
+// withCallerInfo tags the context so the stream's direct persistence calls are
+// attributed to the namespace that caused them. Without it they carry no caller
+// name, which means they escape namespace rate limiting and priority as well as
+// going uncounted in per-namespace metrics. The RPC path sets this via
+// interceptors; calls made outside a request handler have to set it themselves.
+func (h *handler) withCallerInfo(ctx context.Context, namespaceID string) context.Context {
+	name, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
+	if err != nil {
+		return ctx
+	}
+	return headers.SetCallerInfo(ctx, headers.NewCallerInfo(
+		name.String(), headers.CallerTypeAPI, ""))
 }
 
 func (h *handler) lockStream(namespaceID, streamID string) func() {
@@ -134,6 +155,8 @@ func (h *handler) AddMessages(
 
 	unlock := h.lockStream(req.GetNamespaceId(), in.GetStreamId())
 	defer unlock()
+
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
 	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
 		namespace.ID(req.GetNamespaceId()), in.GetStreamId())
@@ -239,6 +262,7 @@ func (h *handler) PollMessages(
 	req *streampb.PollMessagesRequest,
 ) (*streampb.PollMessagesResponse, error) {
 	in := req.GetFrontendRequest()
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
 	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
 		namespace.ID(req.GetNamespaceId()), in.GetStreamId())

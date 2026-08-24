@@ -5,6 +5,7 @@ import (
 
 	"go.temporal.io/server/chasm"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -17,12 +18,21 @@ import (
 type retentionTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*streampb.StreamRetentionTask]
 
-	shardController shard.Controller
-	logger          log.Logger
+	shardController   shard.Controller
+	namespaceRegistry namespace.Registry
+	logger            log.Logger
 }
 
-func newRetentionTaskHandler(shardController shard.Controller, logger log.Logger) *retentionTaskHandler {
-	return &retentionTaskHandler{shardController: shardController, logger: logger}
+func newRetentionTaskHandler(
+	shardController shard.Controller,
+	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+) *retentionTaskHandler {
+	return &retentionTaskHandler{
+		shardController:   shardController,
+		namespaceRegistry: namespaceRegistry,
+		logger:            logger,
+	}
 }
 
 func (h *retentionTaskHandler) Validate(
@@ -44,6 +54,12 @@ func (h *retentionTaskHandler) Execute(
 ) error {
 	namespaceID := ref.NamespaceID
 	streamID := ref.BusinessID
+
+	// Runs outside a request, so nothing has tagged the context yet. Deletions
+	// still have to be attributed to the namespace they belong to.
+	if name, nsErr := h.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID)); nsErr == nil {
+		ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundLowCallerInfo(name.String()))
+	}
 
 	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
 		namespace.ID(namespaceID), streamID)
