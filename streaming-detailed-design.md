@@ -501,6 +501,23 @@ from the response field, for the reason in §8.3.
 
 **No new event type.** The range rides an event that already exists once per task, so in-workflow consumption adds zero events to history.
 
+### 8.1a Where the cursor lives, and how a range becomes a fact
+
+The cursor is a subcomponent of the **consuming workflow**, not of the stream.
+
+That placement is what makes the advance atomic. A workflow's CHASM nodes and its History events travel in the same `WorkflowMutation` (`UpsertChasmNodes` alongside the events, `common/persistence/data_interfaces.go:367`), so folding a delivered range into the cursor lands in the same transaction as the `WorkflowTaskCompleted` event that records it. Held on the stream instead, every advance would be a cross-execution write, and a crash between the two writes would either redeliver a range or skip one with nothing in History to show it.
+
+This also settles a question left open in §5: **the CHASM transaction hook is not required for Path C.** It remains wanted for the producer side, where the log append is a genuinely separate persistence write, but consumption needs nothing new.
+
+A range therefore becomes a fact in two steps:
+
+1. **At delivery**, the range attached to the task is staged on the cursor as a pending range. Staging never advances the cursor.
+2. **At completion**, the pending range is recorded on the event and folded into the cursor, in one transaction.
+
+A task that fails or times out recorded nothing, so its staged range never became history. The next delivery re-reads from the unchanged cursor and simply overwrites what was staged, which is why redelivery is allowed to produce a different range than the attempt before it.
+
+The stream keeps a separate `ConsumerCursor` as a **truncation floor** only. It is advisory for retention and is not the position anything is served from, so it can lag without affecting correctness.
+
 ### 8.2 What must be recorded, and why empty counts
 
 Two rules, both load-bearing:
