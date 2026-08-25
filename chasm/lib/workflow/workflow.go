@@ -2,11 +2,13 @@ package workflow
 
 import (
 	"fmt"
+	"slices"
 
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	apistreampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -45,6 +47,11 @@ type Workflow struct {
 	// workflow so publishing rides its commit rather than crossing executions.
 	Streams chasm.Map[string, *stream.Stream]
 
+	// Positions in streams the workflow consumes, keyed by stream name. Held
+	// here rather than on the stream so that folding in a delivered range
+	// commits with the event that records it.
+	StreamCursors chasm.Map[string, *stream.Cursor]
+
 	// Log nodes staged by stream commands during this workflow task. In memory
 	// only, and drained before the transaction commits: the bytes have to be
 	// durable before the frontier that makes them visible is.
@@ -64,6 +71,42 @@ func (w *Workflow) StageStreamAppend(collectionID string, op stream.LogAppend) {
 		CollectionID: collectionID,
 		Append:       op,
 	})
+}
+
+// CommitStreamCursors folds every staged range into its cursor and returns the
+// ranges to record. Called while the workflow task's transaction is open, so
+// the advance and the event that carries the range land together.
+//
+// A cursor with nothing staged is skipped, but a cursor staged with an empty
+// range is not: replay has to see that the subscription was live and observed
+// nothing.
+func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*apistreampb.StreamCursor {
+	if w.StreamCursors == nil {
+		return nil
+	}
+
+	names := make([]string, 0, len(w.StreamCursors))
+	for name := range w.StreamCursors {
+		names = append(names, name)
+	}
+	// Recorded order has to be stable, or replay compares against a different
+	// event than the one the original execution wrote.
+	slices.Sort(names)
+
+	var recorded []*apistreampb.StreamCursor
+	for _, name := range names {
+		cursor := w.StreamCursors[name].Get(mctx)
+		from, to, ok := cursor.Commit(mctx)
+		if !ok {
+			continue
+		}
+		recorded = append(recorded, &apistreampb.StreamCursor{
+			StreamId:   cursor.StreamID(),
+			FromOffset: from,
+			ToOffset:   to,
+		})
+	}
+	return recorded
 }
 
 // DrainStreamAppends returns and clears the staged writes.

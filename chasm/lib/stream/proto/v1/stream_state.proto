@@ -66,6 +66,29 @@ message ConsumerCursor {
   bool active = 4;
 }
 
+// A consuming Workflow's position in a stream. This lives in the consuming
+// Workflow's own state rather than on the stream, so advancing it commits in
+// the same transaction as the WorkflowTaskCompleted event that records the
+// range. Keeping it on the stream would make the advance a cross-execution
+// write, and a crash between the two would either redeliver or skip.
+message WorkflowStreamCursor {
+  string stream_id = 1;
+  // Enough to address the log without reading the stream component first.
+  string collection_id = 2;
+  int64 bucket_size = 3;
+
+  // Next offset to deliver.
+  int64 offset = 4;
+
+  // The range attached to the Workflow Task currently in flight. Recorded on
+  // the event that closes that task, then folded into offset. An empty range
+  // is still recorded: a task where the subscription saw nothing is a fact
+  // replay has to reproduce.
+  int64 pending_from = 5;
+  int64 pending_to = 6;
+  bool has_pending = 7;
+}
+
 message StreamLifecycle {
   // How long a closed stream stays readable before it is deleted.
   google.protobuf.Duration retention = 1;

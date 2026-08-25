@@ -328,6 +328,109 @@ func (x *ConsumerCursor) GetActive() bool {
 	return false
 }
 
+// A consuming Workflow's position in a stream. This lives in the consuming
+// Workflow's own state rather than on the stream, so advancing it commits in
+// the same transaction as the WorkflowTaskCompleted event that records the
+// range. Keeping it on the stream would make the advance a cross-execution
+// write, and a crash between the two would either redeliver or skip.
+type WorkflowStreamCursor struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	StreamId string                 `protobuf:"bytes,1,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	// Enough to address the log without reading the stream component first.
+	CollectionId string `protobuf:"bytes,2,opt,name=collection_id,json=collectionId,proto3" json:"collection_id,omitempty"`
+	BucketSize   int64  `protobuf:"varint,3,opt,name=bucket_size,json=bucketSize,proto3" json:"bucket_size,omitempty"`
+	// Next offset to deliver.
+	Offset int64 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	// The range attached to the Workflow Task currently in flight. Recorded on
+	// the event that closes that task, then folded into offset. An empty range
+	// is still recorded: a task where the subscription saw nothing is a fact
+	// replay has to reproduce.
+	PendingFrom   int64 `protobuf:"varint,5,opt,name=pending_from,json=pendingFrom,proto3" json:"pending_from,omitempty"`
+	PendingTo     int64 `protobuf:"varint,6,opt,name=pending_to,json=pendingTo,proto3" json:"pending_to,omitempty"`
+	HasPending    bool  `protobuf:"varint,7,opt,name=has_pending,json=hasPending,proto3" json:"has_pending,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowStreamCursor) Reset() {
+	*x = WorkflowStreamCursor{}
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowStreamCursor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowStreamCursor) ProtoMessage() {}
+
+func (x *WorkflowStreamCursor) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowStreamCursor.ProtoReflect.Descriptor instead.
+func (*WorkflowStreamCursor) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *WorkflowStreamCursor) GetStreamId() string {
+	if x != nil {
+		return x.StreamId
+	}
+	return ""
+}
+
+func (x *WorkflowStreamCursor) GetCollectionId() string {
+	if x != nil {
+		return x.CollectionId
+	}
+	return ""
+}
+
+func (x *WorkflowStreamCursor) GetBucketSize() int64 {
+	if x != nil {
+		return x.BucketSize
+	}
+	return 0
+}
+
+func (x *WorkflowStreamCursor) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *WorkflowStreamCursor) GetPendingFrom() int64 {
+	if x != nil {
+		return x.PendingFrom
+	}
+	return 0
+}
+
+func (x *WorkflowStreamCursor) GetPendingTo() int64 {
+	if x != nil {
+		return x.PendingTo
+	}
+	return 0
+}
+
+func (x *WorkflowStreamCursor) GetHasPending() bool {
+	if x != nil {
+		return x.HasPending
+	}
+	return false
+}
+
 type StreamLifecycle struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// How long a closed stream stays readable before it is deleted.
@@ -341,7 +444,7 @@ type StreamLifecycle struct {
 
 func (x *StreamLifecycle) Reset() {
 	*x = StreamLifecycle{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -353,7 +456,7 @@ func (x *StreamLifecycle) String() string {
 func (*StreamLifecycle) ProtoMessage() {}
 
 func (x *StreamLifecycle) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -366,7 +469,7 @@ func (x *StreamLifecycle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamLifecycle.ProtoReflect.Descriptor instead.
 func (*StreamLifecycle) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{3}
+	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *StreamLifecycle) GetRetention() *durationpb.Duration {
@@ -425,7 +528,18 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"workflowId\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x16\n" +
 	"\x06offset\x18\x03 \x01(\x03R\x06offset\x12\x16\n" +
-	"\x06active\x18\x04 \x01(\bR\x06active\"g\n" +
+	"\x06active\x18\x04 \x01(\bR\x06active\"\xf4\x01\n" +
+	"\x14WorkflowStreamCursor\x12\x1b\n" +
+	"\tstream_id\x18\x01 \x01(\tR\bstreamId\x12#\n" +
+	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12\x1f\n" +
+	"\vbucket_size\x18\x03 \x01(\x03R\n" +
+	"bucketSize\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\x03R\x06offset\x12!\n" +
+	"\fpending_from\x18\x05 \x01(\x03R\vpendingFrom\x12\x1d\n" +
+	"\n" +
+	"pending_to\x18\x06 \x01(\x03R\tpendingTo\x12\x1f\n" +
+	"\vhas_pending\x18\a \x01(\bR\n" +
+	"hasPending\"g\n" +
 	"\x0fStreamLifecycle\x127\n" +
 	"\tretention\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\tretention\x12\x1b\n" +
 	"\tmax_items\x18\x02 \x01(\x03R\bmaxItemsB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
@@ -442,25 +556,26 @@ func file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZ
 	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_goTypes = []any{
 	(*StreamState)(nil),           // 0: temporal.server.chasm.lib.stream.proto.v1.StreamState
 	(*ProducerCursor)(nil),        // 1: temporal.server.chasm.lib.stream.proto.v1.ProducerCursor
 	(*ConsumerCursor)(nil),        // 2: temporal.server.chasm.lib.stream.proto.v1.ConsumerCursor
-	(*StreamLifecycle)(nil),       // 3: temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
-	nil,                           // 4: temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntry
-	nil,                           // 5: temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntry
-	(*v1.Payload)(nil),            // 6: temporal.api.common.v1.Payload
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 8: google.protobuf.Duration
+	(*WorkflowStreamCursor)(nil),  // 3: temporal.server.chasm.lib.stream.proto.v1.WorkflowStreamCursor
+	(*StreamLifecycle)(nil),       // 4: temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
+	nil,                           // 5: temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntry
+	nil,                           // 6: temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntry
+	(*v1.Payload)(nil),            // 7: temporal.api.common.v1.Payload
+	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 9: google.protobuf.Duration
 }
 var file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_depIdxs = []int32{
-	6, // 0: temporal.server.chasm.lib.stream.proto.v1.StreamState.close_reason:type_name -> temporal.api.common.v1.Payload
-	4, // 1: temporal.server.chasm.lib.stream.proto.v1.StreamState.producers:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntry
-	5, // 2: temporal.server.chasm.lib.stream.proto.v1.StreamState.consumers:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntry
-	3, // 3: temporal.server.chasm.lib.stream.proto.v1.StreamState.lifecycle:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
-	7, // 4: temporal.server.chasm.lib.stream.proto.v1.StreamState.close_time:type_name -> google.protobuf.Timestamp
-	8, // 5: temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle.retention:type_name -> google.protobuf.Duration
+	7, // 0: temporal.server.chasm.lib.stream.proto.v1.StreamState.close_reason:type_name -> temporal.api.common.v1.Payload
+	5, // 1: temporal.server.chasm.lib.stream.proto.v1.StreamState.producers:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntry
+	6, // 2: temporal.server.chasm.lib.stream.proto.v1.StreamState.consumers:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntry
+	4, // 3: temporal.server.chasm.lib.stream.proto.v1.StreamState.lifecycle:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
+	8, // 4: temporal.server.chasm.lib.stream.proto.v1.StreamState.close_time:type_name -> google.protobuf.Timestamp
+	9, // 5: temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle.retention:type_name -> google.protobuf.Duration
 	1, // 6: temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntry.value:type_name -> temporal.server.chasm.lib.stream.proto.v1.ProducerCursor
 	2, // 7: temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntry.value:type_name -> temporal.server.chasm.lib.stream.proto.v1.ConsumerCursor
 	8, // [8:8] is the sub-list for method output_type
@@ -481,7 +596,7 @@ func file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc), len(file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
