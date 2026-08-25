@@ -20,15 +20,16 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	StreamService_CreateStream_FullMethodName   = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/CreateStream"
-	StreamService_AddMessages_FullMethodName    = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/AddMessages"
-	StreamService_FinishWriting_FullMethodName  = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/FinishWriting"
-	StreamService_PollMessages_FullMethodName   = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/PollMessages"
-	StreamService_DescribeStream_FullMethodName = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/DescribeStream"
-	StreamService_CloseStream_FullMethodName    = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/CloseStream"
-	StreamService_TruncateStream_FullMethodName = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/TruncateStream"
-	StreamService_ListStreams_FullMethodName    = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/ListStreams"
-	StreamService_DeleteStream_FullMethodName   = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/DeleteStream"
+	StreamService_CreateStream_FullMethodName      = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/CreateStream"
+	StreamService_AddMessages_FullMethodName       = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/AddMessages"
+	StreamService_FinishWriting_FullMethodName     = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/FinishWriting"
+	StreamService_SubscribeWorkflow_FullMethodName = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/SubscribeWorkflow"
+	StreamService_PollMessages_FullMethodName      = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/PollMessages"
+	StreamService_DescribeStream_FullMethodName    = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/DescribeStream"
+	StreamService_CloseStream_FullMethodName       = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/CloseStream"
+	StreamService_TruncateStream_FullMethodName    = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/TruncateStream"
+	StreamService_ListStreams_FullMethodName       = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/ListStreams"
+	StreamService_DeleteStream_FullMethodName      = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/DeleteStream"
 )
 
 // StreamServiceClient is the client API for StreamService service.
@@ -38,6 +39,7 @@ type StreamServiceClient interface {
 	CreateStream(ctx context.Context, in *CreateStreamRequest, opts ...grpc.CallOption) (*CreateStreamResponse, error)
 	AddMessages(ctx context.Context, in *AddMessagesRequest, opts ...grpc.CallOption) (*AddMessagesResponse, error)
 	FinishWriting(ctx context.Context, in *FinishWritingRequest, opts ...grpc.CallOption) (*FinishWritingResponse, error)
+	SubscribeWorkflow(ctx context.Context, in *SubscribeWorkflowRequest, opts ...grpc.CallOption) (*SubscribeWorkflowResponse, error)
 	PollMessages(ctx context.Context, in *PollMessagesRequest, opts ...grpc.CallOption) (*PollMessagesResponse, error)
 	DescribeStream(ctx context.Context, in *DescribeStreamRequest, opts ...grpc.CallOption) (*DescribeStreamResponse, error)
 	CloseStream(ctx context.Context, in *CloseStreamRequest, opts ...grpc.CallOption) (*CloseStreamResponse, error)
@@ -77,6 +79,15 @@ func (c *streamServiceClient) AddMessages(ctx context.Context, in *AddMessagesRe
 func (c *streamServiceClient) FinishWriting(ctx context.Context, in *FinishWritingRequest, opts ...grpc.CallOption) (*FinishWritingResponse, error) {
 	out := new(FinishWritingResponse)
 	err := c.cc.Invoke(ctx, StreamService_FinishWriting_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamServiceClient) SubscribeWorkflow(ctx context.Context, in *SubscribeWorkflowRequest, opts ...grpc.CallOption) (*SubscribeWorkflowResponse, error) {
+	out := new(SubscribeWorkflowResponse)
+	err := c.cc.Invoke(ctx, StreamService_SubscribeWorkflow_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -144,6 +155,7 @@ type StreamServiceServer interface {
 	CreateStream(context.Context, *CreateStreamRequest) (*CreateStreamResponse, error)
 	AddMessages(context.Context, *AddMessagesRequest) (*AddMessagesResponse, error)
 	FinishWriting(context.Context, *FinishWritingRequest) (*FinishWritingResponse, error)
+	SubscribeWorkflow(context.Context, *SubscribeWorkflowRequest) (*SubscribeWorkflowResponse, error)
 	PollMessages(context.Context, *PollMessagesRequest) (*PollMessagesResponse, error)
 	DescribeStream(context.Context, *DescribeStreamRequest) (*DescribeStreamResponse, error)
 	CloseStream(context.Context, *CloseStreamRequest) (*CloseStreamResponse, error)
@@ -167,6 +179,9 @@ func (UnimplementedStreamServiceServer) AddMessages(context.Context, *AddMessage
 }
 func (UnimplementedStreamServiceServer) FinishWriting(context.Context, *FinishWritingRequest) (*FinishWritingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method FinishWriting not implemented")
+}
+func (UnimplementedStreamServiceServer) SubscribeWorkflow(context.Context, *SubscribeWorkflowRequest) (*SubscribeWorkflowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubscribeWorkflow not implemented")
 }
 func (UnimplementedStreamServiceServer) PollMessages(context.Context, *PollMessagesRequest) (*PollMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PollMessages not implemented")
@@ -249,6 +264,24 @@ func _StreamService_FinishWriting_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(StreamServiceServer).FinishWriting(ctx, req.(*FinishWritingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamService_SubscribeWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubscribeWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamServiceServer).SubscribeWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamService_SubscribeWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamServiceServer).SubscribeWorkflow(ctx, req.(*SubscribeWorkflowRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -379,6 +412,10 @@ var StreamService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "FinishWriting",
 			Handler:    _StreamService_FinishWriting_Handler,
+		},
+		{
+			MethodName: "SubscribeWorkflow",
+			Handler:    _StreamService_SubscribeWorkflow_Handler,
 		},
 		{
 			MethodName: "PollMessages",

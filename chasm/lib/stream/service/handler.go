@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/headers"
@@ -17,7 +18,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
-	"google.golang.org/protobuf/proto"
 )
 
 type handler struct {
@@ -274,6 +274,40 @@ func (h *handler) FinishWriting(
 	return &streampb.FinishWritingResponse{FrontendResponse: &streampb.FinishWritingOutput{}}, nil
 }
 
+// SubscribeWorkflow registers a workflow as a consumer of a stream it owns.
+//
+// The cursor is written into the workflow's own state, not the stream's, which
+// is what lets every later advance commit with the event that records it. Only
+// a stream the workflow owns can be subscribed here: reaching one in another
+// execution needs that stream's frontier, and reading it from inside the
+// consuming workflow's transaction is a separate problem.
+func (h *handler) SubscribeWorkflow(
+	ctx context.Context,
+	req *streampb.SubscribeWorkflowRequest,
+) (*streampb.SubscribeWorkflowResponse, error) {
+	in := req.GetFrontendRequest()
+
+	startOffset, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
+			NamespaceID: req.GetNamespaceId(),
+			BusinessID:  in.GetWorkflowId(),
+		}),
+		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, input *streampb.SubscribeWorkflowInput) (int64, error) {
+			return wf.SubscribeToOwnedStream(mctx, input.GetStreamName(), input.GetStartOffset())
+		},
+		in,
+		chasm.WithRefConsistencyLevel(chasm.RefConsistencyLevelCurrentRun),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &streampb.SubscribeWorkflowResponse{
+		FrontendResponse: &streampb.SubscribeWorkflowOutput{StartOffset: startOffset},
+	}, nil
+}
+
 func (h *handler) PollMessages(
 	ctx context.Context,
 	req *streampb.PollMessagesRequest,
@@ -340,7 +374,7 @@ func (h *handler) PollMessages(
 		}
 	}
 
-	messages, next, err := collectMessages(blobs, startOffsets, from, state.GetHeadOffset(),
+	messages, next, err := stream.CollectMessages(blobs, startOffsets, from, state.GetHeadOffset(),
 		maxMessages, in.GetTopics())
 	if err != nil {
 		return nil, err
@@ -392,50 +426,6 @@ func (h *handler) waitForMessages(
 		return current, nil
 	}
 	return state, nil
-}
-
-// stream.collectMessages decodes the batches covering a range and trims to the
-// requested window. Decoding happens only here and only on the batches a read
-// actually touches; the store never interprets them, and user payloads stay
-// opaque because the codec runs in the SDK.
-func collectMessages(
-	blobs []*commonpb.DataBlob,
-	startOffsets []int64,
-	from int64,
-	head int64,
-	maxMessages int,
-	topics []string,
-) ([]*streampb.StreamMessage, int64, error) {
-	wanted := make(map[string]struct{}, len(topics))
-	for _, t := range topics {
-		wanted[t] = struct{}{}
-	}
-
-	var out []*streampb.StreamMessage
-	next := from
-	for i, blob := range blobs {
-		var batch streampb.StreamMessageBatch
-		if err := proto.Unmarshal(blob.GetData(), &batch); err != nil {
-			return nil, 0, err
-		}
-		for j, msg := range batch.GetMessages() {
-			offset := startOffsets[i] + int64(j)
-			if offset < from || offset >= head {
-				continue
-			}
-			if len(out) >= maxMessages {
-				return out, next, nil
-			}
-			next = offset + 1
-			if len(wanted) > 0 {
-				if _, ok := wanted[msg.GetTopic()]; !ok {
-					continue
-				}
-			}
-			out = append(out, msg)
-		}
-	}
-	return out, next, nil
 }
 
 func (h *handler) DescribeStream(

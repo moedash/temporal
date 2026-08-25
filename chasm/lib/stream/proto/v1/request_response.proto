@@ -59,6 +59,23 @@ message FinishWritingInput {
 
 message FinishWritingOutput {}
 
+// Registers a Workflow as a consumer of a stream it owns. The cursor lands in
+// the Workflow's own state, so from then on each of its Workflow Tasks carries
+// the next range and records what it consumed.
+message SubscribeWorkflowInput {
+  string namespace = 1;
+  string workflow_id = 2;
+  // Name of the stream within the Workflow.
+  string stream_name = 3;
+  // Where to start. Resolved here rather than at delivery, so the first
+  // recorded range starts from a fact instead of a reading.
+  int64 start_offset = 4;
+}
+
+message SubscribeWorkflowOutput {
+  int64 start_offset = 1;
+}
+
 message PollMessagesInput {
   string namespace = 1;
   string stream_id = 2;
@@ -138,6 +155,14 @@ message FinishWritingRequest {
 }
 message FinishWritingResponse {
   FinishWritingOutput frontend_response = 1;
+}
+
+message SubscribeWorkflowRequest {
+  string namespace_id = 1;
+  SubscribeWorkflowInput frontend_request = 2;
+}
+message SubscribeWorkflowResponse {
+  SubscribeWorkflowOutput frontend_response = 1;
 }
 
 message PollMessagesRequest {

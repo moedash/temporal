@@ -227,6 +227,80 @@ func (this *FinishWritingOutput) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type SubscribeWorkflowInput to the protobuf v3 wire format
+func (val *SubscribeWorkflowInput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SubscribeWorkflowInput from the protobuf v3 wire format
+func (val *SubscribeWorkflowInput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SubscribeWorkflowInput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SubscribeWorkflowInput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SubscribeWorkflowInput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SubscribeWorkflowInput
+	switch t := that.(type) {
+	case *SubscribeWorkflowInput:
+		that1 = t
+	case SubscribeWorkflowInput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type SubscribeWorkflowOutput to the protobuf v3 wire format
+func (val *SubscribeWorkflowOutput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SubscribeWorkflowOutput from the protobuf v3 wire format
+func (val *SubscribeWorkflowOutput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SubscribeWorkflowOutput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SubscribeWorkflowOutput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SubscribeWorkflowOutput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SubscribeWorkflowOutput
+	switch t := that.(type) {
+	case *SubscribeWorkflowOutput:
+		that1 = t
+	case SubscribeWorkflowOutput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type PollMessagesInput to the protobuf v3 wire format
 func (val *PollMessagesInput) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -811,6 +885,80 @@ func (this *FinishWritingResponse) Equal(that interface{}) bool {
 	case *FinishWritingResponse:
 		that1 = t
 	case FinishWritingResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type SubscribeWorkflowRequest to the protobuf v3 wire format
+func (val *SubscribeWorkflowRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SubscribeWorkflowRequest from the protobuf v3 wire format
+func (val *SubscribeWorkflowRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SubscribeWorkflowRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SubscribeWorkflowRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SubscribeWorkflowRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SubscribeWorkflowRequest
+	switch t := that.(type) {
+	case *SubscribeWorkflowRequest:
+		that1 = t
+	case SubscribeWorkflowRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type SubscribeWorkflowResponse to the protobuf v3 wire format
+func (val *SubscribeWorkflowResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SubscribeWorkflowResponse from the protobuf v3 wire format
+func (val *SubscribeWorkflowResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SubscribeWorkflowResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SubscribeWorkflowResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SubscribeWorkflowResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SubscribeWorkflowResponse
+	switch t := that.(type) {
+	case *SubscribeWorkflowResponse:
+		that1 = t
+	case SubscribeWorkflowResponse:
 		that1 = &t
 	default:
 		return false

@@ -366,6 +366,11 @@ type (
 		ChasmEnabled() bool
 		ChasmSignalBacklinksEnabled() bool
 		ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error)
+		// HasChasmWorkflowComponent reports whether a workflow component is
+		// actually reachable. Archetype alone does not answer this: a workflow
+		// predating CHASM reports the workflow archetype while carrying a tree
+		// that holds no components.
+		HasChasmWorkflowComponent() bool
 		ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error)
 		// Ensures that the chasm workflow component is installed in the mutable state CHASM tree.
 		// Must be called before adding any components to the tree.

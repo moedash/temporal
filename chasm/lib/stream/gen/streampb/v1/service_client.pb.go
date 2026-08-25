@@ -195,6 +195,49 @@ func (c *StreamServiceLayeredClient) FinishWriting(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+func (c *StreamServiceLayeredClient) callSubscribeWorkflowNoRetry(
+	ctx context.Context,
+	request *SubscribeWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*SubscribeWorkflowResponse, error) {
+	var response *SubscribeWorkflowResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("StreamService.SubscribeWorkflow"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId(), c.numShards)
+	op := func(ctx context.Context, client StreamServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.SubscribeWorkflow(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *StreamServiceLayeredClient) SubscribeWorkflow(
+	ctx context.Context,
+	request *SubscribeWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*SubscribeWorkflowResponse, error) {
+	call := func(ctx context.Context) (*SubscribeWorkflowResponse, error) {
+		return c.callSubscribeWorkflowNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
 func (c *StreamServiceLayeredClient) callPollMessagesNoRetry(
 	ctx context.Context,
 	request *PollMessagesRequest,

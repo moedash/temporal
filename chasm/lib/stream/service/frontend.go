@@ -82,6 +82,18 @@ func (h *FrontendHandler) FinishWriting(
 	})
 }
 
+func (h *FrontendHandler) SubscribeWorkflow(
+	ctx context.Context, req *streampb.SubscribeWorkflowRequest,
+) (*streampb.SubscribeWorkflowResponse, error) {
+	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+	return h.client.SubscribeWorkflow(ctx, &streampb.SubscribeWorkflowRequest{
+		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+	})
+}
+
 func (h *FrontendHandler) PollMessages(
 	ctx context.Context, req *streampb.PollMessagesRequest,
 ) (*streampb.PollMessagesResponse, error) {

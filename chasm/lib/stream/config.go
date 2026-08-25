@@ -28,5 +28,11 @@ const (
 	TailCacheMaxStreams     = 4096
 )
 
+// MaxConsumeItemsPerTask bounds one Workflow Task's slice. A byte cap alone is
+// not enough: a burst of tiny messages stays under it while still making one
+// task's drain arbitrarily long. Whichever bound binds first, the rest is
+// delivered on the following task.
+const MaxConsumeItemsPerTask = 1000
+
 // MaxListPageSize bounds a visibility page when the caller does not.
 const MaxListPageSize = 1000

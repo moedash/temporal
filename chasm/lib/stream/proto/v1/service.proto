@@ -24,6 +24,11 @@ service StreamService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  rpc SubscribeWorkflow(SubscribeWorkflowRequest) returns (SubscribeWorkflowResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   rpc PollMessages(PollMessagesRequest) returns (PollMessagesResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;

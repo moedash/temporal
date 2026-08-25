@@ -102,6 +102,11 @@ func Invoke(
 					if err != nil {
 						return nil, err
 					}
+					// Redelivers whatever range is already staged, so a
+					// duplicate of the same request hands back the same slice.
+					if resp.StreamSlices, err = deliverStreamSlices(ctx, shardContext, mutableState); err != nil {
+						return nil, err
+					}
 					updateAction.Noop = true
 					return updateAction, nil
 				}
@@ -235,6 +240,10 @@ func Invoke(
 				false,
 			)
 			if err != nil {
+				return nil, err
+			}
+
+			if resp.StreamSlices, err = deliverStreamSlices(ctx, shardContext, mutableState); err != nil {
 				return nil, err
 			}
 

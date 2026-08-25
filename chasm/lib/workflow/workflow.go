@@ -73,6 +73,57 @@ func (w *Workflow) StageStreamAppend(collectionID string, op stream.LogAppend) {
 	})
 }
 
+// SubscribeToOwnedStream registers this workflow as a consumer of a stream it
+// owns, returning the offset the subscription actually starts from.
+//
+// A negative start offset means "from wherever the stream is now". That is
+// resolved here and stored, so the first recorded range begins at a fact rather
+// than at a reading that would land somewhere else on replay.
+func (w *Workflow) SubscribeToOwnedStream(
+	mctx chasm.MutableContext,
+	name string,
+	startOffset int64,
+) (int64, error) {
+	field, ok := w.Streams[name]
+	if !ok {
+		return 0, serviceerror.NewNotFoundf("workflow does not own a stream named %q", name)
+	}
+	owned := field.Get(mctx)
+	state, err := owned.Snapshot(mctx, struct{}{})
+	if err != nil {
+		return 0, err
+	}
+
+	if startOffset < 0 {
+		startOffset = state.GetHeadOffset()
+	}
+	if startOffset < state.GetBaseOffset() {
+		return 0, serviceerror.NewFailedPreconditionf(
+			"offset %d is below the stream's floor of %d", startOffset, state.GetBaseOffset())
+	}
+
+	if w.StreamCursors == nil {
+		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
+	}
+	if existing, ok := w.StreamCursors[name]; ok {
+		// Resubscribing must not rewind a cursor: ranges below it are already
+		// recorded in History, and moving back would replay them as new.
+		return existing.Get(mctx).Offset(), nil
+	}
+
+	cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
+		StreamID:     name,
+		CollectionID: state.GetCollectionId(),
+		BucketSize:   state.GetBucketSize(),
+		StartOffset:  startOffset,
+	})
+	if err != nil {
+		return 0, err
+	}
+	w.StreamCursors[name] = chasm.NewComponentField(mctx, cursor)
+	return startOffset, nil
+}
+
 // CommitStreamCursors folds every staged range into its cursor and returns the
 // ranges to record. Called while the workflow task's transaction is open, so
 // the advance and the event that carries the range land together.

@@ -704,6 +704,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 		"",
 		nil,
 		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		nil,
 	)
 	s.Equal(event, s.flush())
 	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
@@ -2321,7 +2322,11 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		commandType := enumspb.CommandType(ct)
 		// Unspecified is not counted.
 		// ProtocolMessage command doesn't have corresponding event.
-		if commandType == enumspb.COMMAND_TYPE_UNSPECIFIED || commandType == enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE {
+		// AddStreamMessages doesn't either: it advances a stream that lives
+		// beside History rather than in it, so it emits nothing to buffer.
+		if commandType == enumspb.COMMAND_TYPE_UNSPECIFIED ||
+			commandType == enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE ||
+			commandType == enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES {
 			continue
 		}
 		commandsWithEventsCount++

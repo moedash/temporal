@@ -10,6 +10,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
+	apistreampb "go.temporal.io/api/stream/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -162,6 +163,7 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	deploymentName string,
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
+	streamCursors []*apistreampb.StreamCursor,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
@@ -176,6 +178,9 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 			WorkerDeploymentName: deploymentName,
 			DeploymentVersion:    worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment),
 			VersioningBehavior:   behavior,
+			// Offsets only. The payloads the task consumed rode the task
+			// response, so History grows with tasks rather than with messages.
+			StreamCursors: streamCursors,
 		},
 	}
 
