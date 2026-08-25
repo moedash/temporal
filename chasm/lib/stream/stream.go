@@ -36,6 +36,12 @@ type NewStreamRequest struct {
 	CollectionID string
 	BucketSize   int64
 	Lifecycle    *streampb.StreamLifecycle
+
+	// Attached means the stream is a subcomponent of another execution rather
+	// than a root. CHASM requires a visibility component to be an immediate
+	// child of the root, so an attached stream carries none and is found
+	// through its owner instead of through ListStreams.
+	Attached bool
 }
 
 type AddMessagesRequest struct {
@@ -80,8 +86,12 @@ func NewStream(ctx chasm.MutableContext, req NewStreamRequest) (*Stream, error) 
 	if bucketSize <= 0 {
 		bucketSize = DefaultBucketSize
 	}
+	visibility := chasm.NewEmptyField[*chasm.Visibility]()
+	if !req.Attached {
+		visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
+	}
 	return &Stream{
-		Visibility: chasm.NewComponentField(ctx, chasm.NewVisibility(ctx)),
+		Visibility: visibility,
 		State: &streampb.StreamState{
 			CollectionId: req.CollectionID,
 			BucketSize:   bucketSize,
@@ -106,12 +116,12 @@ func (s *Stream) Terminate(
 	req chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
 	reason := &commonpb.Payload{Data: []byte(req.Reason)}
-	return chasm.TerminateComponentResponse{}, s.closeAndSchedule(mctx, reason)
+	return chasm.TerminateComponentResponse{}, s.CloseAndSchedule(mctx, reason)
 }
 
-// snapshot returns a copy of the frontier for read paths. It is a copy because
+// Snapshot returns a copy of the frontier for read paths. It is a copy because
 // the caller reads it outside the transition that produced it.
-func (s *Stream) snapshot(_ chasm.Context, _ struct{}) (*streampb.StreamState, error) {
+func (s *Stream) Snapshot(_ chasm.Context, _ struct{}) (*streampb.StreamState, error) {
 	return common.CloneProto(s.State), nil
 }
 
@@ -287,9 +297,8 @@ func (s *Stream) Close(now time.Time, reason *commonpb.Payload) time.Time {
 	return now.Add(retention)
 }
 
-// closeAndSchedule is the transition form: close, then arm retention if the
-// stream asked for it.
-func (s *Stream) closeAndSchedule(mctx chasm.MutableContext, reason *commonpb.Payload) error {
+// CloseAndSchedule closes the stream and arms retention if it asked for it.
+func (s *Stream) CloseAndSchedule(mctx chasm.MutableContext, reason *commonpb.Payload) error {
 	if at := s.Close(mctx.Now(s), reason); !at.IsZero() {
 		mctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: at}, &streampb.StreamRetentionTask{})
 	}

@@ -6,7 +6,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 )
 
-// tailCache keeps the most recently appended batches in memory so a reader at
+// TailCache keeps the most recently appended batches in memory so a reader at
 // the tail is served without touching the database. That is what makes fan-out
 // cheap: N readers at the tail cost N copies rather than N range scans, which
 // is the difference between a subscriber ceiling and no meaningful limit.
@@ -15,7 +15,7 @@ import (
 // the cache can never widen what a reader is allowed to see. Entries are safe
 // to hold indefinitely because an offset's content is immutable once its append
 // commits, and nothing is cached before the commit that made it visible.
-type tailCache struct {
+type TailCache struct {
 	mu sync.Mutex
 
 	bytesPerStream int
@@ -40,15 +40,15 @@ type tailRing struct {
 	bytes   int
 }
 
-func newTailCache(bytesPerStream, maxStreams int) *tailCache {
-	return &tailCache{
+func NewTailCache(bytesPerStream, maxStreams int) *TailCache {
+	return &TailCache{
 		bytesPerStream: bytesPerStream,
 		maxStreams:     maxStreams,
 		streams:        make(map[string]*tailRing),
 	}
 }
 
-func (c *tailCache) put(key string, startOffset, nextOffset int64, blob *commonpb.DataBlob) {
+func (c *TailCache) Put(key string, startOffset, nextOffset int64, blob *commonpb.DataBlob) {
 	if c == nil || blob == nil {
 		return
 	}
@@ -76,7 +76,7 @@ func (c *tailCache) put(key string, startOffset, nextOffset int64, blob *commonp
 	}
 }
 
-func (c *tailCache) evictStreamsLocked() {
+func (c *TailCache) evictStreamsLocked() {
 	for len(c.order) > c.maxStreams {
 		oldest := c.order[0]
 		c.order = c.order[1:]
@@ -84,11 +84,11 @@ func (c *tailCache) evictStreamsLocked() {
 	}
 }
 
-// get returns the batches covering [from, to) when the cache holds all of them,
+// Get returns the batches covering [from, to) when the cache holds all of them,
 // and reports false otherwise. A partial hit is treated as a miss: stitching
 // cached and stored batches together would be a second read path to get wrong,
 // for a case the database already handles.
-func (c *tailCache) get(key string, from, to int64) ([]*commonpb.DataBlob, []int64, bool) {
+func (c *TailCache) Get(key string, from, to int64) ([]*commonpb.DataBlob, []int64, bool) {
 	if c == nil || from >= to {
 		return nil, nil, false
 	}
@@ -128,7 +128,7 @@ func (c *tailCache) get(key string, from, to int64) ([]*commonpb.DataBlob, []int
 	return blobs, starts, true
 }
 
-func (c *tailCache) stats() (hits, misses int64) {
+func (c *TailCache) Stats() (hits, misses int64) {
 	if c == nil {
 		return 0, 0
 	}

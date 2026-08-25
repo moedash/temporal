@@ -1,10 +1,11 @@
-package stream
+package service
 
 import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -152,11 +153,11 @@ func (h *FrontendHandler) ListStreams(
 	}
 
 	pageSize := int(in.GetPageSize())
-	if pageSize <= 0 || pageSize > maxListPageSize {
-		pageSize = maxListPageSize
+	if pageSize <= 0 || pageSize > stream.MaxListPageSize {
+		pageSize = stream.MaxListPageSize
 	}
 
-	resp, err := chasm.ListExecutions[*Stream, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
+	resp, err := chasm.ListExecutions[*stream.Stream, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
 		NamespaceName: in.GetNamespace(),
 		PageSize:      pageSize,
 		NextPageToken: in.GetNextPageToken(),

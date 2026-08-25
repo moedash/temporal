@@ -1,9 +1,10 @@
-package stream
+package service
 
 import (
 	"context"
 
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -37,7 +38,7 @@ func newRetentionTaskHandler(
 
 func (h *retentionTaskHandler) Validate(
 	_ chasm.Context,
-	s *Stream,
+	s *stream.Stream,
 	_ chasm.TaskInvocation,
 	_ *streampb.StreamRetentionTask,
 ) (bool, error) {
@@ -67,16 +68,16 @@ func (h *retentionTaskHandler) Execute(
 		return err
 	}
 
-	state, err := chasm.ReadComponent(ctx, ref, (*Stream).snapshot, struct{}{})
+	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
 	if err != nil {
 		return err
 	}
 
 	// Log data first, then the execution. The other order would drop the only
 	// record of which buckets exist and leak them permanently.
-	lastBucket := BucketOf(max(state.GetHeadOffset()-1, 0), state.GetBucketSize())
-	for b := BucketOf(state.GetBaseOffset(), state.GetBucketSize()); b <= lastBucket; b++ {
-		if err := DeleteBucket(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
+	lastBucket := stream.BucketOf(max(state.GetHeadOffset()-1, 0), state.GetBucketSize())
+	for b := stream.BucketOf(state.GetBaseOffset(), state.GetBucketSize()); b <= lastBucket; b++ {
+		if err := stream.DeleteBucket(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
 			namespaceID, state.GetCollectionId(), b); err != nil {
 			h.logger.Warn("failed to delete a stream bucket during retention cleanup",
 				tag.NewStringTag("collection-id", state.GetCollectionId()),
@@ -85,7 +86,7 @@ func (h *retentionTaskHandler) Execute(
 		}
 	}
 
-	return chasm.DeleteExecution[*Stream](ctx, ref.ExecutionKey, chasm.DeleteExecutionRequest{})
+	return chasm.DeleteExecution[*stream.Stream](ctx, ref.ExecutionKey, chasm.DeleteExecutionRequest{})
 }
 
 func (h *retentionTaskHandler) Discard(

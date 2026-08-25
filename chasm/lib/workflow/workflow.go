@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/stream"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -39,6 +40,37 @@ type Workflow struct {
 
 	// Updates indexed by update ID, used to store the update components.
 	Updates chasm.Map[string, *WorkflowUpdate]
+
+	// Streams the workflow owns, keyed by stream name. Co-located with the
+	// workflow so publishing rides its commit rather than crossing executions.
+	Streams chasm.Map[string, *stream.Stream]
+
+	// Log nodes staged by stream commands during this workflow task. In memory
+	// only, and drained before the transaction commits: the bytes have to be
+	// durable before the frontier that makes them visible is.
+	pendingStreamAppends []PendingStreamAppend
+}
+
+// PendingStreamAppend is a staged log write awaiting the flush that must
+// precede the workflow task's own commit.
+type PendingStreamAppend struct {
+	CollectionID string
+	Append       stream.LogAppend
+}
+
+// StageStreamAppend records a log write for the flush before commit.
+func (w *Workflow) StageStreamAppend(collectionID string, op stream.LogAppend) {
+	w.pendingStreamAppends = append(w.pendingStreamAppends, PendingStreamAppend{
+		CollectionID: collectionID,
+		Append:       op,
+	})
+}
+
+// DrainStreamAppends returns and clears the staged writes.
+func (w *Workflow) DrainStreamAppends() []PendingStreamAppend {
+	out := w.pendingStreamAppends
+	w.pendingStreamAppends = nil
+	return out
 }
 
 func NewWorkflow(

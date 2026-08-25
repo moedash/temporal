@@ -1,4 +1,4 @@
-package stream
+package service
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
@@ -14,7 +15,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"google.golang.org/protobuf/proto"
 )
@@ -40,7 +41,7 @@ type handler struct {
 	appendMu sync.Mutex
 	appendLk map[string]*sync.Mutex
 
-	tail *tailCache
+	tail *stream.TailCache
 }
 
 func newHandler(
@@ -53,7 +54,7 @@ func newHandler(
 		namespaceRegistry: namespaceRegistry,
 		logger:            logger,
 		appendLk:          make(map[string]*sync.Mutex),
-		tail:              newTailCache(tailCacheBytesPerStream, tailCacheMaxStreams),
+		tail:              stream.NewTailCache(stream.TailCacheBytesPerStream, stream.TailCacheMaxStreams),
 	}
 }
 
@@ -97,7 +98,7 @@ func refFor(namespaceID, streamID string) chasm.ComponentRef {
 }
 
 func refForRun(namespaceID, streamID, runID string) chasm.ComponentRef {
-	return chasm.NewComponentRef[*Stream](chasm.ExecutionKey{
+	return chasm.NewComponentRef[*stream.Stream](chasm.ExecutionKey{
 		NamespaceID: namespaceID,
 		BusinessID:  streamID,
 		RunID:       runID,
@@ -107,14 +108,22 @@ func refForRun(namespaceID, streamID, runID string) chasm.ComponentRef {
 // reclaim deletes buckets that a committed truncation put out of reach. It runs
 // after the commit, so a failure here leaves storage to reclaim later rather
 // than data a reader can still ask for but no longer find.
+// logStore is the slice of a shard this package needs. Declared narrowly so the
+// package does not depend on the history service, which would make the workflow
+// library unable to import it.
+type logStore interface {
+	GetShardID() int32
+	GetExecutionManager() persistence.ExecutionManager
+}
+
 func (h *handler) reclaim(
 	ctx context.Context,
-	shardCtx historyi.ShardContext,
+	shardCtx logStore,
 	namespaceID, collectionID string,
 	buckets []int64,
 ) {
 	for _, b := range buckets {
-		if err := DeleteBucket(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
+		if err := stream.DeleteBucket(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
 			namespaceID, collectionID, b); err != nil {
 			h.logger.Warn("failed to reclaim a truncated stream bucket",
 				tag.NewStringTag("collection-id", collectionID),
@@ -136,8 +145,8 @@ func (h *handler) CreateStream(
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: in.GetStreamId()},
-		func(mctx chasm.MutableContext, input *streampb.CreateStreamInput) (*Stream, error) {
-			return NewStream(mctx, NewStreamRequest{
+		func(mctx chasm.MutableContext, input *streampb.CreateStreamInput) (*stream.Stream, error) {
+			return stream.NewStream(mctx, stream.NewStreamRequest{
 				CollectionID: mctx.ExecutionKey().RunID,
 				Lifecycle:    input.GetLifecycle(),
 			})
@@ -173,7 +182,7 @@ func (h *handler) AddMessages(
 	}
 
 	ref := refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId())
-	state, err := chasm.ReadComponent(ctx, ref, (*Stream).snapshot, struct{}{})
+	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +195,7 @@ func (h *handler) AddMessages(
 		txnID = state.GetLastTxnId() + 1
 	}
 
-	addReq := AddMessagesRequest{
+	addReq := stream.AddMessagesRequest{
 		Messages:   in.GetMessages(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
@@ -206,21 +215,21 @@ func (h *handler) AddMessages(
 
 	// Dry run against the state we read, so the node is written at the offsets
 	// the commit will claim. The transition below recomputes it identically.
-	staged := &Stream{State: state}
+	staged := &stream.Stream{State: state}
 	preview, err := staged.AddMessages(nil, addReq)
 	if err != nil {
 		return nil, err
 	}
 	if !preview.Deduplicated {
 		for _, op := range preview.Appends {
-			if err := WriteAppend(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
+			if err := stream.WriteAppend(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
 				req.GetNamespaceId(), state.GetCollectionId(), op); err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	result, _, err := chasm.UpdateComponent(ctx, ref, (*Stream).AddMessages, addReq)
+	result, _, err := chasm.UpdateComponent(ctx, ref, (*stream.Stream).AddMessages, addReq)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +239,7 @@ func (h *handler) AddMessages(
 	// serve those bytes to a reader that must never see them.
 	if !result.Deduplicated {
 		for _, op := range preview.Appends {
-			h.tail.put(streamKey(req.GetNamespaceId(), in.GetStreamId()),
+			h.tail.Put(streamKey(req.GetNamespaceId(), in.GetStreamId()),
 				result.FirstOffset, result.NextOffset, op.Blob)
 		}
 	}
@@ -254,7 +263,7 @@ func (h *handler) FinishWriting(
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
-		func(s *Stream, mctx chasm.MutableContext, producerID string) (struct{}, error) {
+		func(s *stream.Stream, mctx chasm.MutableContext, producerID string) (struct{}, error) {
 			return struct{}{}, s.FinishWriting(mctx, producerID)
 		},
 		in.GetProducerId(),
@@ -281,7 +290,7 @@ func (h *handler) PollMessages(
 	ref := refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId())
 	from := in.GetFromOffset()
 
-	state, err := chasm.ReadComponent(ctx, ref, (*Stream).snapshot, struct{}{})
+	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
 	if err != nil {
 		return nil, err
 	}
@@ -315,15 +324,15 @@ func (h *handler) PollMessages(
 
 	maxMessages := int(in.GetMaxMessages())
 	if maxMessages <= 0 {
-		maxMessages = defaultMaxMessagesPerPoll
+		maxMessages = stream.DefaultMaxMessagesPerPoll
 	}
 
 	// The frontier always comes from the component, so the cache can only save
 	// a read, never widen what the reader is allowed to see.
 	key := streamKey(req.GetNamespaceId(), in.GetStreamId())
-	blobs, startOffsets, cached := h.tail.get(key, from, state.GetHeadOffset())
+	blobs, startOffsets, cached := h.tail.Get(key, from, state.GetHeadOffset())
 	if !cached {
-		blobs, startOffsets, err = ReadRange(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
+		blobs, startOffsets, err = stream.ReadRange(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
 			req.GetNamespaceId(), state.GetCollectionId(), state.GetBucketSize(),
 			from, state.GetHeadOffset(), 0)
 		if err != nil {
@@ -356,11 +365,11 @@ func (h *handler) waitForMessages(
 	from int64,
 	current *streampb.StreamState,
 ) (*streampb.StreamState, error) {
-	pollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollTimeout, longPollBuffer)
+	pollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, stream.LongPollTimeout, stream.LongPollBuffer)
 	defer cancel()
 
 	state, _, err := chasm.PollComponent(pollCtx, ref,
-		func(s *Stream, _ chasm.Context, offset int64) (*streampb.StreamState, bool, error) {
+		func(s *stream.Stream, _ chasm.Context, offset int64) (*streampb.StreamState, bool, error) {
 			// Monotonic, as PollComponent requires: the head only advances and
 			// closed never clears.
 			satisfied := s.State.GetHeadOffset() > offset || s.State.GetClosed()
@@ -385,7 +394,7 @@ func (h *handler) waitForMessages(
 	return state, nil
 }
 
-// collectMessages decodes the batches covering a range and trims to the
+// stream.collectMessages decodes the batches covering a range and trims to the
 // requested window. Decoding happens only here and only on the batches a read
 // actually touches; the store never interprets them, and user payloads stay
 // opaque because the codec runs in the SDK.
@@ -435,7 +444,7 @@ func (h *handler) DescribeStream(
 ) (*streampb.DescribeStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	state, err := chasm.ReadComponent(ctx,
-		refFor(req.GetNamespaceId(), in.GetStreamId()), (*Stream).snapshot, struct{}{})
+		refFor(req.GetNamespaceId(), in.GetStreamId()), (*stream.Stream).Snapshot, struct{}{})
 	if err != nil {
 		return nil, err
 	}
@@ -452,8 +461,8 @@ func (h *handler) CloseStream(
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
-		func(s *Stream, mctx chasm.MutableContext, reason *commonpb.Payload) (struct{}, error) {
-			return struct{}{}, s.closeAndSchedule(mctx, reason)
+		func(s *stream.Stream, mctx chasm.MutableContext, reason *commonpb.Payload) (struct{}, error) {
+			return struct{}{}, s.CloseAndSchedule(mctx, reason)
 		},
 		in.GetReason(),
 	)
@@ -478,7 +487,7 @@ func (h *handler) TruncateStream(
 	reclaimable, _, err := chasm.UpdateComponent(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
-		func(s *Stream, mctx chasm.MutableContext, newBase int64) ([]int64, error) {
+		func(s *stream.Stream, mctx chasm.MutableContext, newBase int64) ([]int64, error) {
 			return s.Truncate(mctx, newBase)
 		},
 		in.GetNewBaseOffset(),
@@ -489,7 +498,7 @@ func (h *handler) TruncateStream(
 
 	if len(reclaimable) > 0 {
 		state, err := chasm.ReadComponent(ctx,
-			refFor(req.GetNamespaceId(), in.GetStreamId()), (*Stream).snapshot, struct{}{})
+			refFor(req.GetNamespaceId(), in.GetStreamId()), (*stream.Stream).Snapshot, struct{}{})
 		if err == nil {
 			h.reclaim(ctx, shardCtx, req.GetNamespaceId(), state.GetCollectionId(), reclaimable)
 		}
@@ -505,7 +514,7 @@ func (h *handler) DeleteStream(
 	req *streampb.DeleteStreamRequest,
 ) (*streampb.DeleteStreamResponse, error) {
 	in := req.GetFrontendRequest()
-	if err := chasm.DeleteExecution[*Stream](ctx, chasm.ExecutionKey{
+	if err := chasm.DeleteExecution[*stream.Stream](ctx, chasm.ExecutionKey{
 		NamespaceID: req.GetNamespaceId(),
 		BusinessID:  in.GetStreamId(),
 	}, chasm.DeleteExecutionRequest{}); err != nil {

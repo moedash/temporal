@@ -23,24 +23,39 @@ import (
 const streamMaxBatch = chasmstream.MaxMessagesPerBatch
 
 type streamTestEnv struct {
-	env    *testcore.TestEnv
-	client streampb.StreamServiceClient
-	ns     string
+	env     *testcore.TestEnv
+	client  streampb.StreamServiceClient
+	ns      string
+	cleanup []func()
 }
 
 func newStreamTestEnv(t *testing.T) *streamTestEnv {
-	env := testcore.NewEnv(t)
+	return newStreamTestEnvFrom(t, testcore.NewEnv(t))
+}
+
+// newStreamTestEnvFrom lets a test that needs its own env, for example one
+// driving the raw task poller, still reach the stream API.
+func newStreamTestEnvFrom(t *testing.T, env *testcore.TestEnv) *streamTestEnv {
 
 	conn, err := grpc.NewClient(env.FrontendGRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 
-	return &streamTestEnv{
-		env:    env,
-		client: streampb.NewStreamServiceClient(conn),
-		ns:     env.Namespace().String(),
-	}
+	env2 := &streamTestEnv{env: env, client: streampb.NewStreamServiceClient(conn), ns: env.Namespace().String()}
+	t.Cleanup(func() {
+		for _, c := range env2.cleanup {
+			c()
+		}
+	})
+
+	return env2
+}
+
+func (s *streamTestEnv) ctx() context.Context {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	s.cleanup = append(s.cleanup, cancel)
+	return ctx
 }
 
 func (s *streamTestEnv) create(ctx context.Context, t *testing.T, streamID string) {

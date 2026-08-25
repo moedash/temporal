@@ -452,6 +452,21 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			return nil, err
 		}
 
+		// Stream commands stage their log writes rather than performing them,
+		// because a command handler runs under the state lock with no context
+		// to do I/O from. Flush here: the bytes have to be durable before the
+		// commit below advances the frontier that makes them visible. A crash
+		// between the two leaves nodes at or past the frontier, which no reader
+		// can observe.
+		if err = flushStagedStreamAppends(
+			ctx,
+			handler.shardContext,
+			ms.GetWorkflowKey().NamespaceID,
+			workflowTaskHandler.stagedStreamAppends,
+		); err != nil {
+			return nil, err
+		}
+
 		// Worker must respond with Update Accepted or Update Rejected message on every Update Requested
 		// message that were delivered on specific WT, when completing this WT.
 		// If worker ignored the update request (old SDK or SDK bug), then server rejects this update.

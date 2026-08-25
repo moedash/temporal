@@ -1,7 +1,8 @@
-package stream
+package service
 
 import (
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"google.golang.org/grpc"
 )
@@ -46,7 +47,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 
 func components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Stream](
+		chasm.NewRegistrableComponent[*stream.Stream](
 			componentName,
 			chasm.WithBusinessIDAlias("StreamId"),
 		),

@@ -7,7 +7,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	streamapi "go.temporal.io/api/stream/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/protobuf/proto"
 )
@@ -16,14 +16,14 @@ import (
 // compile. A field added without its descriptor would compile and silently
 // drop on marshal.
 func TestApiForkCarriesStreamShapes(t *testing.T) {
-	require.Equal(t, enumspb.CommandType(19), enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES)
+	require.Equal(t, enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES, enumspb.CommandType(19))
 
 	cmd := &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
 		Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
 			AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
 				StreamId: "s1",
-				Messages: []*streamapi.StreamMessage{{Topic: "tokens"}},
+				Messages: []*streampb.StreamMessage{{Topic: "tokens"}},
 			},
 		},
 	}
@@ -35,7 +35,7 @@ func TestApiForkCarriesStreamShapes(t *testing.T) {
 	require.Equal(t, "tokens", back.GetAddStreamMessagesCommandAttributes().GetMessages()[0].GetTopic())
 
 	resp := &workflowservice.PollWorkflowTaskQueueResponse{
-		StreamSlices: []*streamapi.StreamSlice{{StreamId: "s1", FromOffset: 4, ToOffset: 7}},
+		StreamSlices: []*streampb.StreamSlice{{StreamId: "s1", FromOffset: 4, ToOffset: 7}},
 	}
 	rb, err := proto.Marshal(resp)
 	require.NoError(t, err)
@@ -44,7 +44,7 @@ func TestApiForkCarriesStreamShapes(t *testing.T) {
 	require.Equal(t, int64(7), rback.GetStreamSlices()[0].GetToOffset())
 
 	attrs := &historypb.WorkflowTaskCompletedEventAttributes{
-		StreamCursors: []*streamapi.StreamCursor{{StreamId: "s1", FromOffset: 4, ToOffset: 4}},
+		StreamCursors: []*streampb.StreamCursor{{StreamId: "s1", FromOffset: 4, ToOffset: 4}},
 	}
 	ab, err := proto.Marshal(attrs)
 	require.NoError(t, err)
