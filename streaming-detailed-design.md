@@ -801,7 +801,7 @@ The benchmark is the deliverable that makes the September 14 decision possible. 
 | 6 | Path C, workflow consume | Highest risk, sequenced last |
 | 7 | Benchmark, demo, write-up | |
 
-**API dependency.** Stages 5 and 6 need `go.temporal.io/api` changes: `temporal.api.stream.v1`, `COMMAND_TYPE_ADD_STREAM_MESSAGES`, a `stream_slices` field on `PollWorkflowTaskQueueResponse`, and a matching `stream_slices` field on `WorkflowTaskCompletedEventAttributes`. Note there is **no new event type**: the consumed range rides an event that already exists (§8.1). Plan is one branch on `temporalio/api` pinned by pseudo-version rather than a local `replace`, so the branch stays buildable by others. `make update-go-api` is the existing path.
+**API dependency.** Stages 5 and 6 need `go.temporal.io/api` changes: `temporal.api.stream.v1`, `COMMAND_TYPE_ADD_STREAM_MESSAGES`, a `stream_slices` field on `PollWorkflowTaskQueueResponse`, and a `stream_cursors` field on `WorkflowTaskCompletedEventAttributes`. Note there is **no new event type**: the consumed range rides an event that already exists (§8.1). Plan is one branch on `temporalio/api` pinned by pseudo-version rather than a local `replace`, so the branch stays buildable by others. `make update-go-api` is the existing path.
 
 ---
 
