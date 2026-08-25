@@ -490,10 +490,14 @@ PollWorkflowTaskQueueResponse.stream_slices: [
 and records the range it delivered as an attribute on the event that closes the task:
 
 ```
-WorkflowTaskCompletedEventAttributes.stream_slices: [
+WorkflowTaskCompletedEventAttributes.stream_cursors: [
   { stream_id, from_offset, to_offset }
 ]
 ```
+
+The response field carries bytes and serves the live delivery. The event
+attribute carries offsets only. Replay is served from the event attribute, not
+from the response field, for the reason in §8.3.
 
 **No new event type.** The range rides an event that already exists once per task, so in-workflow consumption adds zero events to history.
 
@@ -507,14 +511,34 @@ Riding `WorkflowTaskCompleted` is what makes this affordable. A separate event p
 
 **The first record for a subscription carries the resolved start offset.** "Subscribe from the current tail" resolves against `head_offset` at subscribe time, which is a nondeterministic reading. Recording the resolved value turns it into a fact. This applies whether or not anything was delivered on that task.
 
-### 8.3 Determinism
+### 8.3 Determinism, and where the bytes come from on replay
 
-On replay the server reads `[from_offset, to_offset)` from the same branch and attaches the same bytes. This is deterministic because:
+On replay the server reads `[from_offset, to_offset)` from the same branch and attaches the same bytes. That read is deterministic because:
 
 - the log is immutable, so a given offset always holds the same bytes;
 - the range is recorded, so it does not depend on when replay happens;
 - `filterHistoryNodes` resolves the node chain the same way on every read;
 - every task carries a record, so the sequence of observations is fully reconstructible.
+
+What that leaves open is the carrier: which channel hands those bytes to the worker when the task being replayed is not the current one. The response field cannot do it. It is built once per delivery (`CreateRecordWorkflowTaskStartedResponseWithRawHistory`, `service/history/api/recordworkflowtaskstarted/api.go:400`), so it holds a single slice set, while a cache miss replays every prior task.
+
+The Go SDK already answers this for Updates, and the answer is a constraint on us rather than a choice. In `ProcessWorkflowTask` the message index is built from one of two sources depending on the path (`internal/internal_task_handlers.go:1106`):
+
+- live: `indexMessagesByEventID(taskMessages)`, from the poll response;
+- replay: `indexMessagesByEventID(historyMessages)`, synthesized from the event stream by `inferMessageFromAcceptedEvent` while iterating events (`:518`).
+
+Two consequences:
+
+1. **On replay the SDK takes per-event data from History only.** It never calls back to the server inside the replay loop, and nothing in that loop does I/O. So "the SDK re-reads each recorded range during replay" is not a small change. It puts a blocking network call inside the deterministic replay path.
+2. **A missing body is already a hard failure rather than a nondeterminism error.** `if historyMessages[i].Body == nil { return nil, fmt.Errorf("missing body in message for update ID %v", ...) }` (`:1120`). That is the shape §8.4 asks for when stream data has expired, and it already exists.
+
+Delivery position is solved too: messages are drained by event ID, before and after each `ProcessEvent` (`:1203`, `:1221`), so a slice keyed to the `WorkflowTaskCompleted` event ID lands at the same point live and on replay.
+
+**Decision: the server reassembles slices on the History read path, keyed by the recorded cursor.** Storage keeps the property the whole design rests on, because only offsets are written to History. Reassembly happens on read: the bytes are fetched from the stream branch and attached to the event that recorded the range. This matches the carrier the SDK already expects, so it needs no change to the replay loop.
+
+The Update precedent buys the same guarantee by writing the payload into the event (`accepted_request`, whose proto comment says it exists "so that the worker can recreate and deliver that same message as part of replay"). We keep the recreate-from-History contract and move the cost from write to read.
+
+That cost is real and belongs on the read path's budget: one stream read per subscribed workflow per cache miss, on a path shared with `GetWorkflowExecutionHistory` and the UI. §6's tail cache covers the common case, where replay follows soon after the writes. Cold replay of an old workflow is the expensive case and needs a bound before this is more than a prototype.
 
 **Segmentation is not a concern here.** One slice arrives per workflow task, the SDK drains it once, and replay drains an identical slice once. A client-side design that reads a backend continuously while a task is open has to reconstruct how many times the consumer was woken within the task, because condition evaluation happens per wake. Putting the delivery boundary at the task boundary, which is already a durable boundary, removes that problem rather than solving it.
 
@@ -789,4 +813,6 @@ The benchmark is the deliverable that makes the September 14 decision possible. 
 - Naming.
 - The UI story: reconstructing a stream in the Web UI, and dropping the Signal and Update clutter.
 - Whether orphan volume under real retry rates stays inside what the eager trim reclaims (§3.6). Instrumented from Stage 0, not answered by design.
+- What bounds the cost of cold replay under the §8.3 decision. Reassembling slices on the History read path is cheap while the tail cache is warm and unbounded when it is not. A very old workflow with a long consumed history is the case that needs a limit, and it does not have one yet.
+- Whether `GetWorkflowExecutionHistory` should reassemble at all, or only the worker-facing read. The UI and `tctl` share that path, so reassembly there means stream payloads appear in operator tooling that today only sees offsets. That is arguably desirable for debugging and arguably a size and redaction problem. Not decided.
 - Cross-cluster replication. History-node data already replicates, so the mechanism is inherited rather than designed, but the conflict semantics for a stream written on two sides of a failover are not worked out. Last-writer-wins is the assumed answer and it is lossy.
