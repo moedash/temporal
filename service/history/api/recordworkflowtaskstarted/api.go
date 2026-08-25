@@ -400,6 +400,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 		Queries:                    rawResp.Queries,
 		Clock:                      rawResp.Clock,
 		Messages:                   rawResp.Messages,
+		StreamSlices:               rawResp.StreamSlices,
 		Version:                    rawResp.Version,
 		NextPageToken:              rawResp.NextPageToken,
 	}, nil

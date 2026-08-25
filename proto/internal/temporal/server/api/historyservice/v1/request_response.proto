@@ -14,6 +14,7 @@ import "temporal/api/history/v1/message.proto";
 import "temporal/api/nexus/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
+import "temporal/api/stream/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
@@ -301,6 +302,10 @@ message RecordWorkflowTaskStartedResponse {
   //          as raw_history_bytes (field 21) will be the only field used.
   temporal.api.history.v1.History raw_history = 20 [deprecated = true];
   repeated bytes raw_history_bytes = 21;
+  // Slices of the streams this Workflow is consuming, each covering the offset
+  // range the task may deliver. Payloads ride here and never enter History;
+  // only the consumed range is recorded, on WorkflowTaskCompleted.
+  repeated temporal.api.stream.v1.StreamSlice stream_slices = 22;
 }
 
 // RecordWorkflowTaskStartedResponseWithRawHistory is wire-compatible with RecordWorkflowTaskStartedResponse.
@@ -345,6 +350,10 @@ message RecordWorkflowTaskStartedResponseWithRawHistory {
   // instead of a proto-decoded History. This avoids matching service having to decode history.
   repeated bytes raw_history = 20 [deprecated = true];
   repeated bytes raw_history_bytes = 21;
+  // Slices of the streams this Workflow is consuming, each covering the offset
+  // range the task may deliver. Payloads ride here and never enter History;
+  // only the consumed range is recorded, on WorkflowTaskCompleted.
+  repeated temporal.api.stream.v1.StreamSlice stream_slices = 22;
 }
 
 message RecordActivityTaskStartedRequest {
