@@ -111,7 +111,7 @@ Both produced confident, wrong numbers, and neither would have been caught by a 
 - Single run per cell, no repetitions. Treat them as order of magnitude.
 - SQLite on a single-node dev cluster. Cassandra behaviour, especially per-partition cost, is not addressed and these numbers must not be read as speaking to it.
 - Persistence ops per message in the rejecting baseline cells are inflated by retry traffic from rejected polls.
-- The native path is measured with the producer and consumers off-shard, which is the path LLM token streaming takes. Publishing from inside a workflow, and consuming inside one, are not built yet.
+- The native path is measured with the producer and consumers off-shard, which is the path LLM token streaming takes. Publishing from inside a workflow is built since this run but not measured here. Consuming inside one is not built.
 - Latency comes from a simulated generation clock, not a real LLM token stream.
 
 ## Next
