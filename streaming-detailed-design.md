@@ -518,6 +518,16 @@ A task that fails or times out recorded nothing, so its staged range never becam
 
 The stream keeps a separate `ConsumerCursor` as a **truncation floor** only. It is advisory for retention and is not the position anything is served from, so it can lag without affecting correctness.
 
+### 8.1b What the prototype implements
+
+Delivery, staging, recording and the cursor advance are built and covered by `tests/stream_consume_test.go`. Two limits are worth naming rather than leaving to be discovered:
+
+**Only a stream in the consuming workflow's own execution can be consumed.** Reading a stream owned by another execution needs that stream's frontier, and the frontier lives on the stream component. Reaching it from inside the consuming workflow's transaction means a cross-execution read while holding the workflow lock, and the CHASM engine is not reachable from `RecordWorkflowTaskStarted` without re-threading it through the history engine. Subscribing to a stream the workflow does not own is rejected rather than silently returning nothing.
+
+**Replay reassembly is not wired.** §8.3 settles that the server reassembles slices on the History read path; that reassembly does not exist yet, and no SDK reads the field, so replay of a consuming workflow is untested end to end. What the recorded cursors do give is the input that reassembly needs.
+
+One implementation detail with a cost attached: both the delivery and completion paths resolve the workflow component **read-only first**, and only take the mutable path when a cursor exists. Reaching it mutably marks the node dirty, which would add a node to the transaction of every workflow in the cluster, subscribed or not. That showed up as a task-generation change in `TestRefreshSubStateMachineTasks` before the read-only check was added.
+
 ### 8.2 What must be recorded, and why empty counts
 
 Two rules, both load-bearing:

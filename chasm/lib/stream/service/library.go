@@ -51,6 +51,10 @@ func components() []*chasm.RegistrableComponent {
 			componentName,
 			chasm.WithBusinessIDAlias("StreamId"),
 		),
+		// Registered here rather than with the workflow library because it is
+		// this package's type, even though it only ever hangs off a consuming
+		// workflow.
+		chasm.NewRegistrableComponent[*stream.Cursor]("streamCursor"),
 	}
 }
 

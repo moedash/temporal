@@ -297,7 +297,6 @@ func (h *handler) SubscribeWorkflow(
 			return wf.SubscribeToOwnedStream(mctx, input.GetStreamName(), input.GetStartOffset())
 		},
 		in,
-		chasm.WithRefConsistencyLevel(chasm.RefConsistencyLevelCurrentRun),
 	)
 	if err != nil {
 		return nil, err
