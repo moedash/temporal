@@ -140,6 +140,31 @@ func (w *Workflow) SubscribeToOwnedStream(
 	return startOffset, nil
 }
 
+// StreamCursorsBehind reports whether any subscription still has offsets it has
+// not been given.
+//
+// This is the one place a stream wakes a workflow. Publishing deliberately
+// never does, because a stream item is data produced by an execution rather
+// than a decision input to it. An active subscription is different: the
+// workflow asked to be told, so leaving it to wait for some unrelated task
+// would make delivery depend on traffic that has nothing to do with the stream.
+func (w *Workflow) StreamCursorsBehind(ctx chasm.Context) bool {
+	for name, field := range w.StreamCursors {
+		owned, ok := w.Streams[name]
+		if !ok {
+			continue
+		}
+		state, err := owned.Get(ctx).Snapshot(ctx, struct{}{})
+		if err != nil {
+			continue
+		}
+		if field.Get(ctx).Offset() < state.GetHeadOffset() {
+			return true
+		}
+	}
+	return false
+}
+
 // CommitStreamCursors folds every staged range into its cursor and returns the
 // ranges to record. Called while the workflow task's transaction is open, so
 // the advance and the event that carries the range land together.

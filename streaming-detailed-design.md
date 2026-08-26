@@ -597,7 +597,9 @@ The cost of our choice is a workflow task per slice instead of one long task. Th
 
 The attached slice is capped by **both** `stream.maxConsumeBytesPerTask` and `stream.maxConsumeItemsPerTask`. Bytes alone is not enough: a burst of many tiny messages stays under a byte cap while producing a slice large enough to make one task's drain unboundedly long. Whichever limit binds first, attach a prefix, record only that range, and schedule a follow-up workflow task.
 
-That is the single intentional exception to "publishing never wakes a workflow". Publishing does not. An **active in-workflow subscription** does, because the workflow asked to be woken. Worth stating explicitly, because it is the property that keeps Path C from silently reintroducing the cost Path B removes. A workflow that does not subscribe is never woken by stream traffic.
+That is the single intentional exception to "publishing never wakes a workflow".
+
+Implemented in `closeTransactionHandleWorkflowTaskScheduling` rather than at workflow task completion. Completion is the obvious place and it is not enough: registering a subscription against a stream that already holds data completes no workflow task of its own, so a completion-time check leaves that workflow waiting for unrelated traffic. Transaction close covers both, and the pending-task check runs first so a workflow that already owes a task never pays for the subscription lookup. Publishing does not. An **active in-workflow subscription** does, because the workflow asked to be woken. Worth stating explicitly, because it is the property that keeps Path C from silently reintroducing the cost Path B removes. A workflow that does not subscribe is never woken by stream traffic.
 
 ### 8.6 Continue-as-new and reset
 

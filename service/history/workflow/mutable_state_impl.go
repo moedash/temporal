@@ -704,6 +704,20 @@ func (ms *MutableStateImpl) commitStreamCursors() ([]*apistreampb.StreamCursor, 
 	return wf.CommitStreamCursors(chasmCtx), nil
 }
 
+// HasPendingStreamData reports whether a subscription of this workflow has
+// offsets left to deliver, which is the one condition under which stream
+// traffic schedules a workflow task.
+func (ms *MutableStateImpl) HasPendingStreamData() bool {
+	if !ms.HasChasmWorkflowComponent() {
+		return false
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return false
+	}
+	return wf.StreamCursorsBehind(chasmCtx)
+}
+
 func (ms *MutableStateImpl) HasChasmWorkflowComponent() bool {
 	node, ok := ms.chasmTree.(*chasm.Node)
 	if !ok {
@@ -7977,6 +7991,25 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 				}
 			}
 			break
+		}
+	}
+
+	// A stream subscription with offsets left to deliver. Handled here rather
+	// than at workflow task completion so it also covers the transaction that
+	// registers a subscription against a stream that already has data, which
+	// completes no workflow task of its own.
+	//
+	// The pending-task check comes first because it is cheap: a workflow that
+	// already owes a task needs no further reason to run, so the subscription
+	// state is only consulted when the answer could change something.
+	if !ms.HasPendingWorkflowTask() &&
+		!ms.IsWorkflowExecutionStatusPaused() &&
+		ms.HasPendingStreamData() {
+		if _, err := ms.AddWorkflowTaskScheduledEvent(
+			false,
+			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		); err != nil {
+			return err
 		}
 	}
 

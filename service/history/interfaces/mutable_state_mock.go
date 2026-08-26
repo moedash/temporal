@@ -3094,6 +3094,20 @@ func (mr *MockMutableStateMockRecorder) HasParentExecution() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasParentExecution", reflect.TypeOf((*MockMutableState)(nil).HasParentExecution))
 }
 
+// HasPendingStreamData mocks base method.
+func (m *MockMutableState) HasPendingStreamData() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasPendingStreamData")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasPendingStreamData indicates an expected call of HasPendingStreamData.
+func (mr *MockMutableStateMockRecorder) HasPendingStreamData() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingStreamData", reflect.TypeOf((*MockMutableState)(nil).HasPendingStreamData))
+}
+
 // HasPendingWorkflowTask mocks base method.
 func (m *MockMutableState) HasPendingWorkflowTask() bool {
 	m.ctrl.T.Helper()
