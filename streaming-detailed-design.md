@@ -581,6 +581,8 @@ effective_base = min(requested_base, min over consumers of consumer.offset)
 
 This is the one place where a consumer constrains the stream, and it is unavoidable: recording a cursor instead of the data means the data has to outlive the cursor.
 
+Implemented for attached streams: subscribing registers a pin on the stream in the same transaction that creates the cursor, and committing a delivered range advances the pin with it. `Truncate` rejects a base past the lowest active pin, and the message cap yields to it rather than dropping a range a consumer recorded a cursor for. Registering and advancing in the cursor's own transaction is what keeps the two from drifting: a pin lost while its cursor survived would leave truncation free to take a range the cursor still points at.
+
 The interlock covers deliberate truncation. It cannot cover retention expiry on a stream whose consumer outlives it, or out-of-band deletion. If replay finds a recorded range below `base_offset`, the workflow task **fails retryably** with a distinct error rather than raising a nondeterminism error. The distinction matters operationally: a nondeterminism error looks like a code bug and gets triaged as one, while "the stream data this workflow needs is gone" is an infrastructure condition with a different fix. An operator can restore or extend retention and the workflow proceeds.
 
 ### 8.4a The alternative: holding the task open

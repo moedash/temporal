@@ -73,6 +73,13 @@ func (w *Workflow) StageStreamAppend(collectionID string, op stream.LogAppend) {
 	})
 }
 
+// streamConsumerID names this workflow's pin on a stream it owns. An attached
+// stream has exactly one consumer, but the stream's map is keyed by consumer,
+// so the entry still needs a stable name.
+func streamConsumerID(streamName string) string {
+	return "workflow:" + streamName
+}
+
 // SubscribeToOwnedStream registers this workflow as a consumer of a stream it
 // owns, returning the offset the subscription actually starts from.
 //
@@ -120,6 +127,15 @@ func (w *Workflow) SubscribeToOwnedStream(
 	if err != nil {
 		return 0, err
 	}
+
+	// Pin the stream's floor in the same transaction. Registered separately it
+	// could be lost while the cursor survived, and truncation would then be
+	// free to take a range the cursor still points at.
+	key := mctx.ExecutionKey()
+	if err := owned.RegisterConsumer(mctx, streamConsumerID(name), key.BusinessID, key.RunID, startOffset); err != nil {
+		return 0, err
+	}
+
 	w.StreamCursors[name] = chasm.NewComponentField(mctx, cursor)
 	return startOffset, nil
 }
@@ -151,6 +167,13 @@ func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*apistreampb
 		if !ok {
 			continue
 		}
+
+		// Let the floor follow the cursor. Anything below it is recorded as
+		// consumed, so nothing needs to re-read it.
+		if field, ok := w.Streams[name]; ok {
+			field.Get(mctx).AdvanceConsumer(mctx, streamConsumerID(name), to)
+		}
+
 		recorded = append(recorded, &apistreampb.StreamCursor{
 			StreamId:   cursor.StreamID(),
 			FromOffset: from,

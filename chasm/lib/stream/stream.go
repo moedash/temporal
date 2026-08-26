@@ -354,6 +354,60 @@ func (s *Stream) applyCap() []int64 {
 	return reclaimable
 }
 
+// RegisterConsumer pins the stream's readable floor at offset on behalf of an
+// in-workflow consumer, so truncation and the message cap cannot take a range
+// the consumer has not read yet.
+//
+// Without this the interlock in Truncate and applyCap has nothing to consult:
+// a consumer's cursor lives in its own execution, and the stream cannot see it.
+func (s *Stream) RegisterConsumer(
+	_ chasm.MutableContext,
+	consumerID string,
+	workflowID string,
+	runID string,
+	offset int64,
+) error {
+	if consumerID == "" {
+		return serviceerror.NewInvalidArgument("consumer id is required")
+	}
+	if offset < s.State.BaseOffset {
+		return serviceerror.NewFailedPreconditionf(
+			"offset %d is below the stream's floor of %d", offset, s.State.BaseOffset)
+	}
+	if s.State.Consumers == nil {
+		s.State.Consumers = make(map[string]*streampb.ConsumerCursor)
+	}
+	if existing, ok := s.State.Consumers[consumerID]; ok {
+		existing.Active = true
+		return nil
+	}
+	s.State.Consumers[consumerID] = &streampb.ConsumerCursor{
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Offset:     offset,
+		Active:     true,
+	}
+	return nil
+}
+
+// AdvanceConsumer moves a consumer's pin forward as it reads. It never moves
+// backwards: the floor is what lets a recorded range still be re-read, so
+// lowering it would give back a guarantee already written to History.
+func (s *Stream) AdvanceConsumer(_ chasm.MutableContext, consumerID string, offset int64) {
+	consumer, ok := s.State.Consumers[consumerID]
+	if !ok || offset <= consumer.Offset {
+		return
+	}
+	consumer.Offset = offset
+}
+
+// DeregisterConsumer releases the floor a consumer was holding.
+func (s *Stream) DeregisterConsumer(_ chasm.MutableContext, consumerID string) {
+	if consumer, ok := s.State.Consumers[consumerID]; ok {
+		consumer.Active = false
+	}
+}
+
 // consumerPin is the lowest offset any active in-workflow consumer still needs.
 func (s *Stream) consumerPin() (int64, bool) {
 	var pin int64

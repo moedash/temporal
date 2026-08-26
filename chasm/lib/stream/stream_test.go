@@ -298,3 +298,110 @@ func TestCloseSchedulesRetentionOnlyWhenConfigured(t *testing.T) {
 	// Closing twice must not re-arm deletion.
 	require.True(t, withRetention.Close(now, nil).IsZero())
 }
+
+// The pin test above sets State.Consumers by hand, which is why nothing caught
+// that no caller ever populated it. These go through the registration API.
+func TestRegisterConsumerPinsTruncation(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	require.NoError(t, err)
+
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 2))
+
+	_, err = s.Truncate(nil, 3)
+	require.ErrorContains(t, err, "an active consumer still needs")
+
+	_, err = s.Truncate(nil, 2)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), s.State.BaseOffset)
+}
+
+func TestAdvanceConsumerReleasesTruncation(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	require.NoError(t, err)
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0))
+
+	_, err = s.Truncate(nil, 1)
+	require.Error(t, err, "the pin still sits at 0")
+
+	s.AdvanceConsumer(nil, "workflow:output", 3)
+	_, err = s.Truncate(nil, 3)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), s.State.BaseOffset)
+}
+
+// Lowering the pin would hand back a guarantee already written to History: a
+// recorded range has to stay re-readable.
+func TestAdvanceConsumerNeverRewinds(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	require.NoError(t, err)
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0))
+
+	s.AdvanceConsumer(nil, "workflow:output", 3)
+	s.AdvanceConsumer(nil, "workflow:output", 1)
+
+	pin, ok := s.consumerPin()
+	require.True(t, ok)
+	require.Equal(t, int64(3), pin)
+}
+
+func TestRegisterConsumerRejectsAnOffsetBelowTheFloor(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	require.NoError(t, err)
+	_, err = s.Truncate(nil, 2)
+	require.NoError(t, err)
+
+	err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1)
+	require.ErrorContains(t, err, "below the stream's floor")
+}
+
+// Resubscribing reactivates the existing pin rather than resetting it, so a
+// consumer cannot rewind its own floor by subscribing again.
+func TestRegisterConsumerTwiceKeepsThePin(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	require.NoError(t, err)
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0))
+	s.AdvanceConsumer(nil, "workflow:output", 3)
+
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0))
+
+	pin, ok := s.consumerPin()
+	require.True(t, ok)
+	require.Equal(t, int64(3), pin)
+}
+
+func TestDeregisterConsumerReleasesThePin(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	require.NoError(t, err)
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1))
+
+	s.DeregisterConsumer(nil, "workflow:output")
+
+	_, err = s.Truncate(nil, 4)
+	require.NoError(t, err)
+}
+
+// The cap is a storage bound, not a licence to drop a range a consumer has
+// recorded a cursor for, so it stops at the pin and storage grows instead.
+func TestMessageCapYieldsToARegisteredConsumer(t *testing.T) {
+	s := newTestStream(t, 100)
+	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b"), TxnID: 1})
+	require.NoError(t, err)
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0))
+
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("c", "d"), TxnID: 2})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), s.State.BaseOffset, "the cap must not pass the consumer's pin")
+
+	s.AdvanceConsumer(nil, "workflow:output", 4)
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("e"), TxnID: 3})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), s.State.BaseOffset, "once the pin moves the cap applies again")
+}
