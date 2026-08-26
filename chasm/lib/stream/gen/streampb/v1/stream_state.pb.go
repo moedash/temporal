@@ -265,7 +265,11 @@ type ConsumerCursor struct {
 	RunId      string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	Offset     int64                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
 	// While true, truncation cannot advance past offset.
-	Active        bool `protobuf:"varint,4,opt,name=active,proto3" json:"active,omitempty"`
+	Active bool `protobuf:"varint,4,opt,name=active,proto3" json:"active,omitempty"`
+	// Set when the consumer is a workflow in another execution, which is the
+	// only case that has to be told the frontier moved. A workflow consuming a
+	// stream it owns sees that while closing its own transaction.
+	External      bool `protobuf:"varint,5,opt,name=external,proto3" json:"external,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -328,6 +332,13 @@ func (x *ConsumerCursor) GetActive() bool {
 	return false
 }
 
+func (x *ConsumerCursor) GetExternal() bool {
+	if x != nil {
+		return x.External
+	}
+	return false
+}
+
 // A consuming Workflow's position in a stream. This lives in the consuming
 // Workflow's own state rather than on the stream, so advancing it commits in
 // the same transaction as the WorkflowTaskCompleted event that records the
@@ -341,6 +352,13 @@ type WorkflowStreamCursor struct {
 	BucketSize   int64  `protobuf:"varint,3,opt,name=bucket_size,json=bucketSize,proto3" json:"bucket_size,omitempty"`
 	// Next offset to deliver.
 	Offset int64 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	// The stream's frontier as of the last delivery. A workflow consuming a
+	// stream in another execution cannot read the real frontier while closing its
+	// own transaction, so this is what tells it a capped slice left more behind.
+	KnownHead int64 `protobuf:"varint,8,opt,name=known_head,json=knownHead,proto3" json:"known_head,omitempty"`
+	// Set when the stream lives in another execution, which decides whether the
+	// frontier is read locally or taken from known_head.
+	External bool `protobuf:"varint,9,opt,name=external,proto3" json:"external,omitempty"`
 	// The range attached to the Workflow Task currently in flight. Recorded on
 	// the event that closes that task, then folded into offset. An empty range
 	// is still recorded: a task where the subscription saw nothing is a fact
@@ -408,6 +426,20 @@ func (x *WorkflowStreamCursor) GetOffset() int64 {
 		return x.Offset
 	}
 	return 0
+}
+
+func (x *WorkflowStreamCursor) GetKnownHead() int64 {
+	if x != nil {
+		return x.KnownHead
+	}
+	return 0
+}
+
+func (x *WorkflowStreamCursor) GetExternal() bool {
+	if x != nil {
+		return x.External
+	}
+	return false
 }
 
 func (x *WorkflowStreamCursor) GetPendingFrom() int64 {
@@ -522,19 +554,23 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\ffirst_offset\x18\x02 \x01(\x03R\vfirstOffset\x12\x14\n" +
 	"\x05count\x18\x03 \x01(\x03R\x05count\x12!\n" +
 	"\fcontent_hash\x18\x04 \x01(\fR\vcontentHash\x12\x16\n" +
-	"\x06fenced\x18\x05 \x01(\bR\x06fenced\"x\n" +
+	"\x06fenced\x18\x05 \x01(\bR\x06fenced\"\x94\x01\n" +
 	"\x0eConsumerCursor\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x16\n" +
 	"\x06offset\x18\x03 \x01(\x03R\x06offset\x12\x16\n" +
-	"\x06active\x18\x04 \x01(\bR\x06active\"\xf4\x01\n" +
+	"\x06active\x18\x04 \x01(\bR\x06active\x12\x1a\n" +
+	"\bexternal\x18\x05 \x01(\bR\bexternal\"\xaf\x02\n" +
 	"\x14WorkflowStreamCursor\x12\x1b\n" +
 	"\tstream_id\x18\x01 \x01(\tR\bstreamId\x12#\n" +
 	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12\x1f\n" +
 	"\vbucket_size\x18\x03 \x01(\x03R\n" +
 	"bucketSize\x12\x16\n" +
-	"\x06offset\x18\x04 \x01(\x03R\x06offset\x12!\n" +
+	"\x06offset\x18\x04 \x01(\x03R\x06offset\x12\x1d\n" +
+	"\n" +
+	"known_head\x18\b \x01(\x03R\tknownHead\x12\x1a\n" +
+	"\bexternal\x18\t \x01(\bR\bexternal\x12!\n" +
 	"\fpending_from\x18\x05 \x01(\x03R\vpendingFrom\x12\x1d\n" +
 	"\n" +
 	"pending_to\x18\x06 \x01(\x03R\tpendingTo\x12\x1f\n" +

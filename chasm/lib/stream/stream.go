@@ -137,7 +137,7 @@ func (s *Stream) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 // frontier observable, which is the ordering that makes a torn append invisible
 // rather than corrupting.
 func (s *Stream) AddMessages(
-	_ chasm.MutableContext,
+	mctx chasm.MutableContext,
 	req AddMessagesRequest,
 ) (AddMessagesResult, error) {
 	if s.State.Closed {
@@ -212,13 +212,35 @@ func (s *Stream) AddMessages(
 		}
 	}
 
-	return AddMessagesResult{
+	result := AddMessagesResult{
 		FirstOffset:        first,
 		NextOffset:         s.State.HeadOffset,
 		Count:              count,
 		Appends:            []LogAppend{appendOp},
 		ReclaimableBuckets: s.applyCap(),
-	}, nil
+	}
+	s.notifyConsumers(mctx)
+	return result, nil
+}
+
+// notifyConsumers schedules the wake for consumers this append left behind.
+//
+// Only a workflow in another execution needs it. One consuming a stream it owns
+// sees the new frontier while closing its own transaction, so waking it through
+// a task would only duplicate a decision already made locally.
+func (s *Stream) notifyConsumers(mctx chasm.MutableContext) {
+	// The append path previews itself against a detached copy to work out which
+	// log node to write, and that preview has no transition to attach a task
+	// to. Only the real transition, which carries a context, schedules one.
+	if mctx == nil {
+		return
+	}
+	for _, consumer := range s.State.Consumers {
+		if consumer.GetExternal() && consumer.GetActive() && consumer.GetOffset() < s.State.HeadOffset {
+			mctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: mctx.Now(s)}, &streampb.StreamNotifyConsumersTask{})
+			return
+		}
+	}
 }
 
 // checkProducer applies per-producer idempotency. It returns a replay result
@@ -366,6 +388,7 @@ func (s *Stream) RegisterConsumer(
 	workflowID string,
 	runID string,
 	offset int64,
+	external bool,
 ) error {
 	if consumerID == "" {
 		return serviceerror.NewInvalidArgument("consumer id is required")
@@ -386,6 +409,7 @@ func (s *Stream) RegisterConsumer(
 		RunId:      runID,
 		Offset:     offset,
 		Active:     true,
+		External:   external,
 	}
 	return nil
 }

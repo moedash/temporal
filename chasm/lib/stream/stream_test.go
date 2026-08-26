@@ -306,7 +306,7 @@ func TestRegisterConsumerPinsTruncation(t *testing.T) {
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
 	require.NoError(t, err)
 
-	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 2))
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 2, false))
 
 	_, err = s.Truncate(nil, 3)
 	require.ErrorContains(t, err, "an active consumer still needs")
@@ -320,7 +320,7 @@ func TestAdvanceConsumerReleasesTruncation(t *testing.T) {
 	s := newTestStream(t, 100)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
 	require.NoError(t, err)
-	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0))
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 
 	_, err = s.Truncate(nil, 1)
 	require.Error(t, err, "the pin still sits at 0")
@@ -337,7 +337,7 @@ func TestAdvanceConsumerNeverRewinds(t *testing.T) {
 	s := newTestStream(t, 100)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
 	require.NoError(t, err)
-	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0))
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 
 	s.AdvanceConsumer(nil, "workflow:output", 3)
 	s.AdvanceConsumer(nil, "workflow:output", 1)
@@ -354,7 +354,7 @@ func TestRegisterConsumerRejectsAnOffsetBelowTheFloor(t *testing.T) {
 	_, err = s.Truncate(nil, 2)
 	require.NoError(t, err)
 
-	err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1)
+	err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1, false)
 	require.ErrorContains(t, err, "below the stream's floor")
 }
 
@@ -364,10 +364,10 @@ func TestRegisterConsumerTwiceKeepsThePin(t *testing.T) {
 	s := newTestStream(t, 100)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
 	require.NoError(t, err)
-	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0))
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 	s.AdvanceConsumer(nil, "workflow:output", 3)
 
-	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0))
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 
 	pin, ok := s.consumerPin()
 	require.True(t, ok)
@@ -378,7 +378,7 @@ func TestDeregisterConsumerReleasesThePin(t *testing.T) {
 	s := newTestStream(t, 100)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
 	require.NoError(t, err)
-	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1))
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1, false))
 
 	s.DeregisterConsumer(nil, "workflow:output")
 
@@ -394,7 +394,7 @@ func TestMessageCapYieldsToARegisteredConsumer(t *testing.T) {
 
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b"), TxnID: 1})
 	require.NoError(t, err)
-	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0))
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 
 	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("c", "d"), TxnID: 2})
 	require.NoError(t, err)

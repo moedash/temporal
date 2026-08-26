@@ -65,8 +65,11 @@ message FinishWritingOutput {}
 message SubscribeWorkflowInput {
   string namespace = 1;
   string workflow_id = 2;
-  // Name of the stream within the Workflow.
+  // Name of the stream within the Workflow, for a stream it owns.
   string stream_name = 3;
+  // Id of a standalone stream in another execution. Exactly one of this and
+  // stream_name is set.
+  string stream_id = 5;
   // Where to start. Resolved here rather than at delivery, so the first
   // recorded range starts from a fact instead of a reading.
   int64 start_offset = 4;

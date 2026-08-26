@@ -413,8 +413,11 @@ type SubscribeWorkflowInput struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	WorkflowId string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// Name of the stream within the Workflow.
+	// Name of the stream within the Workflow, for a stream it owns.
 	StreamName string `protobuf:"bytes,3,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
+	// Id of a standalone stream in another execution. Exactly one of this and
+	// stream_name is set.
+	StreamId string `protobuf:"bytes,5,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
 	// Where to start. Resolved here rather than at delivery, so the first
 	// recorded range starts from a fact instead of a reading.
 	StartOffset   int64 `protobuf:"varint,4,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
@@ -469,6 +472,13 @@ func (x *SubscribeWorkflowInput) GetWorkflowId() string {
 func (x *SubscribeWorkflowInput) GetStreamName() string {
 	if x != nil {
 		return x.StreamName
+	}
+	return ""
+}
+
+func (x *SubscribeWorkflowInput) GetStreamId() string {
+	if x != nil {
+		return x.StreamId
 	}
 	return ""
 }
@@ -2240,13 +2250,14 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x1f\n" +
 	"\vproducer_id\x18\x03 \x01(\tR\n" +
 	"producerId\"\x15\n" +
-	"\x13FinishWritingOutput\"\x9b\x01\n" +
+	"\x13FinishWritingOutput\"\xb8\x01\n" +
 	"\x16SubscribeWorkflowInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x1f\n" +
 	"\vstream_name\x18\x03 \x01(\tR\n" +
-	"streamName\x12!\n" +
+	"streamName\x12\x1b\n" +
+	"\tstream_id\x18\x05 \x01(\tR\bstreamId\x12!\n" +
 	"\fstart_offset\x18\x04 \x01(\x03R\vstartOffset\"<\n" +
 	"\x17SubscribeWorkflowOutput\x12!\n" +
 	"\fstart_offset\x18\x01 \x01(\x03R\vstartOffset\"\xed\x01\n" +

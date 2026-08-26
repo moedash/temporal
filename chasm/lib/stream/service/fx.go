@@ -11,6 +11,7 @@ var HistoryModule = fx.Module(
 	fx.Provide(
 		newHandler,
 		newRetentionTaskHandler,
+		newNotifyConsumersTaskHandler,
 		newLibrary,
 	),
 	fx.Invoke(func(l *library, registry *chasm.Registry) error {

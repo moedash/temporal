@@ -70,18 +70,24 @@ func deliverStreamSlices(
 	for _, name := range names {
 		cursor := wf.StreamCursors[name].Get(chasmCtx)
 
-		// Only a stream in this execution can be read here. Reaching one owned
-		// by another execution needs its frontier, and reading that from
-		// inside the workflow lock is a different problem than this one.
-		field, ok := wf.Streams[name]
-		if !ok {
-			return nil, nil, serviceerror.NewFailedPreconditionf(
-				"workflow consumes stream %q, which it does not own", name)
-		}
-		owned := field.Get(chasmCtx)
-		state, err := owned.Snapshot(chasmCtx, struct{}{})
-		if err != nil {
-			return nil, nil, err
+		// The frontier a delivery clips to. For a stream this execution owns it
+		// is read directly; for one in another execution it is whatever that
+		// stream last pushed here, because reading the real value would mean
+		// reaching across executions while this transaction is open.
+		var head int64
+		if cursor.IsExternal() {
+			head = cursor.KnownHead()
+		} else {
+			field, ok := wf.Streams[name]
+			if !ok {
+				return nil, nil, serviceerror.NewFailedPreconditionf(
+					"workflow consumes stream %q, which it neither owns nor subscribed to externally", name)
+			}
+			state, err := field.Get(chasmCtx).Snapshot(chasmCtx, struct{}{})
+			if err != nil {
+				return nil, nil, err
+			}
+			head = state.GetHeadOffset()
 		}
 
 		// A range already staged is redelivered unchanged. The same task can be
@@ -94,7 +100,7 @@ func deliverStreamSlices(
 			// Clip to the frontier. Bytes reach the log before the transaction
 			// that makes them visible commits, so reading past head risks
 			// delivering an offset whose content a retry could still replace.
-			to = min(from+int64(maxItems), state.GetHeadOffset())
+			to = min(from+int64(maxItems), head)
 		}
 
 		var messages []*apistreampb.StreamMessage

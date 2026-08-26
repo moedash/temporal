@@ -287,6 +287,10 @@ func (h *handler) SubscribeWorkflow(
 ) (*streampb.SubscribeWorkflowResponse, error) {
 	in := req.GetFrontendRequest()
 
+	if in.GetStreamId() != "" {
+		return h.subscribeToExternalStream(ctx, req.GetNamespaceId(), in)
+	}
+
 	startOffset, _, err := chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
@@ -304,6 +308,74 @@ func (h *handler) SubscribeWorkflow(
 
 	return &streampb.SubscribeWorkflowResponse{
 		FrontendResponse: &streampb.SubscribeWorkflowOutput{StartOffset: startOffset},
+	}, nil
+}
+
+// subscribeToExternalStream registers a cursor against a stream in another
+// execution.
+//
+// The pin goes on the stream before the cursor goes on the workflow, and the
+// order is the guarantee: interrupted after the first write there is a pin
+// holding storage nothing reads, which costs space. Interrupted after the
+// other order there would be a cursor with no pin, and truncation would be free
+// to take a range that cursor still points at.
+func (h *handler) subscribeToExternalStream(
+	ctx context.Context,
+	namespaceID string,
+	in *streampb.SubscribeWorkflowInput,
+) (*streampb.SubscribeWorkflowResponse, error) {
+	streamID := in.GetStreamId()
+
+	state, err := chasm.ReadComponent(ctx,
+		refFor(namespaceID, streamID), (*stream.Stream).Snapshot, struct{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	startOffset := in.GetStartOffset()
+	if startOffset < 0 {
+		startOffset = state.GetHeadOffset()
+	}
+	if startOffset < state.GetBaseOffset() {
+		return nil, serviceerror.NewFailedPreconditionf(
+			"offset %d is below the stream's floor of %d", startOffset, state.GetBaseOffset())
+	}
+
+	consumerID := "workflow:" + in.GetWorkflowId()
+	if _, _, err := chasm.UpdateComponent(
+		ctx,
+		refFor(namespaceID, streamID),
+		func(s *stream.Stream, mctx chasm.MutableContext, offset int64) (struct{}, error) {
+			return struct{}{}, s.RegisterConsumer(mctx, consumerID, in.GetWorkflowId(), "", offset, true)
+		},
+		startOffset,
+	); err != nil {
+		return nil, err
+	}
+
+	registered, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
+			NamespaceID: namespaceID,
+			BusinessID:  in.GetWorkflowId(),
+		}),
+		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, offset int64) (int64, error) {
+			return wf.SubscribeToExternalStream(mctx, chasmworkflow.ExternalStreamSubscription{
+				StreamID:     streamID,
+				CollectionID: state.GetCollectionId(),
+				BucketSize:   state.GetBucketSize(),
+				StartOffset:  offset,
+				KnownHead:    state.GetHeadOffset(),
+			})
+		},
+		startOffset,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &streampb.SubscribeWorkflowResponse{
+		FrontendResponse: &streampb.SubscribeWorkflowOutput{StartOffset: registered},
 	}, nil
 }
 

@@ -21,7 +21,10 @@ type Cursor struct {
 }
 
 type NewCursorRequest struct {
-	StreamID     string
+	StreamID string
+	// External marks a stream in another execution, whose frontier this
+	// workflow is told about rather than reads.
+	External     bool
 	CollectionID string
 	BucketSize   int64
 
@@ -51,6 +54,8 @@ func NewCursor(_ chasm.MutableContext, req NewCursorRequest) (*Cursor, error) {
 			CollectionId: req.CollectionID,
 			BucketSize:   req.BucketSize,
 			Offset:       req.StartOffset,
+			External:     req.External,
+			KnownHead:    req.StartOffset,
 		},
 	}, nil
 }
@@ -131,4 +136,23 @@ func (c *Cursor) Abandon(_ chasm.MutableContext) {
 	c.State.PendingFrom = 0
 	c.State.PendingTo = 0
 	c.State.HasPending = false
+}
+
+// IsExternal reports whether the stream lives in another execution.
+func (c *Cursor) IsExternal() bool {
+	return c.State.External
+}
+
+// KnownHead is the stream's frontier as last pushed to this workflow.
+func (c *Cursor) KnownHead() int64 {
+	return c.State.KnownHead
+}
+
+// AdvanceKnownHead moves the recorded frontier forward. It never moves back: a
+// stale push arriving after a fresher one must not hide offsets already known
+// to exist.
+func (c *Cursor) AdvanceKnownHead(_ chasm.MutableContext, head int64) {
+	if head > c.State.KnownHead {
+		c.State.KnownHead = head
+	}
 }

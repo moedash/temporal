@@ -132,12 +132,68 @@ func (w *Workflow) SubscribeToOwnedStream(
 	// could be lost while the cursor survived, and truncation would then be
 	// free to take a range the cursor still points at.
 	key := mctx.ExecutionKey()
-	if err := owned.RegisterConsumer(mctx, streamConsumerID(name), key.BusinessID, key.RunID, startOffset); err != nil {
+	if err := owned.RegisterConsumer(mctx, streamConsumerID(name), key.BusinessID, key.RunID, startOffset, false); err != nil {
 		return 0, err
 	}
 
 	w.StreamCursors[name] = chasm.NewComponentField(mctx, cursor)
 	return startOffset, nil
+}
+
+// ExternalStreamSubscription describes a stream in another execution. The
+// addressing is copied in at subscribe time so delivery never has to reach
+// across executions to find the log.
+type ExternalStreamSubscription struct {
+	StreamID     string
+	CollectionID string
+	BucketSize   int64
+	StartOffset  int64
+	KnownHead    int64
+}
+
+// SubscribeToExternalStream registers this workflow as a consumer of a stream
+// it does not own, returning the offset the subscription starts from.
+func (w *Workflow) SubscribeToExternalStream(
+	mctx chasm.MutableContext,
+	req ExternalStreamSubscription,
+) (int64, error) {
+	if w.StreamCursors == nil {
+		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
+	}
+	if existing, ok := w.StreamCursors[req.StreamID]; ok {
+		// Resubscribing must not rewind: ranges below the cursor are already
+		// recorded in History, and moving back would replay them as new.
+		return existing.Get(mctx).Offset(), nil
+	}
+
+	cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
+		StreamID:     req.StreamID,
+		External:     true,
+		CollectionID: req.CollectionID,
+		BucketSize:   req.BucketSize,
+		StartOffset:  req.StartOffset,
+	})
+	if err != nil {
+		return 0, err
+	}
+	cursor.AdvanceKnownHead(mctx, req.KnownHead)
+	w.StreamCursors[req.StreamID] = chasm.NewComponentField(mctx, cursor)
+	return req.StartOffset, nil
+}
+
+// AdvanceKnownHead records how far a stream in another execution has moved.
+//
+// A workflow cannot read that frontier itself while closing its own
+// transaction, so the stream pushes it here. Writing it dirties this execution,
+// and the transaction close then sees the cursor is behind and schedules a
+// workflow task, which is the same path an owned stream takes.
+func (w *Workflow) AdvanceKnownHead(mctx chasm.MutableContext, streamID string, head int64) error {
+	field, ok := w.StreamCursors[streamID]
+	if !ok {
+		return serviceerror.NewNotFoundf("workflow does not consume stream %q", streamID)
+	}
+	field.Get(mctx).AdvanceKnownHead(mctx, head)
+	return nil
 }
 
 // StreamCursorsBehind reports whether any subscription still has offsets it has
@@ -150,6 +206,17 @@ func (w *Workflow) SubscribeToOwnedStream(
 // would make delivery depend on traffic that has nothing to do with the stream.
 func (w *Workflow) StreamCursorsBehind(ctx chasm.Context) bool {
 	for name, field := range w.StreamCursors {
+		cursor := field.Get(ctx)
+
+		// An external stream's frontier is whatever it last pushed here: this
+		// execution cannot read the real one without reaching into another.
+		if cursor.IsExternal() {
+			if cursor.Offset() < cursor.KnownHead() {
+				return true
+			}
+			continue
+		}
+
 		owned, ok := w.Streams[name]
 		if !ok {
 			continue
@@ -158,7 +225,7 @@ func (w *Workflow) StreamCursorsBehind(ctx chasm.Context) bool {
 		if err != nil {
 			continue
 		}
-		if field.Get(ctx).Offset() < state.GetHeadOffset() {
+		if cursor.Offset() < state.GetHeadOffset() {
 			return true
 		}
 	}

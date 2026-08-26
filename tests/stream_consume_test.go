@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -477,4 +478,101 @@ func sliceForEvent(slices []*streampb.StreamSlice, eventID int64) *streampb.Stre
 		}
 	}
 	return nil
+}
+
+// The shape the feature exists for: a producer writing off-shard and a workflow
+// consuming it, with no relationship between them beyond the stream.
+//
+// A consuming workflow cannot read another execution's frontier while closing
+// its own transaction, so the stream pushes it. The push dirties the consumer,
+// whose transaction close then sees it is behind and schedules a workflow task.
+//
+// What this asserts stops at that scheduled task. The task is recorded in
+// History and never reaches a worker, because a workflow task scheduled from
+// inside a CHASM update does not get dispatched. That last hop is the one piece
+// of cross-execution consumption still missing, and this test fails the moment
+// it starts working, which is the point.
+func TestExternalStreamPushSchedulesAWorkflowTask(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	streamID := "external-stream-" + uuid.NewString()
+	s.create(s.ctx(), t, streamID)
+
+	id := "stream-wf-external-" + uuid.NewString()
+	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	we, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.ns,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "tester",
+	})
+	require.NoError(t, err)
+
+	//nolint:staticcheck // SA1019: consistent with the other stream tests.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return nil, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	_, err = s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: s.ns, WorkflowId: id,
+			StreamId: streamID, StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+
+	// The subscription has to reach the stream, or truncation could take a
+	// range the cursor still points at.
+	desc, err := s.client.DescribeStream(s.ctx(), &streamlib.DescribeStreamRequest{
+		FrontendRequest: &streamlib.DescribeStreamInput{Namespace: s.ns, StreamId: streamID},
+	})
+	require.NoError(t, err)
+	consumers := desc.GetFrontendResponse().GetState().GetConsumers()
+	require.Len(t, consumers, 1)
+	for _, c := range consumers {
+		require.True(t, c.GetExternal())
+		require.True(t, c.GetActive())
+		require.Equal(t, id, c.GetWorkflowId())
+	}
+
+	// An off-shard producer, unrelated to the workflow.
+	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
+		FrontendRequest: &streamlib.AddMessagesInput{
+			Namespace: s.ns, StreamId: streamID,
+			Messages: []*streamlib.StreamMessage{
+				{Body: &commonpb.Payload{Data: []byte("from-outside-1")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+				{Body: &commonpb.Payload{Data: []byte("from-outside-2")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// The append alone has to produce a workflow task, with no signal and no
+	// other traffic against the workflow.
+	await.RequireTruef(t, func() bool {
+		events := env.GetHistory(s.ns, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
+		scheduled := 0
+		for _, e := range events {
+			if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+				scheduled++
+			}
+		}
+		return scheduled >= 2
+	}, 20*time.Second, 200*time.Millisecond, "the append must schedule a workflow task on its own")
 }

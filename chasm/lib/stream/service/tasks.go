@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -96,5 +97,102 @@ func (h *retentionTaskHandler) Discard(
 	_ *streampb.StreamRetentionTask,
 ) error {
 	// Nothing to undo: the task carries no side effect until it executes.
+	return nil
+}
+
+// notifyConsumersTaskHandler tells workflows in other executions that the
+// stream moved.
+//
+// Appending never schedules a workflow task by itself, because a stream item is
+// data an execution produced rather than a decision input to it. A workflow
+// that subscribed is the exception, and it has no other way to find out: it
+// cannot read another execution's frontier while closing its own transaction.
+// So the frontier is pushed into its cursor, which dirties that execution and
+// lets its own transaction close decide it owes a workflow task.
+type notifyConsumersTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*streampb.StreamNotifyConsumersTask]
+
+	namespaceRegistry namespace.Registry
+	logger            log.Logger
+}
+
+func newNotifyConsumersTaskHandler(
+	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+) *notifyConsumersTaskHandler {
+	return &notifyConsumersTaskHandler{
+		namespaceRegistry: namespaceRegistry,
+		logger:            logger,
+	}
+}
+
+func (h *notifyConsumersTaskHandler) Validate(
+	_ chasm.Context,
+	s *stream.Stream,
+	_ chasm.TaskInvocation,
+	_ *streampb.StreamNotifyConsumersTask,
+) (bool, error) {
+	for _, consumer := range s.State.GetConsumers() {
+		if consumer.GetExternal() && consumer.GetActive() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (h *notifyConsumersTaskHandler) Execute(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	_ chasm.TaskAttributes,
+	_ *streampb.StreamNotifyConsumersTask,
+) error {
+	namespaceID := ref.NamespaceID
+	streamID := ref.BusinessID
+
+	if name, nsErr := h.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID)); nsErr == nil {
+		ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundLowCallerInfo(name.String()))
+	}
+
+	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
+	if err != nil {
+		return err
+	}
+	head := state.GetHeadOffset()
+
+	for _, consumer := range state.GetConsumers() {
+		if !consumer.GetExternal() || !consumer.GetActive() || consumer.GetOffset() >= head {
+			continue
+		}
+
+		_, _, err := chasm.UpdateComponent(
+			ctx,
+			chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
+				NamespaceID: namespaceID,
+				BusinessID:  consumer.GetWorkflowId(),
+			}),
+			func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, at int64) (struct{}, error) {
+				return struct{}{}, wf.AdvanceKnownHead(mctx, streamID, at)
+			},
+			head,
+		)
+		if err != nil {
+			// One unreachable consumer must not hold up the others, and the
+			// next append schedules this again. A consumer that never comes
+			// back is drained by its own truncation floor, not from here.
+			h.logger.Warn("failed to tell a stream consumer that the frontier moved",
+				tag.NewStringTag("stream-id", streamID),
+				tag.NewStringTag("consumer-workflow-id", consumer.GetWorkflowId()),
+				tag.Error(err))
+		}
+	}
+	return nil
+}
+
+func (h *notifyConsumersTaskHandler) Discard(
+	_ context.Context,
+	_ chasm.ComponentRef,
+	_ chasm.TaskAttributes,
+	_ *streampb.StreamNotifyConsumersTask,
+) error {
 	return nil
 }

@@ -64,6 +64,10 @@ message ConsumerCursor {
   int64 offset = 3;
   // While true, truncation cannot advance past offset.
   bool active = 4;
+  // Set when the consumer is a workflow in another execution, which is the
+  // only case that has to be told the frontier moved. A workflow consuming a
+  // stream it owns sees that while closing its own transaction.
+  bool external = 5;
 }
 
 // A consuming Workflow's position in a stream. This lives in the consuming
@@ -79,6 +83,15 @@ message WorkflowStreamCursor {
 
   // Next offset to deliver.
   int64 offset = 4;
+
+  // The stream's frontier as of the last delivery. A workflow consuming a
+  // stream in another execution cannot read the real frontier while closing its
+  // own transaction, so this is what tells it a capped slice left more behind.
+  int64 known_head = 8;
+
+  // Set when the stream lives in another execution, which decides whether the
+  // frontier is read locally or taken from known_head.
+  bool external = 9;
 
   // The range attached to the Workflow Task currently in flight. Recorded on
   // the event that closes that task, then folded into offset. An empty range

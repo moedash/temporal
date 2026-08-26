@@ -522,7 +522,13 @@ The stream keeps a separate `ConsumerCursor` as a **truncation floor** only. It 
 
 Delivery, staging, recording and the cursor advance are built and covered by `tests/stream_consume_test.go`. Two limits are worth naming rather than leaving to be discovered:
 
-**Only a stream in the consuming workflow's own execution can be consumed.** Reading a stream owned by another execution needs that stream's frontier, and the frontier lives on the stream component. Reaching it from inside the consuming workflow's transaction means a cross-execution read while holding the workflow lock, and the CHASM engine is not reachable from `RecordWorkflowTaskStarted` without re-threading it through the history engine. Subscribing to a stream the workflow does not own is rejected rather than silently returning nothing.
+**Consuming a stream in another execution is built except for its last hop.** A consumer cannot read another execution's frontier while closing its own transaction, so the frontier is pushed to it instead: an append that leaves a registered external consumer behind schedules a side-effect task on the stream, which writes the new frontier onto that consumer's cursor. That write dirties the consuming execution, and its own transaction close then sees the cursor is behind and schedules a workflow task, which is the same path an owned stream takes. Delivery clips to the pushed frontier rather than a live read, so no cross-execution read happens while a workflow transaction is open.
+
+The subscription registers the truncation pin on the stream **before** writing the cursor on the workflow. Interrupted after the first write there is a pin holding storage nothing reads, which costs space; the other order would leave a cursor with no pin, and truncation would be free to take a range it still points at.
+
+What does not work yet is dispatch. The wake reaches History as a `WorkflowTaskScheduled` event and the task never reaches a worker, because a workflow task scheduled from inside a CHASM update is not dispatched. `TestExternalStreamPushSchedulesAWorkflowTask` asserts everything up to that event and fails as soon as the last hop starts working.
+
+Two consequences worth stating. An external consumer's pin never advances, because advancing it would be a cross-execution write on the workflow task path, so a stream with a live external consumer does not truncate below where that consumer subscribed. And a capped slice relies on the same pushed frontier to continue, so it resumes on the next push rather than immediately.
 
 **Replay reassembly is built.** When a workflow task carries History, every `WorkflowTaskCompleted` in it that recorded a range gets its payloads re-read from the log and attached, tagged with that event's id. A response therefore holds at most one untagged slice, for the task about to run, plus one per recorded range being replayed. No SDK reads the field yet, so the consuming end is still unproven.
 
