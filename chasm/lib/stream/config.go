@@ -34,5 +34,11 @@ const (
 // delivered on the following task.
 const MaxConsumeItemsPerTask = 1000
 
+// MaxConsumeBytesPerTask bounds one Workflow Task's slice by size. Paired with
+// MaxConsumeItemsPerTask because neither bound alone is enough: a burst of tiny
+// messages slips under the byte budget, and a few large ones slip under the
+// item count.
+const MaxConsumeBytesPerTask = 2 << 20
+
 // MaxListPageSize bounds a visibility page when the caller does not.
 const MaxListPageSize = 1000

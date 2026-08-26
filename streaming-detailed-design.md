@@ -524,7 +524,9 @@ Delivery, staging, recording and the cursor advance are built and covered by `te
 
 **Only a stream in the consuming workflow's own execution can be consumed.** Reading a stream owned by another execution needs that stream's frontier, and the frontier lives on the stream component. Reaching it from inside the consuming workflow's transaction means a cross-execution read while holding the workflow lock, and the CHASM engine is not reachable from `RecordWorkflowTaskStarted` without re-threading it through the history engine. Subscribing to a stream the workflow does not own is rejected rather than silently returning nothing.
 
-**Replay reassembly is not wired.** §8.3 settles that the server reassembles slices on the History read path; that reassembly does not exist yet, and no SDK reads the field, so replay of a consuming workflow is untested end to end. What the recorded cursors do give is the input that reassembly needs.
+**Replay reassembly is built.** When a workflow task carries History, every `WorkflowTaskCompleted` in it that recorded a range gets its payloads re-read from the log and attached, tagged with that event's id. A response therefore holds at most one untagged slice, for the task about to run, plus one per recorded range being replayed. No SDK reads the field yet, so the consuming end is still unproven.
+
+The cost is the one §8.3 flagged: a delivery carrying full History re-reads every range that History records. Sticky delivery carries only the tail and pays proportionally less, but a cold replay of a long-lived consumer re-reads everything it ever consumed, and that still has no bound.
 
 One implementation detail with a cost attached: both the delivery and completion paths resolve the workflow component **read-only first**, and only take the mutable path when a cursor exists. Reaching it mutably marks the node dirty, which would add a node to the transaction of every workflow in the cluster, subscribed or not. That showed up as a task-generation change in `TestRefreshSubStateMachineTasks` before the read-only check was added.
 

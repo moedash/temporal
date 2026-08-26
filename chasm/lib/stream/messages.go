@@ -69,3 +69,29 @@ func ToAPIMessages(in []*streampb.StreamMessage) []*apistreampb.StreamMessage {
 	}
 	return out
 }
+
+// CapByBytes trims a contiguous run of messages to a byte budget and returns
+// the offset just past the last one kept.
+//
+// It always keeps the first message, however large. Dropping it would leave the
+// cursor unable to advance, and since an unconsumed range now schedules a
+// workflow task, a stream holding one oversized message would wake the workflow
+// forever without ever delivering anything.
+func CapByBytes(
+	messages []*streampb.StreamMessage,
+	from int64,
+	maxBytes int,
+) ([]*streampb.StreamMessage, int64) {
+	if len(messages) == 0 {
+		return messages, from
+	}
+
+	total := 0
+	for i, m := range messages {
+		total += proto.Size(m)
+		if total > maxBytes && i > 0 {
+			return messages[:i], from + int64(i)
+		}
+	}
+	return messages, from + int64(len(messages))
+}

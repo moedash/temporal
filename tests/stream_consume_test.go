@@ -110,8 +110,7 @@ func TestStreamWorkflowConsumesWithoutHistoryPayloads(t *testing.T) {
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
 
-	require.Len(t, delivered[1], 1, "the subscribed stream must be attached to the task")
-	slice := delivered[1][0]
+	slice := currentSlice(t, delivered[1])
 	require.Equal(t, int64(0), slice.GetFromOffset())
 	require.Equal(t, int64(3), slice.GetToOffset())
 	require.Len(t, slice.GetMessages(), 3)
@@ -125,10 +124,10 @@ func TestStreamWorkflowConsumesWithoutHistoryPayloads(t *testing.T) {
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
 
-	require.Len(t, delivered[2], 1, "a caught-up subscription is still attached")
-	require.Equal(t, int64(3), delivered[2][0].GetFromOffset())
-	require.Equal(t, int64(3), delivered[2][0].GetToOffset())
-	require.Empty(t, delivered[2][0].GetMessages())
+	idleSlice := currentSlice(t, delivered[2])
+	require.Equal(t, int64(3), idleSlice.GetFromOffset(), "a caught-up subscription is still attached")
+	require.Equal(t, int64(3), idleSlice.GetToOffset())
+	require.Empty(t, idleSlice.GetMessages())
 
 	events := env.GetHistory(s.ns, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
 	recorded := recordedCursors(events)
@@ -250,17 +249,18 @@ func TestStreamSubscriptionSchedulesItsOwnWorkflowTask(t *testing.T) {
 	signalWorkflow(t, s, id, "")
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
-	require.Equal(t, int64(1), delivered[1][0].GetToOffset(), "nothing new at the tail yet")
+	require.Equal(t, int64(1), currentSlice(t, delivered[1]).GetToOffset(), "nothing new at the tail yet")
 
 	// No signal this time. The subscription owes two offsets, so completing the
 	// previous task has to have scheduled this one.
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
 	require.Len(t, delivered, 3)
-	require.Equal(t, int64(1), delivered[2][0].GetFromOffset())
-	require.Equal(t, int64(3), delivered[2][0].GetToOffset())
-	require.Len(t, delivered[2][0].GetMessages(), 2)
-	require.Equal(t, "alpha", string(delivered[2][0].GetMessages()[0].GetBody().GetData()))
+	woken := currentSlice(t, delivered[2])
+	require.Equal(t, int64(1), woken.GetFromOffset())
+	require.Equal(t, int64(3), woken.GetToOffset())
+	require.Len(t, woken.GetMessages(), 2)
+	require.Equal(t, "alpha", string(woken.GetMessages()[0].GetBody().GetData()))
 
 	// And it has to stop. A wake condition that stayed true would spin the
 	// workflow on empty tasks forever.
@@ -344,6 +344,137 @@ func TestSubscribingToABacklogSchedulesAWorkflowTask(t *testing.T) {
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
 	require.Len(t, delivered, 2)
-	require.Equal(t, int64(0), delivered[1][0].GetFromOffset())
-	require.Equal(t, int64(2), delivered[1][0].GetToOffset())
+	backlog := currentSlice(t, delivered[1])
+	require.Equal(t, int64(0), backlog.GetFromOffset())
+	require.Equal(t, int64(2), backlog.GetToOffset())
+}
+
+// History records the offsets a task consumed and never the payloads, so a
+// worker replaying that task has to be handed the bytes again. The response
+// field alone cannot do it: it is built once per delivery while a cache miss
+// replays every prior task, so each re-supplied range travels with the id of
+// the event that recorded it.
+func TestReplayGetsTheConsumedRangesBackFromTheStream(t *testing.T) {
+	// Dedicated, because forcing the replay path means evicting the cached
+	// workflow context, and CloseShard is not allowed on a shared cluster.
+	env := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+	s := newStreamTestEnvFrom(t, env)
+
+	id := "stream-wf-replay-" + uuid.NewString()
+	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	we, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.ns,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "tester",
+	})
+	require.NoError(t, err)
+
+	var delivered [][]*streampb.StreamSlice
+	task := 0
+
+	//nolint:staticcheck // SA1019: only the deprecated poller can emit this command type.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			delivered = append(delivered, resp.GetStreamSlices())
+			task++
+			if task > 1 {
+				return nil, nil
+			}
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
+				Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
+					AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
+						Messages: []*streampb.StreamMessage{
+							{Body: &commonpb.Payload{Data: []byte("replay-me-1")}, Topic: "tokens"},
+							{Body: &commonpb.Payload{Data: []byte("replay-me-2")}, Topic: "tokens"},
+						},
+					},
+				},
+			}}, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	_, err = s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: s.ns, WorkflowId: id,
+			StreamName: chasmworkflow.DefaultStreamName, StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+
+	// Consume the range. This is the task replay will have to reproduce.
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	require.Len(t, currentSlice(t, delivered[1]).GetMessages(), 2)
+
+	consumedAt := completedEventWithCursors(t, env.GetHistory(s.ns,
+		&commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()}))
+
+	// Drop the cached context so the next task is served with full history,
+	// which is the replay path.
+	env.CloseShard(env.NamespaceID().String(), id)
+
+	signalWorkflow(t, s, id, we.GetRunId())
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	replayed := sliceForEvent(delivered[2], consumedAt)
+	require.NotNil(t, replayed, "the replayed task must carry the range recorded at event %d", consumedAt)
+	require.Equal(t, int64(0), replayed.GetFromOffset())
+	require.Equal(t, int64(2), replayed.GetToOffset())
+	require.Len(t, replayed.GetMessages(), 2, "the payloads have to come back from the stream")
+	require.Equal(t, "replay-me-1", string(replayed.GetMessages()[0].GetBody().GetData()))
+	require.Equal(t, "replay-me-2", string(replayed.GetMessages()[1].GetBody().GetData()))
+}
+
+// completedEventWithCursors returns the id of the first WorkflowTaskCompleted
+// event that recorded a non-empty consumed range.
+func completedEventWithCursors(t *testing.T, events []*historypb.HistoryEvent) int64 {
+	t.Helper()
+	for _, e := range events {
+		for _, c := range e.GetWorkflowTaskCompletedEventAttributes().GetStreamCursors() {
+			if c.GetToOffset() > c.GetFromOffset() {
+				return e.GetEventId()
+			}
+		}
+	}
+	t.Fatal("no completed event recorded a consumed range")
+	return 0
+}
+
+// currentSlice picks the slice for the task about to run. Slices carrying an
+// event id belong to tasks being replayed, and a response can hold both.
+func currentSlice(t *testing.T, slices []*streampb.StreamSlice) *streampb.StreamSlice {
+	t.Helper()
+	for _, s := range slices {
+		if s.GetWorkflowTaskCompletedEventId() == 0 {
+			return s
+		}
+	}
+	t.Fatal("no slice for the current task")
+	return nil
+}
+
+func sliceForEvent(slices []*streampb.StreamSlice, eventID int64) *streampb.StreamSlice {
+	for _, s := range slices {
+		if s.GetWorkflowTaskCompletedEventId() == eventID {
+			return s
+		}
+	}
+	return nil
 }

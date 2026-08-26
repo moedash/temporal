@@ -51,6 +51,7 @@ func Invoke(
 
 	var workflowKey definition.WorkflowKey
 	var resp *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory
+	var streamAddresses map[string]streamAddress
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -104,7 +105,8 @@ func Invoke(
 					}
 					// Redelivers whatever range is already staged, so a
 					// duplicate of the same request hands back the same slice.
-					if resp.StreamSlices, err = deliverStreamSlices(ctx, shardContext, mutableState); err != nil {
+					resp.StreamSlices, streamAddresses, err = deliverStreamSlices(ctx, shardContext, mutableState)
+					if err != nil {
 						return nil, err
 					}
 					updateAction.Noop = true
@@ -243,7 +245,8 @@ func Invoke(
 				return nil, err
 			}
 
-			if resp.StreamSlices, err = deliverStreamSlices(ctx, shardContext, mutableState); err != nil {
+			resp.StreamSlices, streamAddresses, err = deliverStreamSlices(ctx, shardContext, mutableState)
+			if err != nil {
 				return nil, err
 			}
 
@@ -271,6 +274,12 @@ func Invoke(
 		resp,
 	)
 	if err != nil {
+		return nil, err
+	}
+
+	// After the history is attached, because the ranges to re-supply are read
+	// out of the events being sent.
+	if err := attachReplaySlices(ctx, shardContext, workflowKey.GetNamespaceID(), streamAddresses, resp); err != nil {
 		return nil, err
 	}
 	return resp, nil
