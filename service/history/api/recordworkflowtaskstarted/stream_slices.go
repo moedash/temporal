@@ -11,6 +11,7 @@ import (
 	apistreampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm/lib/stream"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
@@ -28,6 +29,23 @@ import (
 type streamAddress struct {
 	collectionID string
 	bucketSize   int64
+	// The shard the log lives on, which is the stream's own, not the
+	// consumer's. They differ whenever the stream is in another execution.
+	shardID int32
+}
+
+// logShardID resolves the shard holding a stream's log. History nodes are
+// stored per shard, so reading an external stream from the consumer's shard
+// finds nothing at all rather than failing loudly.
+func logShardID(
+	shardContext historyi.ShardContext,
+	namespaceID string,
+	cursor *stream.Cursor,
+) int32 {
+	if !cursor.IsExternal() {
+		return shardContext.GetShardID()
+	}
+	return shardContext.GetConfig().GetShardID(namespace.ID(namespaceID), cursor.StreamID())
 }
 
 func deliverStreamSlices(
@@ -62,7 +80,6 @@ func deliverStreamSlices(
 
 	maxItems := stream.MaxConsumeItemsPerTask
 	execMgr := shardContext.GetExecutionManager()
-	shardID := shardContext.GetShardID()
 	namespaceID := ms.GetExecutionInfo().GetNamespaceId()
 
 	slicesOut := make([]*apistreampb.StreamSlice, 0, len(names))
@@ -107,7 +124,7 @@ func deliverStreamSlices(
 		next := from
 		if to > from {
 			blobs, startOffsets, err := stream.ReadRange(
-				ctx, execMgr, shardID, namespaceID,
+				ctx, execMgr, logShardID(shardContext, namespaceID, cursor), namespaceID,
 				cursor.CollectionID(), cursor.BucketSize(), from, to, 0)
 			if err != nil {
 				return nil, nil, err
@@ -142,6 +159,7 @@ func deliverStreamSlices(
 		addresses[cursor.StreamID()] = streamAddress{
 			collectionID: cursor.CollectionID(),
 			bucketSize:   cursor.BucketSize(),
+			shardID:      logShardID(shardContext, namespaceID, cursor),
 		}
 	}
 	return slicesOut, addresses, nil
@@ -176,7 +194,6 @@ func attachReplaySlices(
 	}
 
 	execMgr := shardContext.GetExecutionManager()
-	shardID := shardContext.GetShardID()
 
 	for _, event := range events {
 		for _, recorded := range event.GetWorkflowTaskCompletedEventAttributes().GetStreamCursors() {
@@ -190,7 +207,7 @@ func attachReplaySlices(
 			var messages []*apistreampb.StreamMessage
 			if recorded.GetToOffset() > recorded.GetFromOffset() {
 				blobs, startOffsets, err := stream.ReadRange(
-					ctx, execMgr, shardID, namespaceID,
+					ctx, execMgr, address.shardID, namespaceID,
 					address.collectionID, address.bucketSize,
 					recorded.GetFromOffset(), recorded.GetToOffset(), 0)
 				if err != nil {

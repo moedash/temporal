@@ -487,12 +487,11 @@ func sliceForEvent(slices []*streampb.StreamSlice, eventID int64) *streampb.Stre
 // its own transaction, so the stream pushes it. The push dirties the consumer,
 // whose transaction close then sees it is behind and schedules a workflow task.
 //
-// What this asserts stops at that scheduled task. The task is recorded in
-// History and never reaches a worker, because a workflow task scheduled from
-// inside a CHASM update does not get dispatched. That last hop is the one piece
-// of cross-execution consumption still missing, and this test fails the moment
-// it starts working, which is the point.
-func TestExternalStreamPushSchedulesAWorkflowTask(t *testing.T) {
+// The log is read from the stream's own shard rather than the consumer's.
+// History nodes are stored per shard, so reading an external stream from the
+// consumer's shard finds nothing, and the workflow task then fails to start
+// and is dropped rather than reporting anything useful.
+func TestWorkflowConsumesAStreamItDoesNotOwn(t *testing.T) {
 	env := testcore.NewEnv(t)
 	s := newStreamTestEnvFrom(t, env)
 
@@ -514,13 +513,16 @@ func TestExternalStreamPushSchedulesAWorkflowTask(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	var delivered [][]*streampb.StreamSlice
+
 	//nolint:staticcheck // SA1019: consistent with the other stream tests.
 	poller := &testcore.TaskPoller{
 		Client:    env.FrontendClient(),
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			delivered = append(delivered, resp.GetStreamSlices())
 			return nil, nil
 		},
 		Logger: env.Logger,
@@ -575,4 +577,14 @@ func TestExternalStreamPushSchedulesAWorkflowTask(t *testing.T) {
 		}
 		return scheduled >= 2
 	}, 20*time.Second, 200*time.Millisecond, "the append must schedule a workflow task on its own")
+
+	// And it must reach a worker.
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	got := currentSlice(t, delivered[1])
+	require.Equal(t, streamID, got.GetStreamId())
+	require.Equal(t, int64(0), got.GetFromOffset())
+	require.Equal(t, int64(2), got.GetToOffset())
+	require.Len(t, got.GetMessages(), 2)
+	require.Equal(t, "from-outside-1", string(got.GetMessages()[0].GetBody().GetData()))
 }
