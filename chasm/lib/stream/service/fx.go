@@ -17,6 +17,7 @@ var HistoryModule = fx.Module(
 	fx.Invoke(func(l *library, registry *chasm.Registry) error {
 		return registry.Register(l)
 	}),
+	fx.Invoke(RegisterEventDefinitions),
 )
 
 var FrontendModule = fx.Module(

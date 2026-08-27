@@ -49,6 +49,7 @@ func resolveStagedStreamSubscriptions(
 	ctx context.Context,
 	ms historyi.MutableState,
 	namespaceID string,
+	completedEventID int64,
 	staged []chasmworkflow.PendingStreamSubscription,
 ) error {
 	if len(staged) == 0 {
@@ -61,6 +62,18 @@ func resolveStagedStreamSubscriptions(
 	}
 
 	for _, pending := range staged {
+		// A stream this workflow owns needs no lookup and no pin registration:
+		// it is in this execution, and its cursor commits with everything else.
+		if _, owned := wf.Streams[pending.StreamID]; owned {
+			startOffset, err := wf.SubscribeToOwnedStream(
+				chasmCtx, pending.StreamID, pending.StartOffset)
+			if err != nil {
+				return err
+			}
+			wf.RecordStreamSubscribed(pending.StreamID, startOffset, completedEventID)
+			continue
+		}
+
 		ref := chasm.NewComponentRef[*stream.Stream](chasm.ExecutionKey{
 			NamespaceID: namespaceID,
 			BusinessID:  pending.StreamID,
@@ -101,6 +114,10 @@ func resolveStagedStreamSubscriptions(
 		}); err != nil {
 			return err
 		}
+
+		// Recorded after the cursor exists, so a crash between them leaves no
+		// event claiming a subscription that was never made.
+		wf.RecordStreamSubscribed(pending.StreamID, startOffset, completedEventID)
 	}
 	return nil
 }

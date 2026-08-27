@@ -3,6 +3,7 @@ package workflow
 import (
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
@@ -81,22 +82,69 @@ func handleSubscribeStreamCommand(
 		return serviceerror.NewInvalidArgument("SubscribeStream command names no stream")
 	}
 
-	if _, owned := wf.Streams[streamID]; owned {
-		_, err := wf.SubscribeToOwnedStream(chasmCtx, streamID, attrs.GetStartOffset())
-		return err
-	}
-
-	// Already subscribed, so there is nothing to resolve. Re-issuing on replay
-	// has to be a no-op rather than a second registration.
+	// Already subscribed, so there is nothing to do. Re-issuing on replay has to
+	// be a no-op rather than a second registration.
 	if _, ok := wf.StreamCursors[streamID]; ok {
 		return nil
 	}
 
+	// Everything is staged, including a stream this workflow owns, so that the
+	// resolved start offset and the event recording it are produced in one
+	// place rather than two.
 	wf.StagePendingSubscription(PendingStreamSubscription{
 		StreamID:    streamID,
 		StartOffset: attrs.GetStartOffset(),
 	})
 	return nil
+}
+
+// streamSubscribedEvent is the event a subscription writes.
+//
+// It is recorded once per subscription, not per message: the offsets a task
+// consumed ride WorkflowTaskCompleted, and payloads never enter History. The
+// event exists because a command that produces none desynchronises the
+// command-to-event matching every SDK's replay depends on, and because without
+// it nothing in History explains why a workflow started receiving stream data.
+type streamSubscribedEvent struct{}
+
+func (streamSubscribedEvent) Type() enumspb.EventType {
+	return enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED
+}
+
+func (streamSubscribedEvent) IsWorkflowTaskTrigger() bool { return false }
+
+// The cursor lives in CHASM state, which is persisted and rebuilt with the
+// execution, so there is nothing for replication or reset to reconstruct here.
+func (streamSubscribedEvent) Apply(chasm.MutableContext, *Workflow, *historypb.HistoryEvent) error {
+	return nil
+}
+
+// A command event, so it is never cherry-picked: the workflow reissues the
+// subscribe command on the new branch if it still wants one.
+func (streamSubscribedEvent) CherryPick(
+	chasm.MutableContext,
+	*Workflow,
+	*historypb.HistoryEvent,
+	map[enumspb.ResetReapplyExcludeType]struct{},
+) error {
+	return ErrEventNotCherryPickable
+}
+
+// RecordStreamSubscribed writes the event for a resolved subscription.
+func (w *Workflow) RecordStreamSubscribed(
+	streamID string,
+	startOffset int64,
+	workflowTaskCompletedEventID int64,
+) {
+	w.AddHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_WorkflowStreamSubscribedEventAttributes{
+			WorkflowStreamSubscribedEventAttributes: &historypb.WorkflowStreamSubscribedEventAttributes{
+				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
+				StreamId:                     streamID,
+				StartOffset:                  startOffset,
+			},
+		}
+	})
 }
 
 // streamNamed returns the workflow's stream of that name, creating it on first
@@ -165,6 +213,7 @@ func (l *streamLibrary) CommandHandlers() map[enumspb.CommandType]CommandHandler
 }
 
 func (l *streamLibrary) EventDefinitions() []EventDefinition {
-	// None, deliberately. Publishing produces no history event at all.
-	return nil
+	// Publishing still writes none: it is per batch and its offsets ride the
+	// stream itself. Subscribing writes one, once.
+	return []EventDefinition{streamSubscribedEvent{}}
 }

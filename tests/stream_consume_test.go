@@ -772,6 +772,16 @@ func TestWorkflowSubscribesToAStreamItself(t *testing.T) {
 	require.Len(t, desc.GetFrontendResponse().GetState().GetConsumers(), 1,
 		"the command must have registered a consumer on the stream")
 
+	// The subscription is recorded once, with the offset the server resolved.
+	// Without it nothing in History explains why this workflow starts receiving
+	// stream data, and a command that writes no event desynchronises the
+	// command-to-event matching every SDK's replay depends on.
+	subscribed := subscribedEvents(env.GetHistory(s.ns,
+		&commonpb.WorkflowExecution{WorkflowId: id}))
+	require.Len(t, subscribed, 1)
+	require.Equal(t, streamID, subscribed[0].GetStreamId())
+	require.Equal(t, int64(0), subscribed[0].GetStartOffset())
+
 	// An off-shard producer, with no signal to the workflow.
 	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
@@ -793,4 +803,14 @@ func TestWorkflowSubscribesToAStreamItself(t *testing.T) {
 	require.Equal(t, int64(2), got.GetToOffset())
 	require.Len(t, got.GetMessages(), 2)
 	require.Equal(t, "self-1", string(got.GetMessages()[0].GetBody().GetData()))
+}
+
+func subscribedEvents(events []*historypb.HistoryEvent) []*historypb.WorkflowStreamSubscribedEventAttributes {
+	var out []*historypb.WorkflowStreamSubscribedEventAttributes
+	for _, e := range events {
+		if attrs := e.GetWorkflowStreamSubscribedEventAttributes(); attrs != nil {
+			out = append(out, attrs)
+		}
+	}
+	return out
 }

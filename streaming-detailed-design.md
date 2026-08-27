@@ -503,6 +503,20 @@ from the response field, for the reason in §8.3.
 
 ### 8.1c Subscribing from inside the workflow
 
+Subscribing writes one history event, `WorkflowStreamSubscribed`, carrying the stream id and the resolved start offset. Publishing still writes none.
+
+The reason is not cost. Every SDK matches issued commands against command-generated events **in order**, popping a queue as each event arrives (`workflow_machines.rs`, `self.commands.pop_front()`). A command that produces no event leaves its entry at the head of that queue and the next event pops the wrong one. So a command reachable from workflow code has to have an event, and the codebase already says so: `TestBufferEvent` exists to force exactly that, and this design had been opting out of it.
+
+The cost is per subscription, not per message. A workflow subscribes to a stream once, so this is the same order as a single signal, and it leaves the property the design rests on untouched: the offsets a task consumed still ride `WorkflowTaskCompleted`, and payloads never enter History. Consumption remains zero events per task.
+
+It also closes an operational gap. Without the event nothing in History explains why a workflow began receiving stream data.
+
+`AddStreamMessages` is the case where an event would be per batch rather than once, so it still writes none and remains unreachable from workflow code for the same matching reason. That is the trade to revisit with measurements, not by assumption.
+
+#### Resolution
+
+
+
 `COMMAND_TYPE_SUBSCRIBE_STREAM` carries only a stream id and a start offset. Everything else the cursor needs is resolved by the server, because a workflow cannot look it up: a stream's collection id is its run id and its bucket size is its own, and reading either means I/O. A value the workflow carried would be a reading rather than a fact, so it could differ on replay.
 
 Where the resolution happens is forced by two constraints. The command handler runs under the state lock with nowhere to do I/O from, and by delivery time the cursor has to already exist. So a subscription to a stream in another execution is staged by the handler and resolved in the flush before commit, the same place staged log writes go. A stream the workflow owns needs no resolution and is subscribed in the handler directly.
