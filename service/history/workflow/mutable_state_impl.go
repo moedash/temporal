@@ -707,6 +707,34 @@ func (ms *MutableStateImpl) commitStreamCursors() ([]*apistreampb.StreamCursor, 
 // HasPendingStreamData reports whether a subscription of this workflow has
 // offsets left to deliver, which is the one condition under which stream
 // traffic schedules a workflow task.
+// carryStreamSubscriptionsTo hands this run's subscriptions to the run that
+// continues it.
+//
+// A cursor is workflow state, so without this a continue-as-new would silently
+// end a subscription the workflow never cancelled: the stream would keep its
+// consumer pin and keep pushing to the workflow id, and the successor would
+// have nowhere to put it.
+func (ms *MutableStateImpl) carryStreamSubscriptionsTo(newMutableState *MutableStateImpl) error {
+	if !ms.HasChasmWorkflowComponent() {
+		return nil
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return err
+	}
+	subscriptions := wf.ExportStreamSubscriptions(chasmCtx)
+	if len(subscriptions) == 0 {
+		return nil
+	}
+
+	newMutableState.EnsureChasmWorkflowComponent(context.Background())
+	newWorkflow, newChasmCtx, err := newMutableState.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+	return newWorkflow.ImportStreamSubscriptions(newChasmCtx, subscriptions)
+}
+
 func (ms *MutableStateImpl) HasPendingStreamData() bool {
 	if !ms.HasChasmWorkflowComponent() {
 		return false
@@ -6446,6 +6474,10 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		newMutableState.executionInfo.WorkflowRunTimeout,
 		newRunID,
 	); err != nil {
+		return nil, nil, err
+	}
+
+	if err = ms.carryStreamSubscriptionsTo(newMutableState); err != nil {
 		return nil, nil, err
 	}
 

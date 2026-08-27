@@ -588,3 +588,115 @@ func TestWorkflowConsumesAStreamItDoesNotOwn(t *testing.T) {
 	require.Len(t, got.GetMessages(), 2)
 	require.Equal(t, "from-outside-1", string(got.GetMessages()[0].GetBody().GetData()))
 }
+
+// A cursor is workflow state, so a continue-as-new has to carry it. Without
+// that the subscription ends silently: the stream keeps its consumer pin and
+// keeps pushing to the workflow id, and the successor run has nowhere to put
+// what arrives.
+func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	streamID := "carried-stream-" + uuid.NewString()
+	s.create(s.ctx(), t, streamID)
+
+	id := "stream-wf-can-" + uuid.NewString()
+	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.ns,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "tester",
+	})
+	require.NoError(t, err)
+
+	var delivered [][]*streampb.StreamSlice
+	task := 0
+
+	//nolint:staticcheck // SA1019: consistent with the other stream tests.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			delivered = append(delivered, resp.GetStreamSlices())
+			task++
+			if task == 2 {
+				// Continue as new, carrying nothing of its own.
+				return []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+						ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+							WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+							TaskQueue:           tq,
+							WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+							WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+						},
+					},
+				}}, nil
+			}
+			return nil, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	_, err = s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: s.ns, WorkflowId: id, StreamId: streamID, StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+
+	// First append, consumed by the original run.
+	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
+		FrontendRequest: &streamlib.AddMessagesInput{
+			Namespace: s.ns, StreamId: streamID,
+			Messages: []*streamlib.StreamMessage{
+				{Body: &commonpb.Payload{Data: []byte("before-can")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Task 2 receives it and continues as new.
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	consumed := currentSlice(t, delivered[1])
+	require.Equal(t, int64(1), consumed.GetToOffset())
+	require.Len(t, consumed.GetMessages(), 1)
+
+	// Drain the successor's first task, which carries nothing new.
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	// Append again. Only a carried subscription can deliver this, and it must
+	// resume at offset 1 rather than replaying from the start.
+	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
+		FrontendRequest: &streamlib.AddMessagesInput{
+			Namespace: s.ns, StreamId: streamID,
+			Messages: []*streamlib.StreamMessage{
+				{Body: &commonpb.Payload{Data: []byte("after-can")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	afterCAN := currentSlice(t, delivered[len(delivered)-1])
+	require.Equal(t, int64(1), afterCAN.GetFromOffset(), "the successor resumes where its predecessor stopped")
+	require.Equal(t, int64(2), afterCAN.GetToOffset())
+	require.Len(t, afterCAN.GetMessages(), 1)
+	require.Equal(t, "after-can", string(afterCAN.GetMessages()[0].GetBody().GetData()))
+}

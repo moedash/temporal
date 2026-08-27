@@ -611,7 +611,9 @@ Implemented in `closeTransactionHandleWorkflowTaskScheduling` rather than at wor
 
 ### 8.6 Continue-as-new and reset
 
-- **Continue-as-new**: the cursor is workflow state, carried in the continue-as-new input. The stream is untouched. Nothing is duplicated or dropped.
+- **Continue-as-new**: the cursor is workflow state, carried to the successor by the server rather than by the application. The stream is untouched, and because offsets are global to the stream the successor resumes at exactly the offset its predecessor stopped at, so nothing is duplicated or dropped. Without this the subscription would end silently: the stream keeps its consumer pin and keeps pushing to the workflow id, and the successor would have nowhere to put what arrives.
+
+  Only subscriptions to streams in other executions are carried. A stream the workflow owns lives in its execution and does not itself survive the run transition yet (§8a.1), so a cursor for one would leave the successor pointing at a stream it cannot reach.
 - **Reset**: the workflow rewinds; the stream does not. Cursor events before the reset point are intact, so replay works, and the new run re-consumes from the cursor as of that point. Relative to the abandoned run, some messages are delivered twice. That is visible to the application by design, matching the decision that rewinds are the application's concern rather than something the system hides.
 
 ---

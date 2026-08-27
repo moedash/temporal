@@ -3,6 +3,7 @@ package workflow
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -179,6 +180,51 @@ func (w *Workflow) SubscribeToExternalStream(
 	cursor.AdvanceKnownHead(mctx, req.KnownHead)
 	w.StreamCursors[req.StreamID] = chasm.NewComponentField(mctx, cursor)
 	return req.StartOffset, nil
+}
+
+// ExportStreamSubscriptions returns the subscriptions a successor run has to
+// inherit.
+//
+// Only subscriptions to streams in other executions are exported. A stream this
+// workflow owns lives in this execution and does not itself survive the run
+// transition yet (§8a), so carrying a cursor for one would leave the successor
+// pointing at a stream it cannot reach.
+func (w *Workflow) ExportStreamSubscriptions(ctx chasm.Context) []ExternalStreamSubscription {
+	var out []ExternalStreamSubscription
+	for _, field := range w.StreamCursors {
+		cursor := field.Get(ctx)
+		if !cursor.IsExternal() {
+			continue
+		}
+		out = append(out, ExternalStreamSubscription{
+			StreamID:     cursor.StreamID(),
+			CollectionID: cursor.CollectionID(),
+			BucketSize:   cursor.BucketSize(),
+			StartOffset:  cursor.Offset(),
+			KnownHead:    cursor.KnownHead(),
+		})
+	}
+	// Stable order, so a successor's state does not depend on map iteration.
+	slices.SortFunc(out, func(a, b ExternalStreamSubscription) int {
+		return strings.Compare(a.StreamID, b.StreamID)
+	})
+	return out
+}
+
+// ImportStreamSubscriptions installs subscriptions inherited from the run this
+// one continues. The offset carries over unchanged: offsets are global to the
+// stream, so the successor resumes exactly where its predecessor stopped and
+// the stream itself is untouched.
+func (w *Workflow) ImportStreamSubscriptions(
+	mctx chasm.MutableContext,
+	subscriptions []ExternalStreamSubscription,
+) error {
+	for _, sub := range subscriptions {
+		if _, err := w.SubscribeToExternalStream(mctx, sub); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // AdvanceKnownHead records how far a stream in another execution has moved.
