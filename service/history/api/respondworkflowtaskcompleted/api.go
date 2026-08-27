@@ -467,6 +467,18 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			return nil, err
 		}
 
+		// Subscriptions to streams in other executions, resolved here for the
+		// same reason: the command handler has nowhere to look the addressing
+		// up from, and by delivery time the cursor has to already exist.
+		if err = resolveStagedStreamSubscriptions(
+			ctx,
+			ms,
+			ms.GetWorkflowKey().NamespaceID,
+			workflowTaskHandler.stagedStreamSubscriptions,
+		); err != nil {
+			return nil, err
+		}
+
 		// Worker must respond with Update Accepted or Update Rejected message on every Update Requested
 		// message that were delivered on specific WT, when completing this WT.
 		// If worker ignored the update request (old SDK or SDK bug), then server rejects this update.

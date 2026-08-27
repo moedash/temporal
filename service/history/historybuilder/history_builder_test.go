@@ -2326,7 +2326,8 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		// beside History rather than in it, so it emits nothing to buffer.
 		if commandType == enumspb.COMMAND_TYPE_UNSPECIFIED ||
 			commandType == enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE ||
-			commandType == enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES {
+			commandType == enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES ||
+			commandType == enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM {
 			continue
 		}
 		commandsWithEventsCount++

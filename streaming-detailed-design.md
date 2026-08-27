@@ -501,6 +501,14 @@ from the response field, for the reason in §8.3.
 
 **No new event type.** The range rides an event that already exists once per task, so in-workflow consumption adds zero events to history.
 
+### 8.1c Subscribing from inside the workflow
+
+`COMMAND_TYPE_SUBSCRIBE_STREAM` carries only a stream id and a start offset. Everything else the cursor needs is resolved by the server, because a workflow cannot look it up: a stream's collection id is its run id and its bucket size is its own, and reading either means I/O. A value the workflow carried would be a reading rather than a fact, so it could differ on replay.
+
+Where the resolution happens is forced by two constraints. The command handler runs under the state lock with nowhere to do I/O from, and by delivery time the cursor has to already exist. So a subscription to a stream in another execution is staged by the handler and resolved in the flush before commit, the same place staged log writes go. A stream the workflow owns needs no resolution and is subscribed in the handler directly.
+
+A negative start offset resolves to the stream's frontier once, at registration, and the resolved value is recorded. Left to delivery it would be resolved again on replay against a stream that has since moved.
+
 ### 8.1a Where the cursor lives, and how a range becomes a fact
 
 The cursor is a subcomponent of the **consuming workflow**, not of the stream.

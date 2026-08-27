@@ -700,3 +700,97 @@ func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
 	require.Len(t, afterCAN.GetMessages(), 1)
 	require.Equal(t, "after-can", string(afterCAN.GetMessages()[0].GetBody().GetData()))
 }
+
+// A workflow subscribing itself, rather than being subscribed out of band.
+//
+// The command carries only the stream id and a start offset. Everything else
+// the cursor needs is looked up by the server: a workflow cannot read another
+// execution's collection id or bucket size without doing I/O, and a value it
+// carried would be a reading rather than a fact, so it could differ on replay.
+func TestWorkflowSubscribesToAStreamItself(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	streamID := "self-sub-stream-" + uuid.NewString()
+	s.create(s.ctx(), t, streamID)
+
+	id := "stream-wf-selfsub-" + uuid.NewString()
+	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.ns,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "tester",
+	})
+	require.NoError(t, err)
+
+	var delivered [][]*streampb.StreamSlice
+	task := 0
+
+	//nolint:staticcheck // SA1019: only the deprecated poller can emit this command type.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			delivered = append(delivered, resp.GetStreamSlices())
+			task++
+			if task > 1 {
+				return nil, nil
+			}
+			// The workflow subscribes itself on its first task.
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM,
+				Attributes: &commandpb.Command_SubscribeStreamCommandAttributes{
+					SubscribeStreamCommandAttributes: &commandpb.SubscribeStreamCommandAttributes{
+						StreamId:    streamID,
+						StartOffset: 0,
+					},
+				},
+			}}, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	require.Empty(t, delivered[0], "nothing is subscribed until this task completes")
+
+	// The subscription has to have reached the stream, or truncation could take
+	// a range the cursor still points at.
+	desc, err := s.client.DescribeStream(s.ctx(), &streamlib.DescribeStreamRequest{
+		FrontendRequest: &streamlib.DescribeStreamInput{Namespace: s.ns, StreamId: streamID},
+	})
+	require.NoError(t, err)
+	require.Len(t, desc.GetFrontendResponse().GetState().GetConsumers(), 1,
+		"the command must have registered a consumer on the stream")
+
+	// An off-shard producer, with no signal to the workflow.
+	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
+		FrontendRequest: &streamlib.AddMessagesInput{
+			Namespace: s.ns, StreamId: streamID,
+			Messages: []*streamlib.StreamMessage{
+				{Body: &commonpb.Payload{Data: []byte("self-1")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+				{Body: &commonpb.Payload{Data: []byte("self-2")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	got := currentSlice(t, delivered[1])
+	require.Equal(t, streamID, got.GetStreamId())
+	require.Equal(t, int64(0), got.GetFromOffset())
+	require.Equal(t, int64(2), got.GetToOffset())
+	require.Len(t, got.GetMessages(), 2)
+	require.Equal(t, "self-1", string(got.GetMessages()[0].GetBody().GetData()))
+}

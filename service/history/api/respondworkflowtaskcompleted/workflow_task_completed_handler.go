@@ -64,6 +64,7 @@ type (
 		// Log writes staged by stream commands, flushed before this workflow
 		// task commits.
 		stagedStreamAppends                 []chasmworkflow.PendingStreamAppend
+		stagedStreamSubscriptions           []chasmworkflow.PendingStreamSubscription
 		hasBufferedEventsOrMessages         bool
 		workflowTaskFailedCause             *workflowTaskFailedCause
 		activityNotStartedCancelled         bool
@@ -363,6 +364,8 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 				// precede this workflow task's commit.
 				handler.stagedStreamAppends = append(
 					handler.stagedStreamAppends, chasmWorkflow.DrainStreamAppends()...)
+				handler.stagedStreamSubscriptions = append(
+					handler.stagedStreamSubscriptions, chasmWorkflow.DrainStreamSubscriptions()...)
 				// Fall back to the HSM handler either when the command type is not supported by CHASM (disabled
 				// feature flag) or when the targeted entity is not owned by the CHASM tree (e.g. an operation
 				// scheduled in HSM before the flag was flipped on).

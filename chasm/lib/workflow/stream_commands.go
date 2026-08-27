@@ -58,6 +58,47 @@ func handleAddStreamMessagesCommand(
 	return nil
 }
 
+// handleSubscribeStreamCommand registers this workflow as a consumer.
+//
+// A stream the workflow owns is subscribed here and now, because everything the
+// cursor needs is already in this execution. One in another execution cannot
+// be: its collection id is the stream's run id and its bucket size is its own,
+// and finding either means a lookup a command handler cannot do. Those are
+// staged and resolved in the flush before commit, the same way log writes are.
+func handleSubscribeStreamCommand(
+	chasmCtx chasm.MutableContext,
+	wf *Workflow,
+	_ Validator,
+	command *commandpb.Command,
+	_ CommandHandlerOptions,
+) error {
+	attrs := command.GetSubscribeStreamCommandAttributes()
+	if attrs == nil {
+		return serviceerror.NewInvalidArgument("SubscribeStreamCommandAttributes is not set")
+	}
+	streamID := attrs.GetStreamId()
+	if streamID == "" {
+		return serviceerror.NewInvalidArgument("SubscribeStream command names no stream")
+	}
+
+	if _, owned := wf.Streams[streamID]; owned {
+		_, err := wf.SubscribeToOwnedStream(chasmCtx, streamID, attrs.GetStartOffset())
+		return err
+	}
+
+	// Already subscribed, so there is nothing to resolve. Re-issuing on replay
+	// has to be a no-op rather than a second registration.
+	if _, ok := wf.StreamCursors[streamID]; ok {
+		return nil
+	}
+
+	wf.StagePendingSubscription(PendingStreamSubscription{
+		StreamID:    streamID,
+		StartOffset: attrs.GetStartOffset(),
+	})
+	return nil
+}
+
 // streamNamed returns the workflow's stream of that name, creating it on first
 // use. Implicit creation is deliberate: a workflow publishing to its own output
 // should not have to coordinate with anyone about who creates it.
@@ -119,6 +160,7 @@ type streamLibrary struct{}
 func (l *streamLibrary) CommandHandlers() map[enumspb.CommandType]CommandHandler {
 	return map[enumspb.CommandType]CommandHandler{
 		enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES: handleAddStreamMessagesCommand,
+		enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM:    handleSubscribeStreamCommand,
 	}
 }
 

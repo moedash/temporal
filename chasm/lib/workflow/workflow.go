@@ -57,6 +57,30 @@ type Workflow struct {
 	// only, and drained before the transaction commits: the bytes have to be
 	// durable before the frontier that makes them visible is.
 	pendingStreamAppends []PendingStreamAppend
+
+	// Subscribe commands whose stream is in another execution, so the addressing
+	// has to be looked up before a cursor can be made. In memory only, drained
+	// by the flush before commit.
+	pendingStreamSubscriptions []PendingStreamSubscription
+}
+
+// PendingStreamSubscription is a subscribe command whose stream lives in
+// another execution, waiting for the flush to look up its addressing.
+type PendingStreamSubscription struct {
+	StreamID    string
+	StartOffset int64
+}
+
+// StagePendingSubscription records a subscription for the flush to resolve.
+func (w *Workflow) StagePendingSubscription(sub PendingStreamSubscription) {
+	w.pendingStreamSubscriptions = append(w.pendingStreamSubscriptions, sub)
+}
+
+// DrainStreamSubscriptions returns and clears the staged subscriptions.
+func (w *Workflow) DrainStreamSubscriptions() []PendingStreamSubscription {
+	out := w.pendingStreamSubscriptions
+	w.pendingStreamSubscriptions = nil
+	return out
 }
 
 // PendingStreamAppend is a staged log write awaiting the flush that must
