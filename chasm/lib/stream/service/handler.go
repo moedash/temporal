@@ -62,6 +62,15 @@ func streamKey(namespaceID, streamID string) string {
 	return namespaceID + "/" + streamID
 }
 
+// logKey identifies the cached bytes by the log they came from, not by the name
+// the caller used to reach it. A stream id can be reused: delete or close one
+// and create another with the same id, and the new stream starts at offset 0
+// again. Keyed by name, the old stream's entries would still match, and a
+// reader of the new stream would be served bytes from the old one.
+func logKey(namespaceID, collectionID string) string {
+	return namespaceID + "/" + collectionID
+}
+
 // withCallerInfo tags the context so the stream's direct persistence calls are
 // attributed to the namespace that caused them. Without it they carry no caller
 // name, which means they escape namespace rate limiting and priority as well as
@@ -239,7 +248,7 @@ func (h *handler) AddMessages(
 	// serve those bytes to a reader that must never see them.
 	if !result.Deduplicated {
 		for _, op := range preview.Appends {
-			h.tail.Put(streamKey(req.GetNamespaceId(), in.GetStreamId()),
+			h.tail.Put(logKey(req.GetNamespaceId(), state.GetCollectionId()),
 				result.FirstOffset, result.NextOffset, op.Blob)
 		}
 	}
@@ -432,28 +441,39 @@ func (h *handler) PollMessages(
 		maxMessages = stream.DefaultMaxMessagesPerPoll
 	}
 
+	// Clip the read to what the caller can be given. One offset is one message,
+	// so this bound is exact. Without it a poll for a single message off a large
+	// stream reads every batch from the offset to the head before trimming, and
+	// the whole stream lands in memory on the history host.
+	//
+	// A topic filter can leave the page short of maxMessages. That is fine: the
+	// response carries next_offset, so the caller reads on from there.
+	to := min(state.GetHeadOffset(), from+int64(maxMessages))
+
 	// The frontier always comes from the component, so the cache can only save
 	// a read, never widen what the reader is allowed to see.
-	key := streamKey(req.GetNamespaceId(), in.GetStreamId())
-	blobs, startOffsets, cached := h.tail.Get(key, from, state.GetHeadOffset())
+	key := logKey(req.GetNamespaceId(), state.GetCollectionId())
+	blobs, startOffsets, cached := h.tail.Get(key, from, to)
 	if !cached {
 		blobs, startOffsets, err = stream.ReadRange(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
 			req.GetNamespaceId(), state.GetCollectionId(), state.GetBucketSize(),
-			from, state.GetHeadOffset(), 0)
+			from, to, 0)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	messages, next, err := stream.CollectMessages(blobs, startOffsets, from, state.GetHeadOffset(),
+	messages, next, err := stream.CollectMessages(blobs, startOffsets, from, to,
 		maxMessages, in.GetTopics())
 	if err != nil {
 		return nil, err
 	}
-	if next < state.GetHeadOffset() && len(messages) == 0 {
+	if next < to && len(messages) == 0 && len(in.GetTopics()) > 0 {
 		// A page that filtered everything out still has to advance, or the
-		// caller loops forever on the same offsets.
-		next = state.GetHeadOffset()
+		// caller loops forever on the same offsets. Limited to a filtered read
+		// on purpose: for any other reason a page comes back short, moving the
+		// reader past offsets it was never given would hide the short read.
+		next = to
 	}
 	out.Messages = messages
 	out.NextOffset = next

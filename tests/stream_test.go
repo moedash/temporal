@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -520,4 +521,93 @@ func TestStreamListStreams(t *testing.T) {
 		}
 		return true
 	}, 20*time.Second, 250*time.Millisecond)
+}
+
+// A capped poll must not read the whole stream to answer. The read is clipped
+// to the offsets the caller can be given, so a reader asking for one message
+// off a long stream does not pull the rest into the history host on its way.
+func TestStreamPollReadsOnlyWhatItReturns(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-poll-cap"
+	s.create(ctx, t, id)
+
+	for i := range 40 {
+		_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{
+			Messages: streamMsgs("", fmt.Sprintf("m%d", i)),
+		})
+		require.NoError(t, err)
+	}
+
+	got := s.pollMax(ctx, t, id, 0, 1)
+	require.Equal(t, []string{"m0"}, bodies(got.GetMessages()))
+	require.Equal(t, int64(1), got.GetNextOffset(), "a capped read advances only over what it gave")
+	require.Equal(t, int64(40), got.GetHeadOffset(), "the frontier is still reported in full")
+
+	// Paging from there covers the rest, so the cap trims the read and not the stream.
+	got = s.pollMax(ctx, t, id, got.GetNextOffset(), 10)
+	require.Equal(t, []string{"m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9", "m10"},
+		bodies(got.GetMessages()))
+	require.Equal(t, int64(11), got.GetNextOffset())
+
+	// A filter finding nothing in the page still has to leave the reader able to
+	// go on, and it must stop at the page rather than scanning to the head.
+	got = s.pollMaxTopics(ctx, t, id, 0, 5, "nothing-matches-this")
+	require.Empty(t, got.GetMessages())
+	require.Equal(t, int64(5), got.GetNextOffset(),
+		"a filtered page advanced past its own bound, so the read ran to the head")
+}
+
+// A stream id can be reused. The cached bytes belong to the log, not to the
+// name, so a reader of the new stream must never be served the old one's.
+func TestStreamPollAfterIdIsReusedServesTheNewStream(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-reused-id"
+
+	s.create(ctx, t, id)
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "old")})
+	require.NoError(t, err)
+	// Read it back so the bytes are certain to be cached before the id is reused.
+	require.Equal(t, []string{"old"}, bodies(s.poll(ctx, t, id, 0).GetMessages()))
+
+	_, err = s.client.DeleteStream(ctx, &streampb.DeleteStreamRequest{
+		FrontendRequest: &streampb.DeleteStreamInput{Namespace: s.ns, StreamId: id},
+	})
+	require.NoError(t, err)
+
+	s.create(ctx, t, id)
+	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "new")})
+	require.NoError(t, err)
+
+	got := s.poll(ctx, t, id, 0)
+	require.Equal(t, []string{"new"}, bodies(got.GetMessages()),
+		"a reused id served bytes from the deleted stream")
+}
+
+func (s *streamTestEnv) pollMaxTopics(
+	ctx context.Context, t *testing.T, streamID string, from int64, maxMessages int32, topics ...string,
+) *streampb.PollMessagesOutput {
+	t.Helper()
+	resp, err := s.client.PollMessages(ctx, &streampb.PollMessagesRequest{
+		FrontendRequest: &streampb.PollMessagesInput{
+			Namespace: s.ns, StreamId: streamID, FromOffset: from,
+			MaxMessages: maxMessages, Topics: topics,
+		},
+	})
+	require.NoError(t, err)
+	return resp.GetFrontendResponse()
+}
+
+func (s *streamTestEnv) pollMax(
+	ctx context.Context, t *testing.T, streamID string, from int64, maxMessages int32,
+) *streampb.PollMessagesOutput {
+	t.Helper()
+	resp, err := s.client.PollMessages(ctx, &streampb.PollMessagesRequest{
+		FrontendRequest: &streampb.PollMessagesInput{
+			Namespace: s.ns, StreamId: streamID, FromOffset: from, MaxMessages: maxMessages,
+		},
+	})
+	require.NoError(t, err)
+	return resp.GetFrontendResponse()
 }
