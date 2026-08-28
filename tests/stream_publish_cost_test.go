@@ -118,10 +118,14 @@ func assertPublishCost(t *testing.T, byName map[string]publishCostResult) {
 	require.Equal(t, int64(100), marginalEvents("stream-b100-m10"))
 	require.Equal(t, int64(500), marginalEvents("stream-b500"))
 
-	// A hundredfold increase in payload size must not move History at all,
-	// which is the claim that bodies never enter it.
-	require.Equal(t, marginalBytes("stream-b100-s200"), marginalBytes("stream-b100-s2000"),
-		"20x the payload changed the history cost, so payload is reaching History")
+	// Ten times the payload must not move History, which is the claim that
+	// bodies never enter it. Judged against what a leak would cost rather than
+	// against zero: event sizes wobble by a byte or two on varint widths, while
+	// 1800 extra bytes per message across a hundred batches would be six
+	// figures.
+	sizeDrift := marginalBytes("stream-b100-s2000") - marginalBytes("stream-b100-s200")
+	require.Less(t, max(sizeDrift, -sizeDrift), int64(2000),
+		"10x the payload moved the history cost, so payload is reaching History")
 
 	// Ten times the messages through the same batches, within a byte or two of
 	// noise from varint widths.

@@ -48,3 +48,6 @@
 
 # Ignoring AI agent files
 .agents/
+
+# Compiled output of develop/streamdemo.
+/streamdemo
