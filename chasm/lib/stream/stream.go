@@ -168,6 +168,11 @@ func (s *Stream) AddMessages(
 		return AddMessagesResult{}, serviceerror.NewFailedPrecondition("producer has been fenced")
 	}
 
+	// After the retry check, so a known producer is never rejected for room.
+	if err := s.checkProducerRoom(req.ProducerID); err != nil {
+		return AddMessagesResult{}, err
+	}
+
 	if req.ExpectedOffset != nil && *req.ExpectedOffset != s.State.HeadOffset {
 		return AddMessagesResult{}, serviceerror.NewAlreadyExistsf(
 			"expected offset %d but stream head is %d", *req.ExpectedOffset, s.State.HeadOffset)
@@ -241,6 +246,33 @@ func (s *Stream) notifyConsumers(mctx chasm.MutableContext) {
 			return
 		}
 	}
+}
+
+// checkProducerRoom keeps the dedup table bounded.
+//
+// Entries whose whole batch sits below the floor go first: a retry of a batch
+// that truncation already removed cannot be served its recorded offsets
+// anyway, so the entry has no use left.
+func (s *Stream) checkProducerRoom(producerID string) error {
+	if producerID == "" {
+		return nil
+	}
+	if _, known := s.State.Producers[producerID]; known {
+		return nil
+	}
+	if len(s.State.Producers) < MaxProducersPerStream {
+		return nil
+	}
+	for id, cursor := range s.State.Producers {
+		if cursor.GetFirstOffset()+cursor.GetCount() <= s.State.GetBaseOffset() {
+			delete(s.State.Producers, id)
+		}
+	}
+	if len(s.State.Producers) >= MaxProducersPerStream {
+		return serviceerror.NewInvalidArgumentf(
+			"stream already tracks %d producers, which is the limit", MaxProducersPerStream)
+	}
+	return nil
 }
 
 // checkProducer applies per-producer idempotency. It returns a replay result
@@ -396,6 +428,11 @@ func (s *Stream) RegisterConsumer(
 	if offset < s.State.BaseOffset {
 		return serviceerror.NewFailedPreconditionf(
 			"offset %d is below the stream's floor of %d", offset, s.State.BaseOffset)
+	}
+	if _, known := s.State.Consumers[consumerID]; !known &&
+		len(s.State.Consumers) >= MaxConsumersPerStream {
+		return serviceerror.NewInvalidArgumentf(
+			"stream already has %d consumers, which is the limit", MaxConsumersPerStream)
 	}
 	if s.State.Consumers == nil {
 		s.State.Consumers = make(map[string]*streampb.ConsumerCursor)

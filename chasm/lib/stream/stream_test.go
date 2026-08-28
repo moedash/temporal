@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -404,4 +405,65 @@ func TestMessageCapYieldsToARegisteredConsumer(t *testing.T) {
 	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("e"), TxnID: 3})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), s.State.BaseOffset, "once the pin moves the cap applies again")
+}
+
+// A caller sending a fresh producer id per request would otherwise grow the
+// component state until no append fits, which leaves the stream unwritable for
+// good rather than failing the call that caused it.
+func TestStreamProducerTableIsBounded(t *testing.T) {
+	s := newTestStream(t, 100000)
+
+	for i := range MaxProducersPerStream {
+		_, err := s.AddMessages(nil, AddMessagesRequest{
+			Messages:   msgs("m"),
+			ProducerID: fmt.Sprintf("p%d", i),
+			Sequence:   1,
+			TxnID:      int64(i + 1),
+		})
+		require.NoError(t, err)
+	}
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{
+		Messages:   msgs("one too many"),
+		ProducerID: "p-over",
+		Sequence:   1,
+		TxnID:      int64(MaxProducersPerStream + 1),
+	})
+	require.Error(t, err)
+	require.IsType(t, &serviceerror.InvalidArgument{}, err)
+
+	// A producer already tracked keeps working, so the cap cannot wedge the
+	// producers that filled it.
+	_, err = s.AddMessages(nil, AddMessagesRequest{
+		Messages:   msgs("still fine"),
+		ProducerID: "p0",
+		Sequence:   2,
+		TxnID:      int64(MaxProducersPerStream + 2),
+	})
+	require.NoError(t, err)
+
+	// An anonymous append is never blocked by the table.
+	_, err = s.AddMessages(nil, AddMessagesRequest{
+		Messages: msgs("anon"),
+		TxnID:    int64(MaxProducersPerStream + 3),
+	})
+	require.NoError(t, err)
+}
+
+// Each consumer holds a truncation floor, so an unbounded table pins storage as
+// well as growing state.
+func TestStreamConsumerTableIsBounded(t *testing.T) {
+	s := newTestStream(t, 100000)
+
+	for i := range MaxConsumersPerStream {
+		require.NoError(t, s.RegisterConsumer(
+			nil, fmt.Sprintf("c%d", i), "wf", "run", 0, true))
+	}
+
+	err := s.RegisterConsumer(nil, "c-over", "wf", "run", 0, true)
+	require.Error(t, err)
+	require.IsType(t, &serviceerror.InvalidArgument{}, err)
+
+	// Re-registering an existing consumer is an update, not a new entry.
+	require.NoError(t, s.RegisterConsumer(nil, "c0", "wf", "run", 0, true))
 }

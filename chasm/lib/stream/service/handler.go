@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/dgryski/go-farm"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -38,8 +40,12 @@ type handler struct {
 	// stage the node inside the CHASM transaction so write and commit order
 	// cannot diverge. Until then this also means appends are only safe within
 	// one process, which holds because these RPCs route to the shard owner.
-	appendMu sync.Mutex
-	appendLk map[string]*sync.Mutex
+	//
+	// Striped rather than one lock per stream. The key comes from request input
+	// before the stream is known to exist, so a per-stream map would grow once
+	// per distinct id a caller names, including ids that resolve to nothing.
+	// Unrelated streams sharing a stripe only serialize with each other.
+	appendLk [appendStripes]sync.Mutex
 
 	tail *stream.TailCache
 }
@@ -53,7 +59,6 @@ func newHandler(
 		shardController:   shardController,
 		namespaceRegistry: namespaceRegistry,
 		logger:            logger,
-		appendLk:          make(map[string]*sync.Mutex),
 		tail:              stream.NewTailCache(stream.TailCacheBytesPerStream, stream.TailCacheMaxStreams),
 	}
 }
@@ -86,17 +91,18 @@ func (h *handler) withCallerInfo(ctx context.Context, namespaceID string) contex
 }
 
 func (h *handler) lockStream(namespaceID, streamID string) func() {
-	key := streamKey(namespaceID, streamID)
-	h.appendMu.Lock()
-	mu, ok := h.appendLk[key]
-	if !ok {
-		mu = &sync.Mutex{}
-		h.appendLk[key] = mu
-	}
-	h.appendMu.Unlock()
-
+	mu := &h.appendLk[appendStripe(streamKey(namespaceID, streamID))]
 	mu.Lock()
 	return mu.Unlock
+}
+
+// Sized well above the per-host stream count that would make collisions matter.
+// Appends to one stream are serialized anyway, so a collision costs only the
+// unrelated stream's concurrency, never correctness.
+const appendStripes = 2048
+
+func appendStripe(key string) uint32 {
+	return farm.Fingerprint32([]byte(key)) % appendStripes
 }
 
 // refFor builds a reference to a stream. A supplied run ID lets the engine skip
@@ -595,10 +601,24 @@ func (h *handler) DeleteStream(
 	req *streampb.DeleteStreamRequest,
 ) (*streampb.DeleteStreamResponse, error) {
 	in := req.GetFrontendRequest()
-	if err := chasm.DeleteExecution[*stream.Stream](ctx, chasm.ExecutionKey{
-		NamespaceID: req.GetNamespaceId(),
-		BusinessID:  in.GetStreamId(),
-	}, chasm.DeleteExecutionRequest{}); err != nil {
+	key := chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: in.GetStreamId()}
+
+	// The log has to go before the execution that names it. Read the state to
+	// find the buckets while the execution is still there to be read.
+	ref := chasm.NewComponentRef[*stream.Stream](key)
+	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
+	if err != nil {
+		return nil, err
+	}
+	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
+		namespace.ID(req.GetNamespaceId()), in.GetStreamId())
+	if err != nil {
+		return nil, err
+	}
+	deleteLogBuckets(h.withCallerInfo(ctx, req.GetNamespaceId()), shardCtx, h.logger,
+		req.GetNamespaceId(), state)
+
+	if err := chasm.DeleteExecution[*stream.Stream](ctx, key, chasm.DeleteExecutionRequest{}); err != nil {
 		return nil, err
 	}
 	return &streampb.DeleteStreamResponse{FrontendResponse: &streampb.DeleteStreamOutput{}}, nil

@@ -40,5 +40,17 @@ const MaxConsumeItemsPerTask = 1000
 // item count.
 const MaxConsumeBytesPerTask = 2 << 20
 
+// MaxProducersPerStream bounds the per-producer dedup table. The table is part
+// of the component state written on every append, so a caller that sends a
+// fresh producer id per request would grow the state until the mutable-state
+// size limit rejects every further append, leaving the stream unwritable for
+// good. The bound turns that into a clear error on the offending call.
+const MaxProducersPerStream = 1000
+
+// MaxConsumersPerStream bounds the registered consumer table for the same
+// reason. Each consumer also holds a truncation floor, so an unbounded table
+// would pin storage as well as grow state.
+const MaxConsumersPerStream = 1000
+
 // MaxListPageSize bounds a visibility page when the caller does not.
 const MaxListPageSize = 1000
