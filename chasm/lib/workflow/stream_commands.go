@@ -17,10 +17,13 @@ const DefaultStreamName = "output"
 // handleAddStreamMessagesCommand appends to a stream the workflow owns.
 //
 // The stream is a co-located subcomponent, so its frontier advances as part of
-// the workflow task's own commit: no history event, no extra transition, and no
-// cross-execution write. The log bytes cannot be written here, because a command
-// handler runs under the state lock with no context to do I/O from, so they are
-// staged and flushed before the commit that makes them visible.
+// the workflow task's own commit: no extra transition and no cross-execution
+// write. The log bytes cannot be written here, because a command handler runs
+// under the state lock with no context to do I/O from, so they are staged and
+// flushed before the commit that makes them visible.
+//
+// The offsets are known here, unlike a subscription's, so the event is written
+// here too rather than being staged for the flush.
 func handleAddStreamMessagesCommand(
 	chasmCtx chasm.MutableContext,
 	wf *Workflow,
@@ -56,6 +59,13 @@ func handleAddStreamMessagesCommand(
 	for _, op := range result.Appends {
 		wf.StageStreamAppend(s.State.GetCollectionId(), op)
 	}
+
+	// Written even when a producer sequence deduplicated the append, because
+	// the command was still issued and the event is what the replaying worker
+	// matches it against. It names the original offsets, which is what a
+	// deduplicated append resolves to.
+	wf.RecordStreamMessagesAdded(
+		name, result.FirstOffset, result.Count, opts.WorkflowTaskCompletedEventID)
 	return nil
 }
 
@@ -147,6 +157,59 @@ func (w *Workflow) RecordStreamSubscribed(
 	})
 }
 
+// streamMessagesAddedEvent is the event a publish writes.
+//
+// One per batch, holding the offset range and nothing else. That is what makes
+// it a fixed cost: a batch of one 20-byte message and a batch of a thousand
+// 2KB messages write the same event, because the bodies went to the stream's
+// log. It exists for the same reason the subscription event does, that a
+// command producing no event desynchronises the command-to-event matching
+// every SDK's replay depends on, and it doubles as the only record in History
+// that the workflow published at all.
+type streamMessagesAddedEvent struct{}
+
+func (streamMessagesAddedEvent) Type() enumspb.EventType {
+	return enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED
+}
+
+func (streamMessagesAddedEvent) IsWorkflowTaskTrigger() bool { return false }
+
+// The frontier it describes is CHASM state, persisted and rebuilt with the
+// execution, so there is nothing here to reconstruct.
+func (streamMessagesAddedEvent) Apply(chasm.MutableContext, *Workflow, *historypb.HistoryEvent) error {
+	return nil
+}
+
+// A command event, so it is never cherry-picked: the offsets belong to a log
+// the new branch did not write.
+func (streamMessagesAddedEvent) CherryPick(
+	chasm.MutableContext,
+	*Workflow,
+	*historypb.HistoryEvent,
+	map[enumspb.ResetReapplyExcludeType]struct{},
+) error {
+	return ErrEventNotCherryPickable
+}
+
+// RecordStreamMessagesAdded writes the event for one published batch.
+func (w *Workflow) RecordStreamMessagesAdded(
+	streamID string,
+	firstOffset int64,
+	count int64,
+	workflowTaskCompletedEventID int64,
+) {
+	w.AddHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_WorkflowStreamMessagesAddedEventAttributes{
+			WorkflowStreamMessagesAddedEventAttributes: &historypb.WorkflowStreamMessagesAddedEventAttributes{
+				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
+				StreamId:                     streamID,
+				FirstOffset:                  firstOffset,
+				MessageCount:                 count,
+			},
+		}
+	})
+}
+
 // streamNamed returns the workflow's stream of that name, creating it on first
 // use. Implicit creation is deliberate: a workflow publishing to its own output
 // should not have to coordinate with anyone about who creates it.
@@ -213,7 +276,5 @@ func (l *streamLibrary) CommandHandlers() map[enumspb.CommandType]CommandHandler
 }
 
 func (l *streamLibrary) EventDefinitions() []EventDefinition {
-	// Publishing still writes none: it is per batch and its offsets ride the
-	// stream itself. Subscribing writes one, once.
-	return []EventDefinition{streamSubscribedEvent{}}
+	return []EventDefinition{streamSubscribedEvent{}, streamMessagesAddedEvent{}}
 }

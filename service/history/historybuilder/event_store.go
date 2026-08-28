@@ -332,7 +332,8 @@ func (b *EventStore) bufferEvent(
 		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED,
-		enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED:
+		enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED,
+		enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED:
 		// do not buffer event if event is directly generated from a corresponding command
 		return false
 

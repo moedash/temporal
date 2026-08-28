@@ -9,6 +9,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	streampb "go.temporal.io/api/stream/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -19,12 +20,13 @@ import (
 )
 
 // Path A: a workflow publishing to a stream it owns. The stream is co-located
-// with the workflow, so the frontier advances in the workflow task's own commit
-// and the publish produces no history event at all.
+// with the workflow, so the frontier advances in the workflow task's own
+// commit, and History gets one fixed-size event naming the offset range rather
+// than anything that was published.
 //
 // Driven through the raw task poller rather than an SDK, because emitting a new
 // command type does not need one.
-func TestStreamWorkflowPublishesWithoutHistoryEvents(t *testing.T) {
+func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 	env := testcore.NewEnv(t)
 	s := newStreamTestEnvFrom(t, env)
 
@@ -81,12 +83,28 @@ func TestStreamWorkflowPublishesWithoutHistoryEvents(t *testing.T) {
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
 
-	// The publish must not have written any history event of its own.
+	// One event for the batch, holding the range and none of the payload. Two
+	// messages were published, so it has to name both of them and stop there.
 	events := env.GetHistory(s.ns, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
+	var added []*historypb.WorkflowStreamMessagesAddedEventAttributes
 	for _, e := range events {
-		require.NotContains(t, e.GetEventType().String(), "STREAM",
-			"publishing must add no history event, found %v", e.GetEventType())
+		if a := e.GetWorkflowStreamMessagesAddedEventAttributes(); a != nil {
+			added = append(added, a)
+		}
 	}
+	require.Len(t, added, 1, "one publish command writes one event")
+	require.Equal(t, int64(0), added[0].GetFirstOffset())
+	require.Equal(t, int64(2), added[0].GetMessageCount())
+	require.Equal(t, chasmworkflow.DefaultStreamName, added[0].GetStreamId(),
+		"an unnamed stream resolves to the default before it is recorded")
+
+	// The bodies stay out of History. Asserted on the serialized event rather
+	// than on its fields, because a field this test forgot to check would still
+	// be carrying them.
+	raw, err := added[0].Marshal()
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "calling tool",
+		"the event must name the range, never carry the payload")
 
 	// Known gap, asserted rather than tolerated: an attached stream lives
 	// inside the workflow's execution, so it has no standalone id to route on
