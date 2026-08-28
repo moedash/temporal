@@ -109,6 +109,22 @@ func readDeliverable(
 	return stream.ToAPIMessages(collected), readTo, nil
 }
 
+// DeliverStreamSlices hands the next range to a task built outside this
+// package. The inline task returned by RespondWorkflowTaskCompleted is built by
+// its own handler, so without this a subscribed workflow gets no data on the
+// dispatch path every current SDK asks for.
+//
+// Only the live range. That task is always sticky, so the worker still holds
+// the execution and has no ranges to replay.
+func DeliverStreamSlices(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	ms historyi.MutableState,
+) ([]*streampb.StreamSlice, error) {
+	slices, _, err := deliverStreamSlices(ctx, shardContext, ms)
+	return slices, err
+}
+
 func deliverStreamSlices(
 	ctx context.Context,
 	shardContext historyi.ShardContext,

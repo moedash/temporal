@@ -27,7 +27,7 @@ const DefaultStreamName = "output"
 func handleAddStreamMessagesCommand(
 	chasmCtx chasm.MutableContext,
 	wf *Workflow,
-	_ Validator,
+	validator Validator,
 	command *commandpb.Command,
 	opts CommandHandlerOptions,
 ) error {
@@ -37,6 +37,22 @@ func handleAddStreamMessagesCommand(
 	}
 	if len(attrs.GetMessages()) == 0 {
 		return serviceerror.NewInvalidArgument("AddStreamMessages command carries no messages")
+	}
+
+	// The batch becomes one log node, so the whole batch is what has to fit.
+	// Left unchecked it fails later in the flush, which surfaces as a
+	// persistence error out of a task the worker will replay and re-issue
+	// forever, with nothing naming the batch as the cause.
+	size := 0
+	for _, m := range attrs.GetMessages() {
+		size += m.Size()
+	}
+	if !validator.IsValidPayloadSize(size) {
+		return FailWorkflowTaskError{
+			Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_PAYLOADS_TOO_LARGE,
+			Message:           "AddStreamMessagesCommandAttributes.Messages exceeds size limit",
+			TerminateWorkflow: true,
+		}
 	}
 
 	name := attrs.GetStreamId()
