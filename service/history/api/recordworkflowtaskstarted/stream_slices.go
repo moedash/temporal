@@ -121,8 +121,8 @@ func DeliverStreamSlices(
 	shardContext historyi.ShardContext,
 	ms historyi.MutableState,
 ) ([]*streampb.StreamSlice, error) {
-	slices, _, err := deliverStreamSlices(ctx, shardContext, ms)
-	return slices, err
+	live, _, err := deliverStreamSlices(ctx, shardContext, ms)
+	return live, err
 }
 
 func deliverStreamSlices(
@@ -182,16 +182,25 @@ func deliverStreamSlices(
 			to = min(from+int64(maxItems), head)
 		}
 
+		shardID := logShardID(shardContext, namespaceID, cursor)
 		messages, next, err := readDeliverable(
-			ctx, execMgr, logShardID(shardContext, namespaceID, cursor), namespaceID, cursor, from, to)
+			ctx, execMgr, shardID, namespaceID, cursor, from, to)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if !restaged {
-			if err := cursor.StagePending(chasmCtx, from, next); err != nil {
-				return nil, nil, err
+		if restaged {
+			// The staged range is the one the completion will record, so the
+			// worker has to be handed exactly that. A re-read that comes back
+			// short would otherwise deliver less than history claims was
+			// consumed, and replay would then disagree with the original run.
+			if next != to {
+				return nil, nil, serviceerror.NewInternalf(
+					"stream %q staged range [%d,%d) re-read as [%d,%d)",
+					cursor.StreamID(), from, to, from, next)
 			}
+		} else if err := cursor.StagePending(chasmCtx, from, next); err != nil {
+			return nil, nil, err
 		}
 
 		// Attached even when empty. A task that saw nothing still has to record
@@ -205,7 +214,7 @@ func deliverStreamSlices(
 		addresses[cursor.StreamID()] = streamAddress{
 			collectionID: cursor.CollectionID(),
 			bucketSize:   cursor.BucketSize(),
-			shardID:      logShardID(shardContext, namespaceID, cursor),
+			shardID:      shardID,
 		}
 	}
 	return slicesOut, addresses, nil

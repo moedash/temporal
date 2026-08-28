@@ -69,6 +69,10 @@ type Workflow struct {
 type PendingStreamSubscription struct {
 	StreamID    string
 	StartOffset int64
+	// The workflow already holds a cursor for this stream. The subscription
+	// itself is done, but the command still needs its event, because that is
+	// what a replaying worker matches the re-issued command against.
+	AlreadySubscribed bool
 }
 
 // StagePendingSubscription records a subscription for the flush to resolve.

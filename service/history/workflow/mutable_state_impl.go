@@ -704,9 +704,6 @@ func (ms *MutableStateImpl) commitStreamCursors() ([]*streampb.StreamCursor, err
 	return wf.CommitStreamCursors(chasmCtx), nil
 }
 
-// HasPendingStreamData reports whether a subscription of this workflow has
-// offsets left to deliver, which is the one condition under which stream
-// traffic schedules a workflow task.
 // carryStreamSubscriptionsTo hands this run's subscriptions to the run that
 // continues it.
 //
@@ -735,12 +732,25 @@ func (ms *MutableStateImpl) carryStreamSubscriptionsTo(newMutableState *MutableS
 	return newWorkflow.ImportStreamSubscriptions(newChasmCtx, subscriptions)
 }
 
+// HasPendingStreamData reports whether a subscription of this workflow has
+// offsets left to deliver, which is the one condition under which stream
+// traffic schedules a workflow task.
+//
+// Called on every transaction close for every workflow, almost none of which
+// have a subscription, so it resolves the root component once rather than
+// asking whether it exists and then asking for it.
 func (ms *MutableStateImpl) HasPendingStreamData() bool {
-	if !ms.HasChasmWorkflowComponent() {
+	node, ok := ms.chasmTree.(*chasm.Node)
+	if !ok {
 		return false
 	}
-	wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	chasmCtx := chasm.NewContext(context.Background(), node)
+	rootComponent, err := node.ComponentByPath(chasmCtx, nil)
 	if err != nil {
+		return false
+	}
+	wf, ok := rootComponent.(*chasmworkflow.Workflow)
+	if !ok {
 		return false
 	}
 	return wf.StreamCursorsBehind(chasmCtx)

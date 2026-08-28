@@ -814,3 +814,84 @@ func subscribedEvents(events []*historypb.HistoryEvent) []*historypb.WorkflowStr
 	}
 	return out
 }
+
+// A second subscribe to a stream the workflow already holds registers nothing,
+// but it still has to write an event. Every SDK matches issued commands against
+// command-generated events by position, so a command producing no event leaves
+// the machine that issued it unmatched and puts every later command out of step.
+func TestResubscribingStillWritesItsEvent(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	streamID := "resub-stream-" + uuid.NewString()
+	s.create(s.ctx(), t, streamID)
+
+	id := "stream-wf-resub-" + uuid.NewString()
+	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	we, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.ns,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "tester",
+	})
+	require.NoError(t, err)
+
+	subscribe := []*commandpb.Command{{
+		CommandType: enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM,
+		Attributes: &commandpb.Command_SubscribeStreamCommandAttributes{
+			SubscribeStreamCommandAttributes: &commandpb.SubscribeStreamCommandAttributes{
+				StreamId: streamID, StartOffset: 0,
+			},
+		},
+	}}
+
+	task := 0
+	//nolint:staticcheck // SA1019: only the deprecated poller can emit this command type.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			task++
+			if task > 2 {
+				return nil, nil
+			}
+			return subscribe, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+
+	// Two tasks, each issuing the same subscribe. The second registers nothing.
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	_, err = env.FrontendClient().SignalWorkflowExecution(s.ctx(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         s.ns,
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id},
+		SignalName:        "wake",
+		Identity:          "tester",
+		RequestId:         uuid.NewString(),
+	})
+	require.NoError(t, err)
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	events := env.GetHistory(s.ns, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
+	var subscribed []*historypb.WorkflowStreamSubscribedEventAttributes
+	for _, e := range events {
+		if a := e.GetWorkflowStreamSubscribedEventAttributes(); a != nil {
+			subscribed = append(subscribed, a)
+		}
+	}
+	require.Len(t, subscribed, 2, "each subscribe command owes an event, even a repeat")
+	require.Equal(t, streamID, subscribed[1].GetStreamId())
+	// The repeat reports where the cursor actually is, not the offset it asked
+	// for, so a replaying worker reads a fact rather than a request.
+	require.Equal(t, int64(0), subscribed[1].GetStartOffset())
+}

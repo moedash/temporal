@@ -108,18 +108,19 @@ func handleSubscribeStreamCommand(
 		return serviceerror.NewInvalidArgument("SubscribeStream command names no stream")
 	}
 
-	// Already subscribed, so there is nothing to do. Re-issuing on replay has to
-	// be a no-op rather than a second registration.
-	if _, ok := wf.StreamCursors[streamID]; ok {
-		return nil
-	}
+	// A second subscribe to the same stream registers nothing, but it still
+	// gets an event. Every SDK matches issued commands against
+	// command-generated events in order, so a command that produces none puts
+	// that matching out of step, which is the whole reason this event exists.
+	_, already := wf.StreamCursors[streamID]
 
 	// Everything is staged, including a stream this workflow owns, so that the
 	// resolved start offset and the event recording it are produced in one
 	// place rather than two.
 	wf.StagePendingSubscription(PendingStreamSubscription{
-		StreamID:    streamID,
-		StartOffset: attrs.GetStartOffset(),
+		StreamID:          streamID,
+		StartOffset:       attrs.GetStartOffset(),
+		AlreadySubscribed: already,
 	})
 	return nil
 }

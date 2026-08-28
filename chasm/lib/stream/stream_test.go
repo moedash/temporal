@@ -429,8 +429,8 @@ func TestStreamProducerTableIsBounded(t *testing.T) {
 		Sequence:   1,
 		TxnID:      int64(MaxProducersPerStream + 1),
 	})
-	require.Error(t, err)
-	require.IsType(t, &serviceerror.InvalidArgument{}, err)
+	var invalid *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalid)
 
 	// A producer already tracked keeps working, so the cap cannot wedge the
 	// producers that filled it.
@@ -461,8 +461,8 @@ func TestStreamConsumerTableIsBounded(t *testing.T) {
 	}
 
 	err := s.RegisterConsumer(nil, "c-over", "wf", "run", 0, true)
-	require.Error(t, err)
-	require.IsType(t, &serviceerror.InvalidArgument{}, err)
+	var invalid *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalid)
 
 	// Re-registering an existing consumer is an update, not a new entry.
 	require.NoError(t, s.RegisterConsumer(nil, "c0", "wf", "run", 0, true))

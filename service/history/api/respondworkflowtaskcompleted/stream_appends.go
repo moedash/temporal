@@ -3,6 +3,7 @@ package respondworkflowtaskcompleted
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -62,6 +63,20 @@ func resolveStagedStreamSubscriptions(
 	}
 
 	for _, pending := range staged {
+		// Already subscribed, so only the event is owed. Re-registering would
+		// re-run the pin write with the original start offset, which would drag
+		// the stream's truncation floor back to where this consumer began.
+		if pending.AlreadySubscribed {
+			cursor, ok := wf.StreamCursors[pending.StreamID]
+			if !ok {
+				return serviceerror.NewInternalf(
+					"stream %q was marked already subscribed but has no cursor", pending.StreamID)
+			}
+			wf.RecordStreamSubscribed(
+				pending.StreamID, cursor.Get(chasmCtx).Offset(), completedEventID)
+			continue
+		}
+
 		// A stream this workflow owns needs no lookup and no pin registration:
 		// it is in this execution, and its cursor commits with everything else.
 		if _, owned := wf.Streams[pending.StreamID]; owned {
