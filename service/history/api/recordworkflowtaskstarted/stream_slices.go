@@ -8,10 +8,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	apistreampb "go.temporal.io/api/stream/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
@@ -48,11 +51,69 @@ func logShardID(
 	return shardContext.GetConfig().GetShardID(namespace.ID(namespaceID), cursor.StreamID())
 }
 
+// deliveryFrontier is the offset a delivery clips to. For a stream this
+// execution owns it is read directly; for one in another execution it is
+// whatever that stream last pushed here, because reading the real value would
+// mean reaching across executions while this transaction is open.
+func deliveryFrontier(
+	chasmCtx chasm.Context,
+	wf *chasmworkflow.Workflow,
+	name string,
+	cursor *stream.Cursor,
+) (int64, error) {
+	if cursor.IsExternal() {
+		return cursor.KnownHead(), nil
+	}
+	field, ok := wf.Streams[name]
+	if !ok {
+		return 0, serviceerror.NewFailedPreconditionf(
+			"workflow consumes stream %q, which it neither owns nor subscribed to externally", name)
+	}
+	state, err := field.Get(chasmCtx).Snapshot(chasmCtx, struct{}{})
+	if err != nil {
+		return 0, err
+	}
+	return state.GetHeadOffset(), nil
+}
+
+// readDeliverable reads [from, to) from the stream's log and returns the
+// messages along with the offset the range actually reaches, which the byte cap
+// can pull back short of `to`.
+func readDeliverable(
+	ctx context.Context,
+	execMgr persistence.ExecutionManager,
+	shardID int32,
+	namespaceID string,
+	cursor *stream.Cursor,
+	from, to int64,
+) ([]*streampb.StreamMessage, int64, error) {
+	if to <= from {
+		return nil, from, nil
+	}
+	blobs, startOffsets, err := stream.ReadRange(
+		ctx, execMgr, shardID, namespaceID,
+		cursor.CollectionID(), cursor.BucketSize(), from, to, 0)
+	if err != nil {
+		return nil, 0, err
+	}
+	// The collected run is contiguous from `from`, so the byte cap recomputes
+	// the same end offset the read would have reported.
+	collected, _, err := stream.CollectMessages(
+		blobs, startOffsets, from, to, stream.MaxConsumeItemsPerTask, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	// Cap before converting: the byte budget applies to the run as stored, and
+	// trimming decides how far the recorded range reaches.
+	collected, readTo := stream.CapByBytes(collected, from, stream.MaxConsumeBytesPerTask)
+	return stream.ToAPIMessages(collected), readTo, nil
+}
+
 func deliverStreamSlices(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	ms historyi.MutableState,
-) ([]*apistreampb.StreamSlice, map[string]streamAddress, error) {
+) ([]*streampb.StreamSlice, map[string]streamAddress, error) {
 	if !ms.HasChasmWorkflowComponent() {
 		return nil, nil, nil
 	}
@@ -82,29 +143,14 @@ func deliverStreamSlices(
 	execMgr := shardContext.GetExecutionManager()
 	namespaceID := ms.GetExecutionInfo().GetNamespaceId()
 
-	slicesOut := make([]*apistreampb.StreamSlice, 0, len(names))
+	slicesOut := make([]*streampb.StreamSlice, 0, len(names))
 	addresses := make(map[string]streamAddress, len(names))
 	for _, name := range names {
 		cursor := wf.StreamCursors[name].Get(chasmCtx)
 
-		// The frontier a delivery clips to. For a stream this execution owns it
-		// is read directly; for one in another execution it is whatever that
-		// stream last pushed here, because reading the real value would mean
-		// reaching across executions while this transaction is open.
-		var head int64
-		if cursor.IsExternal() {
-			head = cursor.KnownHead()
-		} else {
-			field, ok := wf.Streams[name]
-			if !ok {
-				return nil, nil, serviceerror.NewFailedPreconditionf(
-					"workflow consumes stream %q, which it neither owns nor subscribed to externally", name)
-			}
-			state, err := field.Get(chasmCtx).Snapshot(chasmCtx, struct{}{})
-			if err != nil {
-				return nil, nil, err
-			}
-			head = state.GetHeadOffset()
+		head, err := deliveryFrontier(chasmCtx, wf, name, cursor)
+		if err != nil {
+			return nil, nil, err
 		}
 
 		// A range already staged is redelivered unchanged. The same task can be
@@ -120,26 +166,10 @@ func deliverStreamSlices(
 			to = min(from+int64(maxItems), head)
 		}
 
-		var messages []*apistreampb.StreamMessage
-		next := from
-		if to > from {
-			blobs, startOffsets, err := stream.ReadRange(
-				ctx, execMgr, logShardID(shardContext, namespaceID, cursor), namespaceID,
-				cursor.CollectionID(), cursor.BucketSize(), from, to, 0)
-			if err != nil {
-				return nil, nil, err
-			}
-			// The collected run is contiguous from `from`, so the byte cap
-			// recomputes the same end offset the read would have reported.
-			collected, _, err := stream.CollectMessages(blobs, startOffsets, from, to, maxItems, nil)
-			if err != nil {
-				return nil, nil, err
-			}
-			// Cap before converting: the byte budget applies to the run as
-			// stored, and trimming decides how far the recorded range reaches.
-			collected, readTo := stream.CapByBytes(collected, from, stream.MaxConsumeBytesPerTask)
-			messages = stream.ToAPIMessages(collected)
-			next = readTo
+		messages, next, err := readDeliverable(
+			ctx, execMgr, logShardID(shardContext, namespaceID, cursor), namespaceID, cursor, from, to)
+		if err != nil {
+			return nil, nil, err
 		}
 
 		if !restaged {
@@ -150,7 +180,7 @@ func deliverStreamSlices(
 
 		// Attached even when empty. A task that saw nothing still has to record
 		// that it saw nothing, and the slice is what the completion reads.
-		slicesOut = append(slicesOut, &apistreampb.StreamSlice{
+		slicesOut = append(slicesOut, &streampb.StreamSlice{
 			StreamId:   cursor.StreamID(),
 			FromOffset: from,
 			ToOffset:   next,
@@ -204,7 +234,7 @@ func attachReplaySlices(
 				continue
 			}
 
-			var messages []*apistreampb.StreamMessage
+			var messages []*streampb.StreamMessage
 			if recorded.GetToOffset() > recorded.GetFromOffset() {
 				blobs, startOffsets, err := stream.ReadRange(
 					ctx, execMgr, address.shardID, namespaceID,
@@ -225,7 +255,7 @@ func attachReplaySlices(
 
 			// Attached even when empty: the task observed nothing, and replay
 			// has to reproduce that rather than infer it from an absence.
-			resp.StreamSlices = append(resp.StreamSlices, &apistreampb.StreamSlice{
+			resp.StreamSlices = append(resp.StreamSlices, &streampb.StreamSlice{
 				StreamId:                     recorded.GetStreamId(),
 				FromOffset:                   recorded.GetFromOffset(),
 				ToOffset:                     recorded.GetToOffset(),

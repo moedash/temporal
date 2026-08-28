@@ -145,6 +145,8 @@ func valueTypeDiff(
 			return fmt.Sprintf("field %d (%s) refers to %s on one side and %s on the other",
 				number, name, a.Enum().FullName(), b.Enum().FullName())
 		}
+	default:
+		// Scalars are fully described by the kind equality checked above.
 	}
 	return ""
 }

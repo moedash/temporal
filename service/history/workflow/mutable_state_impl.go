@@ -22,7 +22,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
-	apistreampb "go.temporal.io/api/stream/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -678,7 +678,7 @@ func (ms *MutableStateImpl) mustInitHSM() {
 // the event carrying the range are in one transaction: split apart, a crash
 // between them would either redeliver a range or skip it with nothing in
 // History to say so.
-func (ms *MutableStateImpl) commitStreamCursors() ([]*apistreampb.StreamCursor, error) {
+func (ms *MutableStateImpl) commitStreamCursors() ([]*streampb.StreamCursor, error) {
 	if !ms.HasChasmWorkflowComponent() {
 		return nil, nil
 	}

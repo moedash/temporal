@@ -60,8 +60,9 @@ func NewCursor(_ chasm.MutableContext, req NewCursorRequest) (*Cursor, error) {
 	}, nil
 }
 
-// A cursor lives as long as the workflow holding it. Deregistration is an
-// explicit act, not a state the component reaches on its own.
+// LifecycleState reports the cursor as running for as long as the workflow
+// holding it exists. Deregistration is an explicit act, not a state the
+// component reaches on its own.
 func (c *Cursor) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }

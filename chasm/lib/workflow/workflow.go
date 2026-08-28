@@ -9,7 +9,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	apistreampb "go.temporal.io/api/stream/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -309,7 +309,7 @@ func (w *Workflow) StreamCursorsBehind(ctx chasm.Context) bool {
 // A cursor with nothing staged is skipped, but a cursor staged with an empty
 // range is not: replay has to see that the subscription was live and observed
 // nothing.
-func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*apistreampb.StreamCursor {
+func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*streampb.StreamCursor {
 	if w.StreamCursors == nil {
 		return nil
 	}
@@ -322,7 +322,7 @@ func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*apistreampb
 	// event than the one the original execution wrote.
 	slices.Sort(names)
 
-	var recorded []*apistreampb.StreamCursor
+	var recorded []*streampb.StreamCursor
 	for _, name := range names {
 		cursor := w.StreamCursors[name].Get(mctx)
 		from, to, ok := cursor.Commit(mctx)
@@ -336,7 +336,7 @@ func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*apistreampb
 			field.Get(mctx).AdvanceConsumer(mctx, streamConsumerID(name), to)
 		}
 
-		recorded = append(recorded, &apistreampb.StreamCursor{
+		recorded = append(recorded, &streampb.StreamCursor{
 			StreamId:   cursor.StreamID(),
 			FromOffset: from,
 			ToOffset:   to,

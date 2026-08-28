@@ -2,8 +2,8 @@ package stream
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
-	apistreampb "go.temporal.io/api/stream/v1"
-	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	streampb "go.temporal.io/api/stream/v1"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -18,16 +18,16 @@ func CollectMessages(
 	head int64,
 	maxMessages int,
 	topics []string,
-) ([]*streampb.StreamMessage, int64, error) {
+) ([]*streamlib.StreamMessage, int64, error) {
 	wanted := make(map[string]struct{}, len(topics))
 	for _, t := range topics {
 		wanted[t] = struct{}{}
 	}
 
-	var out []*streampb.StreamMessage
+	var out []*streamlib.StreamMessage
 	next := from
 	for i, blob := range blobs {
-		var batch streampb.StreamMessageBatch
+		var batch streamlib.StreamMessageBatch
 		if err := proto.Unmarshal(blob.GetData(), &batch); err != nil {
 			return nil, 0, err
 		}
@@ -54,13 +54,13 @@ func CollectMessages(
 // ToAPIMessages converts stored messages to the shape carried on a Workflow
 // Task. Control messages are dropped: they steer the log itself and mean
 // nothing to a consumer.
-func ToAPIMessages(in []*streampb.StreamMessage) []*apistreampb.StreamMessage {
-	out := make([]*apistreampb.StreamMessage, 0, len(in))
+func ToAPIMessages(in []*streamlib.StreamMessage) []*streampb.StreamMessage {
+	out := make([]*streampb.StreamMessage, 0, len(in))
 	for _, m := range in {
-		if m.GetKind() != streampb.STREAM_MESSAGE_KIND_DATA {
+		if m.GetKind() != streamlib.STREAM_MESSAGE_KIND_DATA {
 			continue
 		}
-		out = append(out, &apistreampb.StreamMessage{
+		out = append(out, &streampb.StreamMessage{
 			Body:          m.GetBody(),
 			Metadata:      m.GetMetadata(),
 			Topic:         m.GetTopic(),
@@ -78,10 +78,10 @@ func ToAPIMessages(in []*streampb.StreamMessage) []*apistreampb.StreamMessage {
 // workflow task, a stream holding one oversized message would wake the workflow
 // forever without ever delivering anything.
 func CapByBytes(
-	messages []*streampb.StreamMessage,
+	messages []*streamlib.StreamMessage,
 	from int64,
 	maxBytes int,
-) ([]*streampb.StreamMessage, int64) {
+) ([]*streamlib.StreamMessage, int64) {
 	if len(messages) == 0 {
 		return messages, from
 	}
