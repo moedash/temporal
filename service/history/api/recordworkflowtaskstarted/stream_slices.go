@@ -234,6 +234,14 @@ func attachReplaySlices(
 		return nil
 	}
 
+	// A sticky task means the worker still holds the execution, so it has
+	// nothing to replay. Its history begins at the previous task's completion,
+	// and that event carries the range that task already consumed, so
+	// re-supplying it here would hand the workflow the same messages twice.
+	if resp.GetStickyExecutionEnabled() {
+		return nil
+	}
+
 	events, err := eventsOfResponse(resp)
 	if err != nil {
 		return err
