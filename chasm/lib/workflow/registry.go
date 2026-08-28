@@ -107,6 +107,11 @@ var ErrCommandTargetNotFound = errors.New("command target not found in chasm tre
 
 type CommandHandlerOptions struct {
 	WorkflowTaskCompletedEventID int64
+	// Attempt of the workflow task carrying the command, starting at 1. A
+	// retried attempt replays the same commands from the same event id, so a
+	// handler that derives an identity from the event id alone cannot tell the
+	// attempts apart.
+	WorkflowTaskAttempt int32
 }
 
 // CommandHandler is a function for handling a workflow command as part of processing a RespondWorkflowTaskCompleted

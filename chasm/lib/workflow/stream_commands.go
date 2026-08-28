@@ -51,7 +51,7 @@ func handleAddStreamMessagesCommand(
 
 	result, err := s.AddMessages(chasmCtx, stream.AddMessagesRequest{
 		Messages: toLibraryMessages(attrs.GetMessages()),
-		TxnID:    streamTxnID(s, opts.WorkflowTaskCompletedEventID),
+		TxnID:    streamTxnID(s, opts.WorkflowTaskCompletedEventID, opts.WorkflowTaskAttempt),
 	})
 	if err != nil {
 		return err
@@ -235,16 +235,22 @@ func (w *Workflow) streamNamed(ctx chasm.MutableContext, name string) (*stream.S
 }
 
 // streamTxnID derives a transaction id that advances across workflow tasks and
-// within one, anchored on the task's completed event id.
+// within one, anchored on the task's completed event id and attempt.
 //
-// A retried workflow task can reuse an id, and that is safe here in a way it is
-// not for an external producer: the workflow replays deterministically and
-// re-issues the same command, so a reused id lands the same bytes at the same
-// node, which the store treats as an idempotent overwrite. The hazard the
-// external path guards against is different content under an equal id, which
-// deterministic replay cannot produce.
-func streamTxnID(s *stream.Stream, workflowTaskCompletedEventID int64) int64 {
-	next := workflowTaskCompletedEventID
+// The attempt is what keeps a retry apart from the attempt it replaces. A
+// failed attempt never commits, so the stream's last committed id does not
+// move, and two attempts anchored on the event id alone would both write the
+// same node under the same id. Storage keys a node by that pair, so the two
+// rows collapse into one and the survivor is whichever reached the database
+// last, not whichever attempt committed. Replay is deterministic, but a
+// re-issued attempt is not a replay: anything the worker re-runs before the
+// completion is durable, a local activity for instance, may return a different
+// value and publish different bytes.
+//
+// A later attempt is always higher, so the store resolves the collision the
+// same way it does for an external producer: the newer transaction id wins.
+func streamTxnID(s *stream.Stream, workflowTaskCompletedEventID int64, attempt int32) int64 {
+	next := workflowTaskCompletedEventID + int64(max(attempt, 1)) - 1
 	if last := s.State.GetLastTxnId(); next <= last {
 		next = last + 1
 	}

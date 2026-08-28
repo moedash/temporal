@@ -146,3 +146,23 @@ func TestCommitStreamCursorsWithAnEmptyRangeHoldsTheFloor(t *testing.T) {
 	require.ErrorContains(t, err, "an active consumer still needs",
 		"consuming nothing must not release the floor")
 }
+
+// A retried workflow task replays the same commands from the same completed
+// event id. Storage keys a log node by node id and transaction id, so two
+// attempts under one id collapse into a single row whose survivor is decided by
+// arrival order rather than by which attempt committed.
+func TestStreamTxnIDSeparatesWorkflowTaskAttempts(t *testing.T) {
+	s := &stream.Stream{State: &streampb.StreamState{}}
+
+	first := streamTxnID(s, 10, 1)
+	retry := streamTxnID(s, 10, 2)
+	require.Greater(t, retry, first, "a retry must supersede the attempt it replaces")
+
+	// An unset attempt still has to produce the pre-existing id, so a caller
+	// that does not populate it is not silently shifted.
+	require.Equal(t, first, streamTxnID(s, 10, 0))
+
+	// The committed id still wins when it has moved past the event id.
+	s.State.LastTxnId = 50
+	require.Equal(t, int64(51), streamTxnID(s, 10, 1))
+}
