@@ -503,15 +503,37 @@ from the response field, for the reason in §8.3.
 
 ### 8.1c Subscribing from inside the workflow
 
-Subscribing writes one history event, `WorkflowStreamSubscribed`, carrying the stream id and the resolved start offset. Publishing still writes none.
+Both stream commands write one history event. Subscribing writes `WorkflowStreamSubscribed`, carrying the stream id and the resolved start offset. Publishing writes `WorkflowStreamMessagesAdded`, carrying the stream id and the offset range the batch landed at.
 
 The reason is not cost. Every SDK matches issued commands against command-generated events **in order**, popping a queue as each event arrives (`workflow_machines.rs`, `self.commands.pop_front()`). A command that produces no event leaves its entry at the head of that queue and the next event pops the wrong one. So a command reachable from workflow code has to have an event, and the codebase already says so: `TestBufferEvent` exists to force exactly that, and this design had been opting out of it.
 
-The cost is per subscription, not per message. A workflow subscribes to a stream once, so this is the same order as a single signal, and it leaves the property the design rests on untouched: the offsets a task consumed still ride `WorkflowTaskCompleted`, and payloads never enter History. Consumption remains zero events per task.
+Subscribing costs one event per subscription, which is the same order as a single signal. Publishing costs one per batch, which is the case that needed measuring rather than assuming, because unlike a subscription it recurs.
 
-It also closes an operational gap. Without the event nothing in History explains why a workflow began receiving stream data.
+It also closes an operational gap. Without the events nothing in History explains why a workflow began receiving stream data, or that it published any.
 
-`AddStreamMessages` is the case where an event would be per batch rather than once, so it still writes none and remains unreachable from workflow code for the same matching reason. That is the trade to revisit with measurements, not by assumption.
+Consumption is still zero events per task: the offsets a task consumed ride `WorkflowTaskCompleted`, and payloads never enter History on any path.
+
+##### What a per-batch event costs
+
+Measured by `TestStreamPublishHistoryCost`, which runs a workflow whose single Workflow Task carries N publish commands and then completes, and differences against an N=0 run so the fixed opening and closing events cancel.
+
+| what was published | per batch | per message |
+|---|---|---|
+| 100 batches x 1 message x 20 bytes | 41 bytes | 41 bytes |
+| 100 batches x 1 message x 2000 bytes | 40 bytes | 40 bytes |
+| 100 batches x 10 messages x 20 bytes | 41 bytes | 4.1 bytes |
+| the same 100 messages as Signals, 20 bytes | 112 bytes | 112 bytes |
+| the same 100 messages as Signals, 2000 bytes | 2097 bytes | 2097 bytes |
+
+Three things follow.
+
+The event is a fixed 41 bytes. A hundredfold increase in payload size does not move it, which is the claim that bodies never enter History, stated as a measurement rather than a reading of the code.
+
+Batching is free. The event is per call, so a batch of a thousand costs History what a batch of one costs. Against Signals the saving is 2.7x at 20-byte messages and 51x at 2KB, and it grows without bound with payload size.
+
+The binding limit is the event count, not the size. At 41 bytes, 51,200 events is the `limit.historyCount.error` ceiling while using 2MB of the 50MB size budget. So a workflow is bounded at 51,200 publish **calls**, with no bound on the messages inside them. Today's Signal path is bounded at 10,000 signals **and** carries every payload against the size limit, so a 2KB-per-message workflow exhausts history at roughly 25,000 messages. The stream path reaches 51,200 batches of any size, which at 100 messages per batch is 5.12M messages for 2MB of History.
+
+The guidance that follows is to batch, and that is what `workflow.add_stream_messages` documents. A workflow that would genuinely exceed 51,200 calls continues as new, which the cursors already survive (§8.6).
 
 #### Resolution
 
@@ -552,7 +574,7 @@ A stream's log is read from the **stream's own shard**, not the consumer's. Hist
 
 One consequence worth stating: an external consumer's pin never advances, because advancing it would be a cross-execution write on the workflow task path. A stream with a live external consumer therefore does not truncate below the offset that consumer subscribed at. A capped slice relies on the same pushed frontier to continue, so it resumes on the next push rather than immediately.
 
-**Replay reassembly is built.** When a workflow task carries History, every `WorkflowTaskCompleted` in it that recorded a range gets its payloads re-read from the log and attached, tagged with that event's id. A response therefore holds at most one untagged slice, for the task about to run, plus one per recorded range being replayed. No SDK reads the field yet, so the consuming end is still unproven.
+**Replay reassembly is built.** When a workflow task carries History, every `WorkflowTaskCompleted` in it that recorded a range gets its payloads re-read from the log and attached, tagged with that event's id. A response therefore holds at most one untagged slice, for the task about to run, plus one per recorded range being replayed. Python reads both, through the sdk-core work in §8.1c, so the consuming end is proven end to end.
 
 The cost is the one §8.3 flagged: a delivery carrying full History re-reads every range that History records. Sticky delivery carries only the tail and pays proportionally less, but a cold replay of a long-lived consumer re-reads everything it ever consumed, and that still has no bound.
 
@@ -661,7 +683,7 @@ A poll holding a reference to the old run sees `redirect_run_id` set, follows it
 
 Reset rebuilds workflow state from an earlier point. It must not rewind the stream, because consumers may already have read past that point, and offsets never decrease.
 
-Stream commands emit no history events, so replay cannot reconstruct stream state. Reset therefore carries it forward explicitly:
+A stream command's history event names an offset range but carries none of the stream's state, and its `Apply` is a no-op, so replay still cannot reconstruct that state from History. Reset therefore carries it forward explicitly:
 
 1. Take the current execution's lock through the existing reset path.
 2. Rebuild the target mutable state from history.
@@ -864,7 +886,7 @@ The benchmark is the deliverable that makes the September 14 decision possible. 
 | 6 | Path C, workflow consume | Highest risk, sequenced last |
 | 7 | Benchmark, demo, write-up | |
 
-**API dependency.** Stages 5 and 6 need `go.temporal.io/api` changes: `temporal.api.stream.v1`, `COMMAND_TYPE_ADD_STREAM_MESSAGES`, a `stream_slices` field on `PollWorkflowTaskQueueResponse`, and a `stream_cursors` field on `WorkflowTaskCompletedEventAttributes`. Note there is **no new event type**: the consumed range rides an event that already exists (§8.1). Plan is one branch on `temporalio/api` pinned by pseudo-version rather than a local `replace`, so the branch stays buildable by others. `make update-go-api` is the existing path.
+**API dependency.** Stages 5 and 6 need `go.temporal.io/api` changes: `temporal.api.stream.v1`, `COMMAND_TYPE_ADD_STREAM_MESSAGES`, `COMMAND_TYPE_SUBSCRIBE_STREAM`, a `stream_slices` field on `PollWorkflowTaskQueueResponse`, and a `stream_cursors` field on `WorkflowTaskCompletedEventAttributes`. Consumption adds no event type, because the consumed range rides an event that already exists (§8.1). Both commands do need one, `WorkflowStreamSubscribed` and `WorkflowStreamMessagesAdded`, for the command-to-event matching in §8.1c. Plan is one branch on `temporalio/api` pinned by pseudo-version rather than a local `replace`, so the branch stays buildable by others. `make update-go-api` is the existing path.
 
 ---
 
@@ -879,3 +901,4 @@ The benchmark is the deliverable that makes the September 14 decision possible. 
 - What bounds the cost of cold replay under the §8.3 decision. Reassembling slices on the History read path is cheap while the tail cache is warm and unbounded when it is not. A very old workflow with a long consumed history is the case that needs a limit, and it does not have one yet.
 - Whether `GetWorkflowExecutionHistory` should reassemble at all, or only the worker-facing read. The UI and `tctl` share that path, so reassembly there means stream payloads appear in operator tooling that today only sees offsets. That is arguably desirable for debugging and arguably a size and redaction problem. Not decided.
 - Cross-cluster replication. History-node data already replicates, so the mechanism is inherited rather than designed, but the conflict semantics for a stream written on two sides of a failover are not worked out. Last-writer-wins is the assumed answer and it is lossy.
+- Whether the 51,200-call publish ceiling needs anything beyond continue-as-new. Batching moves it far out of reach for the workloads this targets, but a workflow that publishes one message per call in a tight loop hits it, and nothing warns before it does. A per-batch minimum, or coalescing repeated calls within one task, would both change the command-to-event matching, so neither is free.
