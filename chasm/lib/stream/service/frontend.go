@@ -106,6 +106,30 @@ func (h *FrontendHandler) PollMessages(
 	})
 }
 
+func (h *FrontendHandler) PollWorkflowMessages(
+	ctx context.Context, req *streampb.PollWorkflowMessagesRequest,
+) (*streampb.PollWorkflowMessagesResponse, error) {
+	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+	return h.client.PollWorkflowMessages(ctx, &streampb.PollWorkflowMessagesRequest{
+		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+	})
+}
+
+func (h *FrontendHandler) DescribeWorkflowStream(
+	ctx context.Context, req *streampb.DescribeWorkflowStreamRequest,
+) (*streampb.DescribeWorkflowStreamResponse, error) {
+	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+	return h.client.DescribeWorkflowStream(ctx, &streampb.DescribeWorkflowStreamRequest{
+		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+	})
+}
+
 func (h *FrontendHandler) DescribeStream(
 	ctx context.Context, req *streampb.DescribeStreamRequest,
 ) (*streampb.DescribeStreamResponse, error) {

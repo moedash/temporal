@@ -27,40 +27,46 @@ var File_temporal_server_chasm_lib_stream_proto_v1_service_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_stream_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/stream/proto/v1/service.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a@temporal/server/chasm/lib/stream/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xd0\x0e\n" +
+	"7temporal/server/chasm/lib/stream/proto/v1/service.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a@temporal/server/chasm/lib/stream/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xfe\x11\n" +
 	"\rStreamService\x12\xb7\x01\n" +
 	"\fCreateStream\x12>.temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest\x1a?.temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse\"&\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1c\x1a\x1afrontend_request.stream_id\x12\xb4\x01\n" +
 	"\vAddMessages\x12=.temporal.server.chasm.lib.stream.proto.v1.AddMessagesRequest\x1a>.temporal.server.chasm.lib.stream.proto.v1.AddMessagesResponse\"&\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1c\x1a\x1afrontend_request.stream_id\x12\xba\x01\n" +
 	"\rFinishWriting\x12?.temporal.server.chasm.lib.stream.proto.v1.FinishWritingRequest\x1a@.temporal.server.chasm.lib.stream.proto.v1.FinishWritingResponse\"&\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1c\x1a\x1afrontend_request.stream_id\x12\xc8\x01\n" +
 	"\x11SubscribeWorkflow\x12C.temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowRequest\x1aD.temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowResponse\"(\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1e\x1a\x1cfrontend_request.workflow_id\x12\xb7\x01\n" +
 	"\fPollMessages\x12>.temporal.server.chasm.lib.stream.proto.v1.PollMessagesRequest\x1a?.temporal.server.chasm.lib.stream.proto.v1.PollMessagesResponse\"&\x8a\xb5\x18\x02\b\x02\xd2\xc3\x18\x1c\x1a\x1afrontend_request.stream_id\x12\xbd\x01\n" +
-	"\x0eDescribeStream\x12@.temporal.server.chasm.lib.stream.proto.v1.DescribeStreamRequest\x1aA.temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse\"&\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1c\x1a\x1afrontend_request.stream_id\x12\xb4\x01\n" +
+	"\x0eDescribeStream\x12@.temporal.server.chasm.lib.stream.proto.v1.DescribeStreamRequest\x1aA.temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse\"&\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1c\x1a\x1afrontend_request.stream_id\x12\xd1\x01\n" +
+	"\x14PollWorkflowMessages\x12F.temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesRequest\x1aG.temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesResponse\"(\x8a\xb5\x18\x02\b\x02\xd2\xc3\x18\x1e\x1a\x1cfrontend_request.workflow_id\x12\xd7\x01\n" +
+	"\x16DescribeWorkflowStream\x12H.temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamRequest\x1aI.temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamResponse\"(\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1e\x1a\x1cfrontend_request.workflow_id\x12\xb4\x01\n" +
 	"\vCloseStream\x12=.temporal.server.chasm.lib.stream.proto.v1.CloseStreamRequest\x1a>.temporal.server.chasm.lib.stream.proto.v1.CloseStreamResponse\"&\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1c\x1a\x1afrontend_request.stream_id\x12\xbd\x01\n" +
 	"\x0eTruncateStream\x12@.temporal.server.chasm.lib.stream.proto.v1.TruncateStreamRequest\x1aA.temporal.server.chasm.lib.stream.proto.v1.TruncateStreamResponse\"&\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1c\x1a\x1afrontend_request.stream_id\x12\x9a\x01\n" +
 	"\vListStreams\x12=.temporal.server.chasm.lib.stream.proto.v1.ListStreamsRequest\x1a>.temporal.server.chasm.lib.stream.proto.v1.ListStreamsResponse\"\f\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x02\b\x01\x12\xb7\x01\n" +
 	"\fDeleteStream\x12>.temporal.server.chasm.lib.stream.proto.v1.DeleteStreamRequest\x1a?.temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse\"&\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1c\x1a\x1afrontend_request.stream_idB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
 
 var file_temporal_server_chasm_lib_stream_proto_v1_service_proto_goTypes = []any{
-	(*CreateStreamRequest)(nil),       // 0: temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest
-	(*AddMessagesRequest)(nil),        // 1: temporal.server.chasm.lib.stream.proto.v1.AddMessagesRequest
-	(*FinishWritingRequest)(nil),      // 2: temporal.server.chasm.lib.stream.proto.v1.FinishWritingRequest
-	(*SubscribeWorkflowRequest)(nil),  // 3: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowRequest
-	(*PollMessagesRequest)(nil),       // 4: temporal.server.chasm.lib.stream.proto.v1.PollMessagesRequest
-	(*DescribeStreamRequest)(nil),     // 5: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamRequest
-	(*CloseStreamRequest)(nil),        // 6: temporal.server.chasm.lib.stream.proto.v1.CloseStreamRequest
-	(*TruncateStreamRequest)(nil),     // 7: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamRequest
-	(*ListStreamsRequest)(nil),        // 8: temporal.server.chasm.lib.stream.proto.v1.ListStreamsRequest
-	(*DeleteStreamRequest)(nil),       // 9: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamRequest
-	(*CreateStreamResponse)(nil),      // 10: temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse
-	(*AddMessagesResponse)(nil),       // 11: temporal.server.chasm.lib.stream.proto.v1.AddMessagesResponse
-	(*FinishWritingResponse)(nil),     // 12: temporal.server.chasm.lib.stream.proto.v1.FinishWritingResponse
-	(*SubscribeWorkflowResponse)(nil), // 13: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowResponse
-	(*PollMessagesResponse)(nil),      // 14: temporal.server.chasm.lib.stream.proto.v1.PollMessagesResponse
-	(*DescribeStreamResponse)(nil),    // 15: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse
-	(*CloseStreamResponse)(nil),       // 16: temporal.server.chasm.lib.stream.proto.v1.CloseStreamResponse
-	(*TruncateStreamResponse)(nil),    // 17: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamResponse
-	(*ListStreamsResponse)(nil),       // 18: temporal.server.chasm.lib.stream.proto.v1.ListStreamsResponse
-	(*DeleteStreamResponse)(nil),      // 19: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse
+	(*CreateStreamRequest)(nil),            // 0: temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest
+	(*AddMessagesRequest)(nil),             // 1: temporal.server.chasm.lib.stream.proto.v1.AddMessagesRequest
+	(*FinishWritingRequest)(nil),           // 2: temporal.server.chasm.lib.stream.proto.v1.FinishWritingRequest
+	(*SubscribeWorkflowRequest)(nil),       // 3: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowRequest
+	(*PollMessagesRequest)(nil),            // 4: temporal.server.chasm.lib.stream.proto.v1.PollMessagesRequest
+	(*DescribeStreamRequest)(nil),          // 5: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamRequest
+	(*PollWorkflowMessagesRequest)(nil),    // 6: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesRequest
+	(*DescribeWorkflowStreamRequest)(nil),  // 7: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamRequest
+	(*CloseStreamRequest)(nil),             // 8: temporal.server.chasm.lib.stream.proto.v1.CloseStreamRequest
+	(*TruncateStreamRequest)(nil),          // 9: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamRequest
+	(*ListStreamsRequest)(nil),             // 10: temporal.server.chasm.lib.stream.proto.v1.ListStreamsRequest
+	(*DeleteStreamRequest)(nil),            // 11: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamRequest
+	(*CreateStreamResponse)(nil),           // 12: temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse
+	(*AddMessagesResponse)(nil),            // 13: temporal.server.chasm.lib.stream.proto.v1.AddMessagesResponse
+	(*FinishWritingResponse)(nil),          // 14: temporal.server.chasm.lib.stream.proto.v1.FinishWritingResponse
+	(*SubscribeWorkflowResponse)(nil),      // 15: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowResponse
+	(*PollMessagesResponse)(nil),           // 16: temporal.server.chasm.lib.stream.proto.v1.PollMessagesResponse
+	(*DescribeStreamResponse)(nil),         // 17: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse
+	(*PollWorkflowMessagesResponse)(nil),   // 18: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesResponse
+	(*DescribeWorkflowStreamResponse)(nil), // 19: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamResponse
+	(*CloseStreamResponse)(nil),            // 20: temporal.server.chasm.lib.stream.proto.v1.CloseStreamResponse
+	(*TruncateStreamResponse)(nil),         // 21: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamResponse
+	(*ListStreamsResponse)(nil),            // 22: temporal.server.chasm.lib.stream.proto.v1.ListStreamsResponse
+	(*DeleteStreamResponse)(nil),           // 23: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse
 }
 var file_temporal_server_chasm_lib_stream_proto_v1_service_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.chasm.lib.stream.proto.v1.StreamService.CreateStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest
@@ -69,22 +75,26 @@ var file_temporal_server_chasm_lib_stream_proto_v1_service_proto_depIdxs = []int
 	3,  // 3: temporal.server.chasm.lib.stream.proto.v1.StreamService.SubscribeWorkflow:input_type -> temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowRequest
 	4,  // 4: temporal.server.chasm.lib.stream.proto.v1.StreamService.PollMessages:input_type -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesRequest
 	5,  // 5: temporal.server.chasm.lib.stream.proto.v1.StreamService.DescribeStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamRequest
-	6,  // 6: temporal.server.chasm.lib.stream.proto.v1.StreamService.CloseStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamRequest
-	7,  // 7: temporal.server.chasm.lib.stream.proto.v1.StreamService.TruncateStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamRequest
-	8,  // 8: temporal.server.chasm.lib.stream.proto.v1.StreamService.ListStreams:input_type -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsRequest
-	9,  // 9: temporal.server.chasm.lib.stream.proto.v1.StreamService.DeleteStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamRequest
-	10, // 10: temporal.server.chasm.lib.stream.proto.v1.StreamService.CreateStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse
-	11, // 11: temporal.server.chasm.lib.stream.proto.v1.StreamService.AddMessages:output_type -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesResponse
-	12, // 12: temporal.server.chasm.lib.stream.proto.v1.StreamService.FinishWriting:output_type -> temporal.server.chasm.lib.stream.proto.v1.FinishWritingResponse
-	13, // 13: temporal.server.chasm.lib.stream.proto.v1.StreamService.SubscribeWorkflow:output_type -> temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowResponse
-	14, // 14: temporal.server.chasm.lib.stream.proto.v1.StreamService.PollMessages:output_type -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesResponse
-	15, // 15: temporal.server.chasm.lib.stream.proto.v1.StreamService.DescribeStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse
-	16, // 16: temporal.server.chasm.lib.stream.proto.v1.StreamService.CloseStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamResponse
-	17, // 17: temporal.server.chasm.lib.stream.proto.v1.StreamService.TruncateStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamResponse
-	18, // 18: temporal.server.chasm.lib.stream.proto.v1.StreamService.ListStreams:output_type -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsResponse
-	19, // 19: temporal.server.chasm.lib.stream.proto.v1.StreamService.DeleteStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse
-	10, // [10:20] is the sub-list for method output_type
-	0,  // [0:10] is the sub-list for method input_type
+	6,  // 6: temporal.server.chasm.lib.stream.proto.v1.StreamService.PollWorkflowMessages:input_type -> temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesRequest
+	7,  // 7: temporal.server.chasm.lib.stream.proto.v1.StreamService.DescribeWorkflowStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamRequest
+	8,  // 8: temporal.server.chasm.lib.stream.proto.v1.StreamService.CloseStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamRequest
+	9,  // 9: temporal.server.chasm.lib.stream.proto.v1.StreamService.TruncateStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamRequest
+	10, // 10: temporal.server.chasm.lib.stream.proto.v1.StreamService.ListStreams:input_type -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsRequest
+	11, // 11: temporal.server.chasm.lib.stream.proto.v1.StreamService.DeleteStream:input_type -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamRequest
+	12, // 12: temporal.server.chasm.lib.stream.proto.v1.StreamService.CreateStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse
+	13, // 13: temporal.server.chasm.lib.stream.proto.v1.StreamService.AddMessages:output_type -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesResponse
+	14, // 14: temporal.server.chasm.lib.stream.proto.v1.StreamService.FinishWriting:output_type -> temporal.server.chasm.lib.stream.proto.v1.FinishWritingResponse
+	15, // 15: temporal.server.chasm.lib.stream.proto.v1.StreamService.SubscribeWorkflow:output_type -> temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowResponse
+	16, // 16: temporal.server.chasm.lib.stream.proto.v1.StreamService.PollMessages:output_type -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesResponse
+	17, // 17: temporal.server.chasm.lib.stream.proto.v1.StreamService.DescribeStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse
+	18, // 18: temporal.server.chasm.lib.stream.proto.v1.StreamService.PollWorkflowMessages:output_type -> temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesResponse
+	19, // 19: temporal.server.chasm.lib.stream.proto.v1.StreamService.DescribeWorkflowStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamResponse
+	20, // 20: temporal.server.chasm.lib.stream.proto.v1.StreamService.CloseStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamResponse
+	21, // 21: temporal.server.chasm.lib.stream.proto.v1.StreamService.TruncateStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamResponse
+	22, // 22: temporal.server.chasm.lib.stream.proto.v1.StreamService.ListStreams:output_type -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsResponse
+	23, // 23: temporal.server.chasm.lib.stream.proto.v1.StreamService.DeleteStream:output_type -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse
+	12, // [12:24] is the sub-list for method output_type
+	0,  // [0:12] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name

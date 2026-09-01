@@ -15,6 +15,7 @@ import (
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/stream"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -631,4 +632,26 @@ func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter
 
 func (w *Workflow) WorkflowTypeName() string {
 	return w.GetWorkflowTypeName()
+}
+
+// OwnedStreamState returns the state of a stream this workflow owns, or nil if
+// it owns none by that name.
+//
+// An attached stream has no id of its own, so this is the only way to see its
+// frontier from outside the execution. Reading it needs the owner's component,
+// which is why it lives here rather than on the stream.
+//
+// Absent is not an error. An owned stream is created by the first publish to
+// it, so a reader that arrives before the workflow has published anything is
+// the ordinary case rather than a mistake, and from outside the execution
+// "not created yet" and "never will be" are the same observation.
+func (w *Workflow) OwnedStreamState(
+	ctx chasm.Context,
+	name string,
+) (*streamlib.StreamState, error) {
+	field, ok := w.Streams[name]
+	if !ok {
+		return nil, nil
+	}
+	return field.Get(ctx).Snapshot(ctx, struct{}{})
 }

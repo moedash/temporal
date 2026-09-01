@@ -119,6 +119,26 @@ func refForRun(namespaceID, streamID, runID string) chasm.ComponentRef {
 	})
 }
 
+// workflowRef builds a reference to the execution that owns an attached
+// stream. An attached stream is a subcomponent, so it has no id of its own and
+// everything about it is reached through its owner.
+func workflowRef(namespaceID, workflowID string) chasm.ComponentRef {
+	return chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
+		NamespaceID: namespaceID,
+		BusinessID:  workflowID,
+	})
+}
+
+// ownedStreamName resolves a name the caller left empty the same way a publish
+// command does, so a reader addresses the default stream by omission just as a
+// writer creates it by omission.
+func ownedStreamName(name string) string {
+	if name == "" {
+		return chasmworkflow.DefaultStreamName
+	}
+	return name
+}
+
 // reclaim deletes buckets that a committed truncation put out of reach. It runs
 // after the commit, so a failure here leaves storage to reclaim later rather
 // than data a reader can still ask for but no longer find.
@@ -307,12 +327,10 @@ func (h *handler) SubscribeWorkflow(
 
 	startOffset, _, err := chasm.UpdateComponent(
 		ctx,
-		chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
-			NamespaceID: req.GetNamespaceId(),
-			BusinessID:  in.GetWorkflowId(),
-		}),
+		workflowRef(req.GetNamespaceId(), in.GetWorkflowId()),
 		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, input *streampb.SubscribeWorkflowInput) (int64, error) {
-			return wf.SubscribeToOwnedStream(mctx, input.GetStreamName(), input.GetStartOffset())
+			return wf.SubscribeToOwnedStream(
+				mctx, ownedStreamName(input.GetStreamName()), input.GetStartOffset())
 		},
 		in,
 	)
@@ -369,10 +387,7 @@ func (h *handler) subscribeToExternalStream(
 
 	registered, _, err := chasm.UpdateComponent(
 		ctx,
-		chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
-			NamespaceID: namespaceID,
-			BusinessID:  in.GetWorkflowId(),
-		}),
+		workflowRef(namespaceID, in.GetWorkflowId()),
 		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, offset int64) (int64, error) {
 			return wf.SubscribeToExternalStream(mctx, chasmworkflow.ExternalStreamSubscription{
 				StreamID:     streamID,
@@ -422,6 +437,69 @@ func (h *handler) PollMessages(
 		}
 	}
 
+	out, err := h.readWindow(ctx, shardCtx, req.GetNamespaceId(), state, from,
+		in.GetMaxMessages(), in.GetTopics())
+	if err != nil {
+		return nil, err
+	}
+	return &streampb.PollMessagesResponse{FrontendResponse: out}, nil
+}
+
+// PollWorkflowMessages reads a stream a workflow owns.
+//
+// Everything that addresses the stream comes from its owner: the shard, the
+// frontier, and the collection the log nodes were written under. That is also
+// why the log read below needs no special case. An attached stream's nodes are
+// written under the owner's shard, which is the shard this call routed to.
+func (h *handler) PollWorkflowMessages(
+	ctx context.Context,
+	req *streampb.PollWorkflowMessagesRequest,
+) (*streampb.PollWorkflowMessagesResponse, error) {
+	in := req.GetFrontendRequest()
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
+
+	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
+		namespace.ID(req.GetNamespaceId()), in.GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+
+	ref := workflowRef(req.GetNamespaceId(), in.GetWorkflowId())
+	name := ownedStreamName(in.GetStreamName())
+	from := in.GetFromOffset()
+
+	state, err := h.ownedStreamState(ctx, ref, name)
+	if err != nil {
+		return nil, err
+	}
+
+	if in.GetWaitNewMessages() && from == state.GetHeadOffset() && !state.GetClosed() {
+		state, err = h.waitForOwnedMessages(ctx, ref, name, from, state)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	out, err := h.readWindow(ctx, shardCtx, req.GetNamespaceId(), state, from,
+		in.GetMaxMessages(), in.GetTopics())
+	if err != nil {
+		return nil, err
+	}
+	return &streampb.PollWorkflowMessagesResponse{FrontendResponse: out}, nil
+}
+
+// readWindow serves a reader's window out of a frontier the caller resolved.
+// Standalone and attached streams differ only in where that frontier comes
+// from, so nothing past it is aware of the difference.
+func (h *handler) readWindow(
+	ctx context.Context,
+	shardCtx logStore,
+	namespaceID string,
+	state *streampb.StreamState,
+	from int64,
+	maxMessages int32,
+	topics []string,
+) (*streampb.PollMessagesOutput, error) {
 	if from < state.GetBaseOffset() {
 		return nil, serviceerror.NewFailedPreconditionf(
 			"offset %d has been truncated, the stream starts at %d", from, state.GetBaseOffset())
@@ -438,12 +516,12 @@ func (h *handler) PollMessages(
 		CloseReason: state.GetCloseReason(),
 	}
 	if from == state.GetHeadOffset() {
-		return &streampb.PollMessagesResponse{FrontendResponse: out}, nil
+		return out, nil
 	}
 
-	maxMessages := int(in.GetMaxMessages())
-	if maxMessages <= 0 {
-		maxMessages = stream.DefaultMaxMessagesPerPoll
+	limit := int(maxMessages)
+	if limit <= 0 {
+		limit = stream.DefaultMaxMessagesPerPoll
 	}
 
 	// Clip the read to what the caller can be given. One offset is one message,
@@ -451,29 +529,29 @@ func (h *handler) PollMessages(
 	// stream reads every batch from the offset to the head before trimming, and
 	// the whole stream lands in memory on the history host.
 	//
-	// A topic filter can leave the page short of maxMessages. That is fine: the
+	// A topic filter can leave the page short of the limit. That is fine: the
 	// response carries next_offset, so the caller reads on from there.
-	to := min(state.GetHeadOffset(), from+int64(maxMessages))
+	to := min(state.GetHeadOffset(), from+int64(limit))
 
 	// The frontier always comes from the component, so the cache can only save
 	// a read, never widen what the reader is allowed to see.
-	key := logKey(req.GetNamespaceId(), state.GetCollectionId())
+	key := logKey(namespaceID, state.GetCollectionId())
 	blobs, startOffsets, cached := h.tail.Get(key, from, to)
 	if !cached {
-		blobs, startOffsets, err = stream.ReadRange(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
-			req.GetNamespaceId(), state.GetCollectionId(), state.GetBucketSize(),
+		var err error
+		blobs, startOffsets, err = stream.ReadRange(ctx, shardCtx.GetExecutionManager(),
+			shardCtx.GetShardID(), namespaceID, state.GetCollectionId(), state.GetBucketSize(),
 			from, to, 0)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	messages, next, err := stream.CollectMessages(blobs, startOffsets, from, to,
-		maxMessages, in.GetTopics())
+	messages, next, err := stream.CollectMessages(blobs, startOffsets, from, to, limit, topics)
 	if err != nil {
 		return nil, err
 	}
-	if next < to && len(messages) == 0 && len(in.GetTopics()) > 0 {
+	if next < to && len(messages) == 0 && len(topics) > 0 {
 		// A page that filtered everything out still has to advance, or the
 		// caller loops forever on the same offsets. Limited to a filtered read
 		// on purpose: for any other reason a page comes back short, moving the
@@ -482,7 +560,28 @@ func (h *handler) PollMessages(
 	}
 	out.Messages = messages
 	out.NextOffset = next
-	return &streampb.PollMessagesResponse{FrontendResponse: out}, nil
+	return out, nil
+}
+
+// ownedStreamState snapshots an attached stream through the component that
+// owns it. A stream the workflow has not published to yet reads as an empty
+// one, so a reader may attach before the first event.
+func (h *handler) ownedStreamState(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	name string,
+) (*streampb.StreamState, error) {
+	state, err := chasm.ReadComponent(ctx, ref,
+		func(wf *chasmworkflow.Workflow, cctx chasm.Context, streamName string) (*streampb.StreamState, error) {
+			return wf.OwnedStreamState(cctx, streamName)
+		}, name)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		return &streampb.StreamState{}, nil
+	}
+	return state, nil
 }
 
 // waitForMessages blocks until the head passes the reader's offset or the
@@ -502,14 +601,57 @@ func (h *handler) waitForMessages(
 		func(s *stream.Stream, _ chasm.Context, offset int64) (*streampb.StreamState, bool, error) {
 			// Monotonic, as PollComponent requires: the head only advances and
 			// closed never clears.
-			satisfied := s.State.GetHeadOffset() > offset || s.State.GetClosed()
-			if !satisfied {
+			if !pollSatisfied(s.State, offset) {
 				return nil, false, nil
 			}
 			return common.CloneProto(s.State), true, nil
 		}, from)
+	return pollOutcome(pollCtx, ctx, state, err, current)
+}
+
+// waitForOwnedMessages is waitForMessages against a stream reached through its
+// owner. The predicate has to re-resolve the stream on every evaluation,
+// because what the poll observes is the owning execution.
+func (h *handler) waitForOwnedMessages(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	name string,
+	from int64,
+	current *streampb.StreamState,
+) (*streampb.StreamState, error) {
+	pollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, stream.LongPollTimeout, stream.LongPollBuffer)
+	defer cancel()
+
+	state, _, err := chasm.PollComponent(pollCtx, ref,
+		func(wf *chasmworkflow.Workflow, cctx chasm.Context, offset int64) (*streampb.StreamState, bool, error) {
+			owned, err := wf.OwnedStreamState(cctx, name)
+			if err != nil {
+				return nil, false, err
+			}
+			if !pollSatisfied(owned, offset) {
+				return nil, false, nil
+			}
+			return owned, true, nil
+		}, from)
+	return pollOutcome(pollCtx, ctx, state, err, current)
+}
+
+// pollSatisfied is the monotonic condition PollComponent requires: the head
+// only advances and closed never clears.
+func pollSatisfied(state *streampb.StreamState, from int64) bool {
+	return state.GetHeadOffset() > from || state.GetClosed()
+}
+
+// pollOutcome turns a long-poll result into the state the reader should be
+// served.
+func pollOutcome(
+	pollCtx, callerCtx context.Context,
+	state *streampb.StreamState,
+	err error,
+	current *streampb.StreamState,
+) (*streampb.StreamState, error) {
 	if err != nil {
-		if pollCtx.Err() != nil && ctx.Err() == nil {
+		if pollCtx.Err() != nil && callerCtx.Err() == nil {
 			// Our long-poll budget expired, not the caller's. Hand back the
 			// state we already had so the reader gets an empty response and
 			// polls again, rather than an error it has to tell apart from a
@@ -535,6 +677,27 @@ func (h *handler) DescribeStream(
 		return nil, err
 	}
 	return &streampb.DescribeStreamResponse{
+		FrontendResponse: &streampb.DescribeStreamOutput{State: state},
+	}, nil
+}
+
+// DescribeWorkflowStream reports the frontier of a stream a workflow owns. A
+// reader needs it to start at the tail rather than at the beginning, which an
+// attached stream offers no other way to find.
+func (h *handler) DescribeWorkflowStream(
+	ctx context.Context,
+	req *streampb.DescribeWorkflowStreamRequest,
+) (*streampb.DescribeWorkflowStreamResponse, error) {
+	in := req.GetFrontendRequest()
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
+
+	state, err := h.ownedStreamState(ctx,
+		workflowRef(req.GetNamespaceId(), in.GetWorkflowId()),
+		ownedStreamName(in.GetStreamName()))
+	if err != nil {
+		return nil, err
+	}
+	return &streampb.DescribeWorkflowStreamResponse{
 		FrontendResponse: &streampb.DescribeStreamOutput{State: state},
 	}, nil
 }

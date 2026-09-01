@@ -39,6 +39,17 @@ service StreamService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  // Routed on the owner, because the stream it reads has no id of its own.
+  rpc PollWorkflowMessages(PollWorkflowMessagesRequest) returns (PollWorkflowMessagesResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
+
+  rpc DescribeWorkflowStream(DescribeWorkflowStreamRequest) returns (DescribeWorkflowStreamResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   rpc CloseStream(CloseStreamRequest) returns (CloseStreamResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;

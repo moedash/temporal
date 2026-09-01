@@ -106,13 +106,54 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 	require.NotContains(t, string(raw), "calling tool",
 		"the event must name the range, never carry the payload")
 
-	// Known gap, asserted rather than tolerated: an attached stream lives
-	// inside the workflow's execution, so it has no standalone id to route on
-	// and the read API cannot reach it. Addressing it needs a path-addressed
-	// component reference, which CHASM does not expose publicly.
-	//
-	// When that lands, this expectation flips to reading the two messages back,
-	// and the test will fail here to say so rather than quietly passing.
+	// The bodies are readable from outside the workflow, which is the point of
+	// publishing them: an attached stream has no id, so it is addressed by its
+	// owner and its name.
+	poll, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: id, FromOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"planning", "calling tool"}, bodies(poll.GetFrontendResponse().GetMessages()))
+	require.Equal(t, int64(2), poll.GetFrontendResponse().GetNextOffset())
+	require.Equal(t, int64(2), poll.GetFrontendResponse().GetHeadOffset())
+
+	// The topic filter applies to an attached stream the same as to any other,
+	// and offsets stay assigned over the unfiltered stream.
+	filtered, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: id, FromOffset: 0, Topics: []string{"nothing-here"},
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, filtered.GetFrontendResponse().GetMessages())
+	require.Equal(t, int64(2), filtered.GetFrontendResponse().GetNextOffset(),
+		"a filtered page still advances the reader")
+
+	// A stream the workflow has not published to reads as an empty one, which
+	// is what lets a reader attach before the first event.
+	unwritten, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: id, StreamName: "not-published-to-yet", FromOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, unwritten.GetFrontendResponse().GetMessages())
+	require.Equal(t, int64(0), unwritten.GetFrontendResponse().GetHeadOffset())
+	require.False(t, unwritten.GetFrontendResponse().GetClosed())
+
+	// A workflow that does not exist is still an error, so a mistyped owner is
+	// not mistaken for a stream with nothing in it.
+	_, err = s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: id + "-does-not-exist", FromOffset: 0,
+		},
+	})
+	require.ErrorContains(t, err, "not found")
+
+	// An attached stream still has no standalone id, so the id-addressed read
+	// must not reach it.
 	streamID := we.GetRunId() + "/" + chasmworkflow.DefaultStreamName
 	_, err = s.client.PollMessages(s.ctx(), &streamlib.PollMessagesRequest{
 		FrontendRequest: &streamlib.PollMessagesInput{
@@ -120,5 +161,76 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 		},
 	})
 	require.ErrorContains(t, err, "stream not found",
-		"an attached stream is still only reachable through its workflow")
+		"an attached stream is only reachable through its workflow")
+}
+
+// A reader attached to a workflow's stream before the workflow published
+// anything. This is the ordinary case for a UI that opens on a session and
+// waits for the agent's first token, so the poll has to park on a stream that
+// does not exist yet and wake when the workflow creates it.
+func TestStreamWorkflowLongPollWakesOnPublish(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	id := "stream-wf-longpoll-" + uuid.NewString()
+	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.ns,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: "stream-publisher"},
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "tester",
+	})
+	require.NoError(t, err)
+
+	type result struct {
+		out *streamlib.PollMessagesOutput
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		resp, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+			FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+				Namespace: s.ns, WorkflowId: id, FromOffset: 0, WaitNewMessages: true,
+			},
+		})
+		done <- result{resp.GetFrontendResponse(), err}
+	}()
+
+	//nolint:staticcheck // SA1019: deprecated poller is the only one that can emit the command.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
+				Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
+					AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
+						Messages: []*streampb.StreamMessage{
+							{Body: &commonpb.Payload{Data: []byte("first token")}},
+						},
+					},
+				},
+			}}, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	select {
+	case r := <-done:
+		require.NoError(t, r.err)
+		require.Equal(t, []string{"first token"}, bodies(r.out.GetMessages()))
+		require.Equal(t, int64(1), r.out.GetNextOffset())
+	case <-time.After(25 * time.Second):
+		t.Fatal("the parked reader did not wake when the workflow published")
+	}
 }
