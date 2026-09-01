@@ -289,6 +289,122 @@ func (h *handler) AddMessages(
 	}, nil
 }
 
+// AddWorkflowMessages appends to a stream a workflow owns, from outside that
+// workflow.
+//
+// The workflow's own publishes ride its Workflow Task and cost no transition of
+// their own. This producer is off-shard, so it pays one transition on the
+// owning execution per batch, and batching is what keeps that cheap. It is the
+// path a model activity streaming tokens takes, where the workflow is only
+// bracketing what the activity produces.
+func (h *handler) AddWorkflowMessages(
+	ctx context.Context,
+	req *streampb.AddWorkflowMessagesRequest,
+) (*streampb.AddWorkflowMessagesResponse, error) {
+	in := req.GetFrontendRequest()
+	if len(in.GetMessages()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("no messages to append")
+	}
+
+	name := ownedStreamName(in.GetStreamName())
+
+	// Keyed on the owner and the name, which is what identifies the log here.
+	unlock := h.lockStream(req.GetNamespaceId(), in.GetWorkflowId()+"/"+name)
+	defer unlock()
+
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
+
+	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
+		namespace.ID(req.GetNamespaceId()), in.GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+
+	ref := workflowRef(req.GetNamespaceId(), in.GetWorkflowId())
+
+	state, err := chasm.ReadComponent(ctx, ref,
+		func(wf *chasmworkflow.Workflow, cctx chasm.Context, streamName string) (*streampb.StreamState, error) {
+			return wf.OwnedStreamState(cctx, streamName)
+		}, name)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		// Nothing has published yet, so the collection id and bucket size this
+		// write needs do not exist. Creating the stream is a transition, and
+		// only the first writer ever pays it.
+		state, _, err = chasm.UpdateComponent(ctx, ref,
+			(*chasmworkflow.Workflow).EnsureOwnedStream, name)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	txnID, err := shardCtx.GenerateTaskID()
+	if err != nil {
+		return nil, err
+	}
+	if txnID <= state.GetLastTxnId() {
+		txnID = state.GetLastTxnId() + 1
+	}
+
+	head := state.GetHeadOffset()
+	addReq := stream.AddMessagesRequest{
+		Messages:   in.GetMessages(),
+		ProducerID: in.GetProducerId(),
+		Sequence:   in.GetSequence(),
+		TxnID:      txnID,
+		// Pinned to the head just read, so a workflow task that published
+		// between the read and the commit fails this append rather than
+		// letting it claim offsets whose node it did not write.
+		ExpectedOffset: &head,
+	}
+
+	// Dry run against the state we read, so the node is written at the offsets
+	// the commit will claim, exactly as the standalone path does.
+	staged := &stream.Stream{State: state}
+	preview, err := staged.AddMessages(nil, addReq)
+	if err != nil {
+		return nil, err
+	}
+	if !preview.Deduplicated {
+		for _, op := range preview.Appends {
+			if err := stream.WriteAppend(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
+				req.GetNamespaceId(), state.GetCollectionId(), op); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	result, _, err := chasm.UpdateComponent(ctx, ref,
+		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, r stream.AddMessagesRequest) (stream.AddMessagesResult, error) {
+			return wf.AppendToOwnedStream(mctx, name, r)
+		}, addReq)
+	if err != nil {
+		return nil, err
+	}
+
+	// Only after the commit, for the same reason as the standalone path: a
+	// write whose commit failed can be superseded by a retry carrying different
+	// bytes at the same offsets.
+	if !result.Deduplicated {
+		for _, op := range preview.Appends {
+			h.tail.Put(logKey(req.GetNamespaceId(), state.GetCollectionId()),
+				result.FirstOffset, result.NextOffset, op.Blob)
+		}
+	}
+	h.reclaim(ctx, shardCtx, req.GetNamespaceId(), state.GetCollectionId(), result.ReclaimableBuckets)
+
+	return &streampb.AddWorkflowMessagesResponse{
+		FrontendResponse: &streampb.AddMessagesOutput{
+			FirstOffset:  result.FirstOffset,
+			NextOffset:   result.NextOffset,
+			Count:        result.Count,
+			Deduplicated: result.Deduplicated,
+		},
+	}, nil
+}
+
 func (h *handler) FinishWriting(
 	ctx context.Context,
 	req *streampb.FinishWritingRequest,

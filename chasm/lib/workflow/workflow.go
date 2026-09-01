@@ -655,3 +655,40 @@ func (w *Workflow) OwnedStreamState(
 	}
 	return field.Get(ctx).Snapshot(ctx, struct{}{})
 }
+
+// EnsureOwnedStream creates a stream this workflow owns if the first writer to
+// it is not the workflow itself, and returns its state either way.
+//
+// An outside writer needs the stream's collection id and bucket size to write
+// its log node, and both are decided when the stream is created. So the first
+// append from outside costs one transition to create the stream and learn
+// them, and none after that.
+func (w *Workflow) EnsureOwnedStream(
+	mctx chasm.MutableContext,
+	name string,
+) (*streamlib.StreamState, error) {
+	s, err := w.streamNamed(mctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return s.Snapshot(mctx, struct{}{})
+}
+
+// AppendToOwnedStream appends to a stream this workflow owns on behalf of a
+// writer outside the execution.
+//
+// The workflow's own publishes go through the command handler, which advances
+// the frontier inside the Workflow Task's commit. This is the other producer:
+// it advances the same frontier in a transition of its own, so the two are
+// serialized by the execution rather than by anything the stream does.
+func (w *Workflow) AppendToOwnedStream(
+	mctx chasm.MutableContext,
+	name string,
+	req stream.AddMessagesRequest,
+) (stream.AddMessagesResult, error) {
+	s, err := w.streamNamed(mctx, name)
+	if err != nil {
+		return stream.AddMessagesResult{}, err
+	}
+	return s.AddMessages(mctx, req)
+}

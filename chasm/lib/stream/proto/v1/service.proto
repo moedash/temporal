@@ -50,6 +50,11 @@ service StreamService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  rpc AddWorkflowMessages(AddWorkflowMessagesRequest) returns (AddWorkflowMessagesResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   rpc CloseStream(CloseStreamRequest) returns (CloseStreamResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;

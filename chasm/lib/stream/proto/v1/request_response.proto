@@ -130,6 +130,19 @@ message DescribeWorkflowStreamInput {
   string stream_name = 3;
 }
 
+// Appending to a stream a workflow owns, from outside that workflow. The
+// workflow's own publishes ride its Workflow Task instead.
+message AddWorkflowMessagesInput {
+  string namespace = 1;
+  string workflow_id = 2;
+  // Empty means the workflow's default output stream.
+  string stream_name = 3;
+  repeated StreamMessage messages = 4;
+  // Optional idempotency, as on AddMessagesInput.
+  string producer_id = 5;
+  int64 sequence = 6;
+}
+
 message DescribeStreamOutput {
   StreamState state = 1;
 }
@@ -219,6 +232,14 @@ message DescribeWorkflowStreamRequest {
 }
 message DescribeWorkflowStreamResponse {
   DescribeStreamOutput frontend_response = 1;
+}
+
+message AddWorkflowMessagesRequest {
+  string namespace_id = 1;
+  AddWorkflowMessagesInput frontend_request = 2;
+}
+message AddWorkflowMessagesResponse {
+  AddMessagesOutput frontend_response = 1;
 }
 
 message CloseStreamRequest {

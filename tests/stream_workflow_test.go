@@ -234,3 +234,95 @@ func TestStreamWorkflowLongPollWakesOnPublish(t *testing.T) {
 		t.Fatal("the parked reader did not wake when the workflow published")
 	}
 }
+
+// Two producers on one stream: the workflow, whose publishes ride its Workflow
+// Task, and something outside it. This is the shape of an agent session, where
+// a model activity produces the tokens and the workflow only brackets them.
+func TestStreamWorkflowTakesAppendsFromOutsideToo(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	id := "stream-wf-mixed-" + uuid.NewString()
+	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.ns,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: "stream-publisher"},
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "tester",
+	})
+	require.NoError(t, err)
+
+	appendOutside := func(body string) *streamlib.AddMessagesOutput {
+		t.Helper()
+		resp, err := s.client.AddWorkflowMessages(s.ctx(), &streamlib.AddWorkflowMessagesRequest{
+			FrontendRequest: &streamlib.AddWorkflowMessagesInput{
+				Namespace: s.ns, WorkflowId: id,
+				Messages: []*streamlib.StreamMessage{{
+					Body: &commonpb.Payload{Data: []byte(body)},
+					Kind: streamlib.STREAM_MESSAGE_KIND_DATA,
+				}},
+			},
+		})
+		require.NoError(t, err)
+		return resp.GetFrontendResponse()
+	}
+
+	// The first writer creates the stream, and here that is not the workflow.
+	first := appendOutside("token one")
+	require.Equal(t, int64(0), first.GetFirstOffset())
+
+	//nolint:staticcheck // SA1019: deprecated poller is the only one that can emit the command.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
+				Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
+					AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
+						Messages: []*streampb.StreamMessage{
+							{Body: &commonpb.Payload{Data: []byte("turn ended")}},
+						},
+					},
+				},
+			}}, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	// The workflow appended after the outside writer, so it has to continue the
+	// same log rather than start its own.
+	require.Equal(t, int64(2), appendOutside("token two").GetFirstOffset())
+
+	poll, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: id, FromOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"token one", "turn ended", "token two"},
+		bodies(poll.GetFrontendResponse().GetMessages()),
+		"both producers write one ordered log")
+
+	// The event names the offset the workflow's own publish landed at, which
+	// only holds if the workflow saw the outside writer's message first.
+	events := env.GetHistory(s.ns, &commonpb.WorkflowExecution{WorkflowId: id})
+	var added []*historypb.WorkflowStreamMessagesAddedEventAttributes
+	for _, e := range events {
+		if a := e.GetWorkflowStreamMessagesAddedEventAttributes(); a != nil {
+			added = append(added, a)
+		}
+	}
+	require.Len(t, added, 1)
+	require.Equal(t, int64(1), added[0].GetFirstOffset())
+}

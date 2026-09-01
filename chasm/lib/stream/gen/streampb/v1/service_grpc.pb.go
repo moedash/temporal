@@ -28,6 +28,7 @@ const (
 	StreamService_DescribeStream_FullMethodName         = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/DescribeStream"
 	StreamService_PollWorkflowMessages_FullMethodName   = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/PollWorkflowMessages"
 	StreamService_DescribeWorkflowStream_FullMethodName = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/DescribeWorkflowStream"
+	StreamService_AddWorkflowMessages_FullMethodName    = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/AddWorkflowMessages"
 	StreamService_CloseStream_FullMethodName            = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/CloseStream"
 	StreamService_TruncateStream_FullMethodName         = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/TruncateStream"
 	StreamService_ListStreams_FullMethodName            = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/ListStreams"
@@ -47,6 +48,7 @@ type StreamServiceClient interface {
 	// Routed on the owner, because the stream it reads has no id of its own.
 	PollWorkflowMessages(ctx context.Context, in *PollWorkflowMessagesRequest, opts ...grpc.CallOption) (*PollWorkflowMessagesResponse, error)
 	DescribeWorkflowStream(ctx context.Context, in *DescribeWorkflowStreamRequest, opts ...grpc.CallOption) (*DescribeWorkflowStreamResponse, error)
+	AddWorkflowMessages(ctx context.Context, in *AddWorkflowMessagesRequest, opts ...grpc.CallOption) (*AddWorkflowMessagesResponse, error)
 	CloseStream(ctx context.Context, in *CloseStreamRequest, opts ...grpc.CallOption) (*CloseStreamResponse, error)
 	TruncateStream(ctx context.Context, in *TruncateStreamRequest, opts ...grpc.CallOption) (*TruncateStreamResponse, error)
 	// Served on the frontend only: it queries visibility rather than a stream,
@@ -135,6 +137,15 @@ func (c *streamServiceClient) DescribeWorkflowStream(ctx context.Context, in *De
 	return out, nil
 }
 
+func (c *streamServiceClient) AddWorkflowMessages(ctx context.Context, in *AddWorkflowMessagesRequest, opts ...grpc.CallOption) (*AddWorkflowMessagesResponse, error) {
+	out := new(AddWorkflowMessagesResponse)
+	err := c.cc.Invoke(ctx, StreamService_AddWorkflowMessages_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *streamServiceClient) CloseStream(ctx context.Context, in *CloseStreamRequest, opts ...grpc.CallOption) (*CloseStreamResponse, error) {
 	out := new(CloseStreamResponse)
 	err := c.cc.Invoke(ctx, StreamService_CloseStream_FullMethodName, in, out, opts...)
@@ -184,6 +195,7 @@ type StreamServiceServer interface {
 	// Routed on the owner, because the stream it reads has no id of its own.
 	PollWorkflowMessages(context.Context, *PollWorkflowMessagesRequest) (*PollWorkflowMessagesResponse, error)
 	DescribeWorkflowStream(context.Context, *DescribeWorkflowStreamRequest) (*DescribeWorkflowStreamResponse, error)
+	AddWorkflowMessages(context.Context, *AddWorkflowMessagesRequest) (*AddWorkflowMessagesResponse, error)
 	CloseStream(context.Context, *CloseStreamRequest) (*CloseStreamResponse, error)
 	TruncateStream(context.Context, *TruncateStreamRequest) (*TruncateStreamResponse, error)
 	// Served on the frontend only: it queries visibility rather than a stream,
@@ -220,6 +232,9 @@ func (UnimplementedStreamServiceServer) PollWorkflowMessages(context.Context, *P
 }
 func (UnimplementedStreamServiceServer) DescribeWorkflowStream(context.Context, *DescribeWorkflowStreamRequest) (*DescribeWorkflowStreamResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeWorkflowStream not implemented")
+}
+func (UnimplementedStreamServiceServer) AddWorkflowMessages(context.Context, *AddWorkflowMessagesRequest) (*AddWorkflowMessagesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddWorkflowMessages not implemented")
 }
 func (UnimplementedStreamServiceServer) CloseStream(context.Context, *CloseStreamRequest) (*CloseStreamResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CloseStream not implemented")
@@ -390,6 +405,24 @@ func _StreamService_DescribeWorkflowStream_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _StreamService_AddWorkflowMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddWorkflowMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamServiceServer).AddWorkflowMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamService_AddWorkflowMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamServiceServer).AddWorkflowMessages(ctx, req.(*AddWorkflowMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _StreamService_CloseStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CloseStreamRequest)
 	if err := dec(in); err != nil {
@@ -500,6 +533,10 @@ var StreamService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeWorkflowStream",
 			Handler:    _StreamService_DescribeWorkflowStream_Handler,
+		},
+		{
+			MethodName: "AddWorkflowMessages",
+			Handler:    _StreamService_AddWorkflowMessages_Handler,
 		},
 		{
 			MethodName: "CloseStream",

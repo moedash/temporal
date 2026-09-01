@@ -130,6 +130,18 @@ func (h *FrontendHandler) DescribeWorkflowStream(
 	})
 }
 
+func (h *FrontendHandler) AddWorkflowMessages(
+	ctx context.Context, req *streampb.AddWorkflowMessagesRequest,
+) (*streampb.AddWorkflowMessagesResponse, error) {
+	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+	return h.client.AddWorkflowMessages(ctx, &streampb.AddWorkflowMessagesRequest{
+		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+	})
+}
+
 func (h *FrontendHandler) DescribeStream(
 	ctx context.Context, req *streampb.DescribeStreamRequest,
 ) (*streampb.DescribeStreamResponse, error) {

@@ -486,6 +486,43 @@ func (this *DescribeWorkflowStreamInput) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type AddWorkflowMessagesInput to the protobuf v3 wire format
+func (val *AddWorkflowMessagesInput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AddWorkflowMessagesInput from the protobuf v3 wire format
+func (val *AddWorkflowMessagesInput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AddWorkflowMessagesInput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AddWorkflowMessagesInput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AddWorkflowMessagesInput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AddWorkflowMessagesInput
+	switch t := that.(type) {
+	case *AddWorkflowMessagesInput:
+		that1 = t
+	case AddWorkflowMessagesInput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type DescribeStreamOutput to the protobuf v3 wire format
 func (val *DescribeStreamOutput) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -1329,6 +1366,80 @@ func (this *DescribeWorkflowStreamResponse) Equal(that interface{}) bool {
 	case *DescribeWorkflowStreamResponse:
 		that1 = t
 	case DescribeWorkflowStreamResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AddWorkflowMessagesRequest to the protobuf v3 wire format
+func (val *AddWorkflowMessagesRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AddWorkflowMessagesRequest from the protobuf v3 wire format
+func (val *AddWorkflowMessagesRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AddWorkflowMessagesRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AddWorkflowMessagesRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AddWorkflowMessagesRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AddWorkflowMessagesRequest
+	switch t := that.(type) {
+	case *AddWorkflowMessagesRequest:
+		that1 = t
+	case AddWorkflowMessagesRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AddWorkflowMessagesResponse to the protobuf v3 wire format
+func (val *AddWorkflowMessagesResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AddWorkflowMessagesResponse from the protobuf v3 wire format
+func (val *AddWorkflowMessagesResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AddWorkflowMessagesResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AddWorkflowMessagesResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AddWorkflowMessagesResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AddWorkflowMessagesResponse
+	switch t := that.(type) {
+	case *AddWorkflowMessagesResponse:
+		that1 = t
+	case AddWorkflowMessagesResponse:
 		that1 = &t
 	default:
 		return false
