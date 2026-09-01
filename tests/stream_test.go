@@ -585,6 +585,26 @@ func TestStreamPollAfterIdIsReusedServesTheNewStream(t *testing.T) {
 		"a reused id served bytes from the deleted stream")
 }
 
+// A filtered read hands back messages whose offsets are not contiguous, which
+// is why the offset rides on the message. A reader cannot count them.
+func TestStreamFilteredReadReportsRealOffsets(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-filtered-offsets"
+	s.create(ctx, t, id)
+
+	for i, topic := range []string{"a", "b", "a", "b", "a"} {
+		_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{
+			Messages: streamMsgs(topic, fmt.Sprintf("m%d", i)),
+		})
+		require.NoError(t, err)
+	}
+
+	got := s.pollMaxTopics(ctx, t, id, 0, 0, "a")
+	require.Equal(t, []string{"m0", "m2", "m4"}, bodies(got.GetMessages()))
+	require.Equal(t, []int64{0, 2, 4}, offsets(got.GetMessages()))
+}
+
 func (s *streamTestEnv) pollMaxTopics(
 	ctx context.Context, t *testing.T, streamID string, from int64, maxMessages int32, topics ...string,
 ) *streampb.PollMessagesOutput {
@@ -610,4 +630,12 @@ func (s *streamTestEnv) pollMax(
 	})
 	require.NoError(t, err)
 	return resp.GetFrontendResponse()
+}
+
+func offsets(msgs []*streampb.StreamMessage) []int64 {
+	out := make([]int64, len(msgs))
+	for i, m := range msgs {
+		out[i] = m.GetOffset()
+	}
+	return out
 }

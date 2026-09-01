@@ -116,6 +116,8 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"planning", "calling tool"}, bodies(poll.GetFrontendResponse().GetMessages()))
+	require.Equal(t, []int64{0, 1}, offsets(poll.GetFrontendResponse().GetMessages()),
+		"each message carries where it sits in the log, so a reader can resume between them")
 	require.Equal(t, int64(2), poll.GetFrontendResponse().GetNextOffset())
 	require.Equal(t, int64(2), poll.GetFrontendResponse().GetHeadOffset())
 
@@ -325,4 +327,83 @@ func TestStreamWorkflowTakesAppendsFromOutsideToo(t *testing.T) {
 	}
 	require.Len(t, added, 1)
 	require.Equal(t, int64(1), added[0].GetFirstOffset())
+}
+
+// A reader tailing a workflow that ends has to be released. Nothing can be
+// added to a stream inside a closed execution, so a reader parked on it would
+// otherwise wait for a message that can never come.
+func TestStreamWorkflowStreamClosesWithItsWorkflow(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	id := "stream-wf-close-" + uuid.NewString()
+	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.ns,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: "stream-publisher"},
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "tester",
+	})
+	require.NoError(t, err)
+
+	describe := func() *streamlib.StreamState {
+		t.Helper()
+		resp, err := s.client.DescribeWorkflowStream(s.ctx(), &streamlib.DescribeWorkflowStreamRequest{
+			FrontendRequest: &streamlib.DescribeWorkflowStreamInput{
+				Namespace: s.ns, WorkflowId: id,
+			},
+		})
+		require.NoError(t, err)
+		return resp.GetFrontendResponse().GetState()
+	}
+
+	//nolint:staticcheck // SA1019: deprecated poller is the only one that can emit the command.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
+					Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
+						AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
+							Messages: []*streampb.StreamMessage{
+								{Body: &commonpb.Payload{Data: []byte("last word")}},
+							},
+						},
+					},
+				},
+				{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+					},
+				},
+			}, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	require.True(t, describe().GetClosed(), "the stream of a completed workflow reads as closed")
+
+	// Closed does not mean gone. Everything published before the workflow
+	// ended is still there to be read.
+	poll, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: id, FromOffset: 0, WaitNewMessages: true,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"last word"}, bodies(poll.GetFrontendResponse().GetMessages()))
+	require.True(t, poll.GetFrontendResponse().GetClosed())
 }

@@ -45,6 +45,9 @@ func CollectMessages(
 					continue
 				}
 			}
+			// Set here rather than stored: it is decided by where the
+			// message sits in the log, not by what the producer wrote.
+			msg.Offset = offset
 			out = append(out, msg)
 		}
 	}

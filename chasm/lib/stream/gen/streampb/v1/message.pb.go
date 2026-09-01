@@ -96,6 +96,10 @@ type StreamMessage struct {
 	// this lets a consumer reason about one topic without decoding the rest.
 	TopicSequence int64             `protobuf:"varint,4,opt,name=topic_sequence,json=topicSequence,proto3" json:"topic_sequence,omitempty"`
 	Kind          StreamMessageKind `protobuf:"varint,5,opt,name=kind,proto3,enum=temporal.server.chasm.lib.stream.proto.v1.StreamMessageKind" json:"kind,omitempty"`
+	// Position in the whole stream, set on read and never stored. A consumer
+	// that resumes at message granularity needs it, and a topic-filtered read
+	// leaves gaps that make it underivable from the response alone.
+	Offset        int64 `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -165,6 +169,13 @@ func (x *StreamMessage) GetKind() StreamMessageKind {
 	return STREAM_MESSAGE_KIND_UNSPECIFIED
 }
 
+func (x *StreamMessage) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
 // One append is one batch, and one batch is one log node. The server stores
 // this serialized and opaque; it decodes only to trim a partial first page or
 // to apply a topic filter.
@@ -216,13 +227,14 @@ var File_temporal_server_chasm_lib_stream_proto_v1_message_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/stream/proto/v1/message.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a$temporal/api/common/v1/message.proto\"\x95\x03\n" +
+	"7temporal/server/chasm/lib/stream/proto/v1/message.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a$temporal/api/common/v1/message.proto\"\xad\x03\n" +
 	"\rStreamMessage\x123\n" +
 	"\x04body\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x04body\x12b\n" +
 	"\bmetadata\x18\x02 \x03(\v2F.temporal.server.chasm.lib.stream.proto.v1.StreamMessage.MetadataEntryR\bmetadata\x12\x14\n" +
 	"\x05topic\x18\x03 \x01(\tR\x05topic\x12%\n" +
 	"\x0etopic_sequence\x18\x04 \x01(\x03R\rtopicSequence\x12P\n" +
-	"\x04kind\x18\x05 \x01(\x0e2<.temporal.server.chasm.lib.stream.proto.v1.StreamMessageKindR\x04kind\x1a\\\n" +
+	"\x04kind\x18\x05 \x01(\x0e2<.temporal.server.chasm.lib.stream.proto.v1.StreamMessageKindR\x04kind\x12\x16\n" +
+	"\x06offset\x18\x06 \x01(\x03R\x06offset\x1a\\\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\"j\n" +

@@ -24,6 +24,11 @@ message StreamMessage {
   // this lets a consumer reason about one topic without decoding the rest.
   int64 topic_sequence = 4;
   StreamMessageKind kind = 5;
+
+  // Position in the whole stream, set on read and never stored. A consumer
+  // that resumes at message granularity needs it, and a topic-filtered read
+  // leaves gaps that make it underivable from the response alone.
+  int64 offset = 6;
 }
 
 // One append is one batch, and one batch is one log node. The server stores

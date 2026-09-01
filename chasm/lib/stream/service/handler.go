@@ -687,15 +687,33 @@ func (h *handler) ownedStreamState(
 	ref chasm.ComponentRef,
 	name string,
 ) (*streampb.StreamState, error) {
-	state, err := chasm.ReadComponent(ctx, ref,
-		func(wf *chasmworkflow.Workflow, cctx chasm.Context, streamName string) (*streampb.StreamState, error) {
-			return wf.OwnedStreamState(cctx, streamName)
-		}, name)
+	state, err := chasm.ReadComponent(ctx, ref, readOwnedStream, name)
+	if err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
+// readOwnedStream snapshots an attached stream and reports whether anything
+// can still be added to it.
+//
+// A closed execution can take no more publishes, from its own Workflow Task or
+// from anywhere else, so its stream is finished whether or not a producer said
+// so. Without this a reader tailing a workflow that ended stays parked forever.
+func readOwnedStream(
+	wf *chasmworkflow.Workflow,
+	cctx chasm.Context,
+	name string,
+) (*streampb.StreamState, error) {
+	state, err := wf.OwnedStreamState(cctx, name)
 	if err != nil {
 		return nil, err
 	}
 	if state == nil {
-		return &streampb.StreamState{}, nil
+		state = &streampb.StreamState{}
+	}
+	if !cctx.ExecutionInfo().CloseTime.IsZero() {
+		state.Closed = true
 	}
 	return state, nil
 }
@@ -740,7 +758,7 @@ func (h *handler) waitForOwnedMessages(
 
 	state, _, err := chasm.PollComponent(pollCtx, ref,
 		func(wf *chasmworkflow.Workflow, cctx chasm.Context, offset int64) (*streampb.StreamState, bool, error) {
-			owned, err := wf.OwnedStreamState(cctx, name)
+			owned, err := readOwnedStream(wf, cctx, name)
 			if err != nil {
 				return nil, false, err
 			}
