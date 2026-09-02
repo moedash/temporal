@@ -196,11 +196,9 @@ func (s *Stream) AddMessages(
 
 	appendOp := LogAppend{
 		Bucket:      BucketOf(first, s.State.BucketSize),
-		NodeID:      NodeIDOf(first, s.State.BucketSize),
-		TxnID:       txnID,
-		PrevTxnID:   s.State.LastTxnId,
+		StartOffset: first,
+		NextOffset:   first + int64(len(req.Messages)),
 		Blob:        blob,
-		IsNewBucket: NodeIDOf(first, s.State.BucketSize) == 1,
 	}
 
 	s.State.HeadOffset = first + count

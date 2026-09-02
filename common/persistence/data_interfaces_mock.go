@@ -214,6 +214,20 @@ func (mr *MockExecutionManagerMockRecorder) AppendRawHistoryNodes(ctx, request a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendRawHistoryNodes", reflect.TypeOf((*MockExecutionManager)(nil).AppendRawHistoryNodes), ctx, request)
 }
 
+// AppendStreamLog mocks base method.
+func (m *MockExecutionManager) AppendStreamLog(ctx context.Context, request *InternalAppendStreamLogRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendStreamLog", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AppendStreamLog indicates an expected call of AppendStreamLog.
+func (mr *MockExecutionManagerMockRecorder) AppendStreamLog(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendStreamLog", reflect.TypeOf((*MockExecutionManager)(nil).AppendStreamLog), ctx, request)
+}
+
 // Close mocks base method.
 func (m *MockExecutionManager) Close() {
 	m.ctrl.T.Helper()
@@ -310,6 +324,20 @@ func (m *MockExecutionManager) DeleteReplicationTaskFromDLQ(ctx context.Context,
 func (mr *MockExecutionManagerMockRecorder) DeleteReplicationTaskFromDLQ(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteReplicationTaskFromDLQ", reflect.TypeOf((*MockExecutionManager)(nil).DeleteReplicationTaskFromDLQ), ctx, request)
+}
+
+// DeleteStreamLogBucket mocks base method.
+func (m *MockExecutionManager) DeleteStreamLogBucket(ctx context.Context, request *InternalDeleteStreamLogBucketRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteStreamLogBucket", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteStreamLogBucket indicates an expected call of DeleteStreamLogBucket.
+func (mr *MockExecutionManagerMockRecorder) DeleteStreamLogBucket(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteStreamLogBucket", reflect.TypeOf((*MockExecutionManager)(nil).DeleteStreamLogBucket), ctx, request)
 }
 
 // DeleteWorkflowExecution mocks base method.
@@ -574,6 +602,21 @@ func (m *MockExecutionManager) ReadRawHistoryBranch(ctx context.Context, request
 func (mr *MockExecutionManagerMockRecorder) ReadRawHistoryBranch(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadRawHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).ReadRawHistoryBranch), ctx, request)
+}
+
+// ReadStreamLog mocks base method.
+func (m *MockExecutionManager) ReadStreamLog(ctx context.Context, request *InternalReadStreamLogRequest) (*InternalReadStreamLogResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadStreamLog", ctx, request)
+	ret0, _ := ret[0].(*InternalReadStreamLogResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadStreamLog indicates an expected call of ReadStreamLog.
+func (mr *MockExecutionManagerMockRecorder) ReadStreamLog(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadStreamLog", reflect.TypeOf((*MockExecutionManager)(nil).ReadStreamLog), ctx, request)
 }
 
 // SetWorkflowExecution mocks base method.

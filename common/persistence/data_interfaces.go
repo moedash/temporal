@@ -1162,6 +1162,13 @@ type (
 		AppendHistoryNodes(ctx context.Context, request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// AppendRawHistoryNodes add a node of raw histories to history node table
 		AppendRawHistoryNodes(ctx context.Context, request *AppendRawHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
+
+		// Stream logs. Not history: an offset-addressed sequence a stream
+		// component owns, where a write is idempotent by the offset its batch
+		// starts at.
+		AppendStreamLog(ctx context.Context, request *InternalAppendStreamLogRequest) error
+		ReadStreamLog(ctx context.Context, request *InternalReadStreamLogRequest) (*InternalReadStreamLogResponse, error)
+		DeleteStreamLogBucket(ctx context.Context, request *InternalDeleteStreamLogBucketRequest) error
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch

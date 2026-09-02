@@ -160,6 +160,20 @@ type (
 		DeleteHistoryBranch(ctx context.Context, request *InternalDeleteHistoryBranchRequest) error
 		// GetHistoryTreeContainingBranch returns all branch information of the tree containing the specified branch
 		GetHistoryTreeContainingBranch(ctx context.Context, request *InternalGetHistoryTreeContainingBranchRequest) (*InternalGetHistoryTreeContainingBranchResponse, error)
+		// The below are the stream log APIs. A stream log is not history: it is
+		// an offset-addressed sequence a stream component owns, and a write is
+		// idempotent by the offset its batch starts at rather than ordered
+		// against other writers by a transaction id.
+
+		// AppendStreamLog writes one batch, replacing any batch already at that
+		// offset. A retry of an append addresses the same row.
+		AppendStreamLog(ctx context.Context, request *InternalAppendStreamLogRequest) error
+		// ReadStreamLog returns the batches covering a range, beginning with the
+		// batch that contains the first offset asked for.
+		ReadStreamLog(ctx context.Context, request *InternalReadStreamLogRequest) (*InternalReadStreamLogResponse, error)
+		// DeleteStreamLogBucket drops a whole bucket, the unit of reclamation.
+		DeleteStreamLogBucket(ctx context.Context, request *InternalDeleteStreamLogBucketRequest) error
+
 		// GetAllHistoryTreeBranches returns all branches of all trees.
 		// Note that branches may be skipped or duplicated across pages if there are branches created or deleted while
 		// paginating through results.
@@ -530,6 +544,44 @@ type (
 		PrevTransactionID int64
 		// The events to be appended
 		Events *commonpb.DataBlob
+	}
+
+	// InternalAppendStreamLogRequest writes one batch of a stream log.
+	InternalAppendStreamLogRequest struct {
+		ShardID      int32
+		NamespaceID  string
+		CollectionID string
+		Bucket       int64
+		StartOffset  int64
+		NextOffset    int64
+		Node         *commonpb.DataBlob
+	}
+
+	// InternalReadStreamLogRequest reads the batches covering
+	// [MinOffset, MaxOffset) from one bucket.
+	InternalReadStreamLogRequest struct {
+		ShardID      int32
+		NamespaceID  string
+		CollectionID string
+		Bucket       int64
+		MinOffset    int64
+		MaxOffset    int64
+		PageSize     int
+	}
+
+	// InternalReadStreamLogResponse returns batches with the offset each begins
+	// at, so a caller can drop the part of the first batch it did not ask for.
+	InternalReadStreamLogResponse struct {
+		Batches      []*commonpb.DataBlob
+		StartOffsets []int64
+	}
+
+	// InternalDeleteStreamLogBucketRequest drops one bucket.
+	InternalDeleteStreamLogBucketRequest struct {
+		ShardID      int32
+		NamespaceID  string
+		CollectionID string
+		Bucket       int64
 	}
 
 	// InternalAppendHistoryNodesRequest is used to append a batch of history nodes

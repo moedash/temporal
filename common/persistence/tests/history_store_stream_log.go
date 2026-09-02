@@ -193,8 +193,6 @@ func (s *HistoryEventsSuite) streamAppend(
 	bucketSize int64,
 	firstOffset int64,
 	count int64,
-	txnID int64,
-	prevTxnID int64,
 	body string,
 ) {
 	blob := &commonpb.DataBlob{
@@ -203,11 +201,9 @@ func (s *HistoryEventsSuite) streamAppend(
 	}
 	err := stream.WriteAppend(s.Ctx, s.store, s.ShardID, testStreamNamespaceID, collectionID, stream.LogAppend{
 		Bucket:      stream.BucketOf(firstOffset, bucketSize),
-		NodeID:      stream.NodeIDOf(firstOffset, bucketSize),
-		TxnID:       txnID,
-		PrevTxnID:   prevTxnID,
+		StartOffset: firstOffset,
+		NextOffset:  firstOffset + count,
 		Blob:        blob,
-		IsNewBucket: stream.NodeIDOf(firstOffset, bucketSize) == 1,
 	})
 	s.NoError(err)
 }
@@ -237,9 +233,9 @@ func (s *HistoryEventsSuite) TestStreamLogBucketedReadSpansTrees() {
 	collectionID := uuid.NewString()
 	const bucketSize = 4
 
-	s.streamAppend(collectionID, bucketSize, 0, 4, 100, 0, "bucket0")
-	s.streamAppend(collectionID, bucketSize, 4, 4, 200, 100, "bucket1")
-	s.streamAppend(collectionID, bucketSize, 8, 2, 300, 200, "bucket2")
+	s.streamAppend(collectionID, bucketSize, 0, 4, "bucket0")
+	s.streamAppend(collectionID, bucketSize, 4, 4, "bucket1")
+	s.streamAppend(collectionID, bucketSize, 8, 2, "bucket2")
 
 	s.Equal([]string{"bucket0", "bucket1", "bucket2"}, s.streamRead(collectionID, bucketSize, 0, 10))
 	s.Equal([]string{"bucket1"}, s.streamRead(collectionID, bucketSize, 4, 8))
@@ -253,17 +249,17 @@ func (s *HistoryEventsSuite) TestStreamLogBucketBoundaryDropsStaleNode() {
 	collectionID := uuid.NewString()
 	const bucketSize = 4
 
-	s.streamAppend(collectionID, bucketSize, 0, 3, 100, 0, "committed")
+	s.streamAppend(collectionID, bucketSize, 0, 3, "committed")
 
 	// Abandoned attempt: tail of bucket 0 plus the head of bucket 1.
-	s.streamAppend(collectionID, bucketSize, 3, 1, 200, 100, "stale-bucket0")
-	s.streamAppend(collectionID, bucketSize, 4, 2, 201, 200, "stale-bucket1")
+	s.streamAppend(collectionID, bucketSize, 3, 1, "stale-bucket0")
+	s.streamAppend(collectionID, bucketSize, 4, 2, "stale-bucket1")
 
 	// Retry covers only bucket 0, so the bucket 1 node is orphaned.
-	s.streamAppend(collectionID, bucketSize, 3, 1, 300, 100, "retry")
+	s.streamAppend(collectionID, bucketSize, 3, 1, "retry")
 
 	// A later append reaches into bucket 1, moving the frontier past the orphan.
-	s.streamAppend(collectionID, bucketSize, 4, 2, 400, 300, "real-bucket1")
+	s.streamAppend(collectionID, bucketSize, 4, 2, "real-bucket1")
 
 	s.Equal(
 		[]string{"committed", "retry", "real-bucket1"},
@@ -326,5 +322,64 @@ func (s *HistoryEventsSuite) TestStreamLogOrphanFromAnotherSequenceShadowsLaterW
 		[]int64{1, 2, 3, 4, 5, 6},
 		s.eventIDsOf(events),
 		"one sequence per shard: the uncommitted node is superseded and nothing is lost",
+	)
+}
+
+// TestStreamLogAppendIsIdempotentByOffset is the property the dedicated facet
+// exists for.
+//
+// A row is keyed by the offset its batch starts at, so a retry of an append
+// addresses the row it wrote before and replaces it. There is no chain to order
+// two writers against, so there is nothing for an uncommitted write to outrank,
+// which is the failure the previous substrate had.
+func (s *HistoryEventsSuite) TestStreamLogAppendIsIdempotentByOffset() {
+	const collectionID = "idempotent-by-offset"
+	const bucketSize = 100
+
+	s.streamAppend(collectionID, bucketSize, 0, 2, "first")
+
+	// An attempt that wrote and never committed, at offsets the next attempt
+	// will reuse. On the old substrate this could outrank what followed.
+	s.streamAppend(collectionID, bucketSize, 2, 3, "abandoned")
+
+	// The retry, covering fewer offsets from the same start.
+	s.streamAppend(collectionID, bucketSize, 2, 1, "retry")
+
+	// Whatever wrote last at that offset is what is there, and nothing before
+	// or after it was disturbed.
+	s.streamAppend(collectionID, bucketSize, 3, 1, "after")
+
+	s.Equal(
+		[]string{"first", "retry", "after"},
+		s.streamRead(collectionID, bucketSize, 0, 4),
+		"a rewrite at an offset replaces that batch and shadows nothing",
+	)
+}
+
+// TestStreamLogReadFindsTheBatchHoldingAnOffset checks that a read starting
+// inside a batch gets the batch containing it.
+//
+// The caller asks for an offset, not for a batch. Only the store can find the
+// row holding it, which it does in one indexed lookup because the key is the
+// offset a batch starts at. The previous substrate could not, and compensated
+// by reading a whole batch's worth of rows backwards on every read.
+func (s *HistoryEventsSuite) TestStreamLogReadFindsTheBatchHoldingAnOffset() {
+	const collectionID = "mid-batch-read"
+	const bucketSize = 100
+
+	s.streamAppend(collectionID, bucketSize, 0, 10, "wide")
+	s.streamAppend(collectionID, bucketSize, 10, 1, "narrow")
+
+	// Offset 4 sits inside the first batch, which starts at 0.
+	s.Equal(
+		[]string{"wide", "narrow"},
+		s.streamRead(collectionID, bucketSize, 4, 11),
+		"a read landing mid-batch must be served the batch that holds it",
+	)
+
+	// And a read starting exactly on a boundary gets only what follows.
+	s.Equal(
+		[]string{"narrow"},
+		s.streamRead(collectionID, bucketSize, 10, 11),
 	)
 }

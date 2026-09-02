@@ -62,13 +62,11 @@ func TestAddMessagesStagesRatherThanPersists(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, res.Appends, 1)
 
-	// The node is bucket-relative and starts at 1, and it chains to the
-	// previous transaction so a stale node is rejected on read.
+	// The batch is addressed by the offsets it covers, which is the key a
+	// retry of this append would write under.
 	require.Equal(t, int64(0), res.Appends[0].Bucket)
-	require.Equal(t, int64(1), res.Appends[0].NodeID)
-	require.Equal(t, int64(7), res.Appends[0].TxnID)
-	require.Equal(t, int64(0), res.Appends[0].PrevTxnID)
-	require.True(t, res.Appends[0].IsNewBucket)
+	require.Equal(t, int64(0), res.Appends[0].StartOffset)
+	require.Equal(t, int64(2), res.Appends[0].NextOffset)
 	require.NotEmpty(t, res.Appends[0].Blob.Data)
 }
 
@@ -190,8 +188,7 @@ func TestAppendsRollToNewBucket(t *testing.T) {
 	res, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("e"), TxnID: 2})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), res.Appends[0].Bucket)
-	require.Equal(t, int64(1), res.Appends[0].NodeID, "node ids restart per bucket")
-	require.True(t, res.Appends[0].IsNewBucket)
+	require.Equal(t, int64(4), res.Appends[0].StartOffset, "the batch opens the second bucket")
 }
 
 func TestTruncateRespectsConsumerPin(t *testing.T) {
@@ -235,9 +232,6 @@ func TestBucketArithmetic(t *testing.T) {
 	require.Equal(t, int64(1), BucketOf(10, 10))
 
 	// Node ids are bucket-relative and start at 1, because the store rejects 0.
-	require.Equal(t, int64(1), NodeIDOf(0, 10))
-	require.Equal(t, int64(10), NodeIDOf(9, 10))
-	require.Equal(t, int64(1), NodeIDOf(10, 10))
 	require.Equal(t, int64(20), BucketStart(2, 10))
 }
 
