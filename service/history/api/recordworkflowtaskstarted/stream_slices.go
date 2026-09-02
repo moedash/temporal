@@ -73,6 +73,16 @@ func deliveryFrontier(
 	if err != nil {
 		return 0, err
 	}
+
+	// A consumer that fell behind a truncating stream is told so rather than
+	// handed the rest and left with a hole it cannot see. Nothing holds the
+	// floor for a consumer any more, on purpose: a floor that waited for the
+	// slowest reader was never released and turned every cap into a no-op.
+	if cursor.Offset() < state.GetBaseOffset() {
+		return 0, serviceerror.NewFailedPreconditionf(
+			"stream %q was truncated past this consumer: it is at offset %d and the stream now starts at %d",
+			name, cursor.Offset(), state.GetBaseOffset())
+	}
 	return state.GetHeadOffset(), nil
 }
 

@@ -55,7 +55,6 @@ type AddMessagesRequest struct {
 
 	// Optional fencing. Rejected if below the stream's current epoch.
 	OwnerEpoch int64
-
 }
 
 type AddMessagesResult struct {
@@ -186,7 +185,7 @@ func (s *Stream) AddMessages(
 	appendOp := LogAppend{
 		Bucket:      BucketOf(first, s.State.BucketSize),
 		StartOffset: first,
-		NextOffset:   first + int64(len(req.Messages)),
+		NextOffset:  first + int64(len(req.Messages)),
 		Blob:        blob,
 	}
 
@@ -345,9 +344,18 @@ func (s *Stream) CloseAndSchedule(mctx chasm.MutableContext, reason *commonpb.Pa
 	return nil
 }
 
-// Truncate advances the readable floor. It cannot pass a registered in-workflow
-// consumer, because that consumer's history records an offset range it must
-// still be able to re-read on replay.
+// Truncate advances the readable floor.
+//
+// It does not stop at a consumer. A pin that held the floor for anyone still
+// reading sounded protective and was not: nothing released it when a consumer
+// finished, so any stream with a cap kept everything for as long as a consumer
+// had ever existed, which is the cap not working rather than a consumer being
+// safe.
+//
+// A consumer that falls behind the floor is told so. Reading from below the
+// base is an error naming where the stream now starts, the same answer a log
+// with a retention window gives anywhere else, and a great deal better than a
+// silent gap or a cap that never applies.
 func (s *Stream) Truncate(_ chasm.MutableContext, newBase int64) ([]int64, error) {
 	if newBase < s.State.BaseOffset {
 		return nil, serviceerror.NewInvalidArgumentf(
@@ -356,10 +364,6 @@ func (s *Stream) Truncate(_ chasm.MutableContext, newBase int64) ([]int64, error
 	if newBase > s.State.HeadOffset {
 		return nil, serviceerror.NewInvalidArgumentf(
 			"cannot truncate past head offset %d", s.State.HeadOffset)
-	}
-	if pin, ok := s.consumerPin(); ok && newBase > pin {
-		return nil, serviceerror.NewFailedPreconditionf(
-			"cannot truncate past offset %d, which an active consumer still needs", pin)
 	}
 	reclaimable := ReclaimableBuckets(s.State.BaseOffset, newBase, s.State.BucketSize)
 	s.State.BaseOffset = newBase
@@ -379,13 +383,11 @@ func (s *Stream) applyCap() []int64 {
 	if readable <= maxItems {
 		return nil
 	}
+	// The cap applies. It used to yield to the slowest consumer, which meant a
+	// capped stream with any consumer at all grew without bound, because
+	// nothing released a consumer when it finished. A consumer that cannot keep
+	// up is told where the stream now starts.
 	newBase := s.State.HeadOffset - maxItems
-	if pin, ok := s.consumerPin(); ok && newBase > pin {
-		// A workflow consumer still needs this range, so the cap yields to it.
-		// Storage grows rather than a consumer losing data it recorded a cursor
-		// for and must be able to re-read on replay.
-		newBase = pin
-	}
 	if newBase <= s.State.BaseOffset {
 		return nil
 	}
@@ -455,7 +457,6 @@ func (s *Stream) DeregisterConsumer(_ chasm.MutableContext, consumerID string) {
 	}
 }
 
-// consumerPin is the lowest offset any active in-workflow consumer still needs.
 func (s *Stream) consumerPin() (int64, bool) {
 	var pin int64
 	found := false
