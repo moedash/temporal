@@ -221,12 +221,14 @@ func (h *handler) AddMessages(
 		return nil, err
 	}
 
+	// Straight from the shard, never adjusted against the state just read.
+	// That state can be stale by the time this commits, so renumbering against
+	// it protects nothing, and two writers that both renumbered would land on
+	// the same id. AddMessages rejects an id that does not exceed the committed
+	// one, which is the check that can see the truth.
 	txnID, err := shardCtx.GenerateTaskID()
 	if err != nil {
 		return nil, err
-	}
-	if txnID <= state.GetLastTxnId() {
-		txnID = state.GetLastTxnId() + 1
 	}
 
 	addReq := stream.AddMessagesRequest{
@@ -340,12 +342,14 @@ func (h *handler) AddWorkflowMessages(
 		}
 	}
 
+	// Straight from the shard, never adjusted against the state just read.
+	// That state can be stale by the time this commits, so renumbering against
+	// it protects nothing, and two writers that both renumbered would land on
+	// the same id. AddMessages rejects an id that does not exceed the committed
+	// one, which is the check that can see the truth.
 	txnID, err := shardCtx.GenerateTaskID()
 	if err != nil {
 		return nil, err
-	}
-	if txnID <= state.GetLastTxnId() {
-		txnID = state.GetLastTxnId() + 1
 	}
 
 	head := state.GetHeadOffset()

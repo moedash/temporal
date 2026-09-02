@@ -271,3 +271,60 @@ func (s *HistoryEventsSuite) TestStreamLogBucketBoundaryDropsStaleNode() {
 		"the orphaned bucket 1 node must not surface once the frontier passes it",
 	)
 }
+
+// TestStreamLogOrphanFromAnotherSequenceShadowsLaterWrites is the failure the
+// prototype shipped with: two producers numbering from two unrelated sequences.
+//
+// The chain rule keeps the highest transaction id it has seen and drops
+// everything below it, which orders contested nodes correctly only while every
+// writer draws from one sequence. A node left behind by a write that never
+// committed still counts, because the rule reads storage and not the frontier.
+// So an uncommitted node numbered from a sequence that runs ahead hides every
+// later write numbered from the one that runs behind, and the reader is not
+// told: it simply stops seeing new messages.
+//
+// The fix is one sequence per shard for every producer. This test pins the
+// behaviour that made the bug invisible, so a second sequence cannot come back.
+func (s *HistoryEventsSuite) TestStreamLogOrphanFromAnotherSequenceShadowsLaterWrites() {
+	branchToken := s.newLogBranch()
+
+	// A committed append, numbered from the sequence the workflow used.
+	first := s.newHistoryEvents([]int64{1, 2}, 32, 0)
+	s.appendRawHistoryBatches(s.ShardID, branchToken, first)
+
+	// A producer outside the workflow writes its node and then fails to commit,
+	// so the frontier never covers it. Its id comes from the shard generator and
+	// is far above anything the workflow task path produces.
+	orphan := s.newHistoryEvents([]int64{3, 4}, 5000, 32)
+	s.appendRawHistoryBatches(s.ShardID, branchToken, orphan)
+
+	// Two more committed appends from the workflow. Both are numbered below the
+	// orphan, which is the whole problem.
+	second := s.newHistoryEvents([]int64{3, 4}, 33, 32)
+	s.appendRawHistoryBatches(s.ShardID, branchToken, second)
+	third := s.newHistoryEvents([]int64{5, 6}, 34, 33)
+	s.appendRawHistoryBatches(s.ShardID, branchToken, third)
+
+	events := s.listHistoryEvents(s.ShardID, branchToken, common.FirstEventID, 7)
+	s.Equal(
+		[]int64{1, 2, 3, 4},
+		s.eventIDsOf(events),
+		"the orphan is served and both committed appends after it are dropped, "+
+			"which is why a second transaction-id sequence loses data",
+	)
+
+	// The same log, written the way the fix writes it: every producer numbering
+	// from the shard, so the orphan is superseded rather than dominant.
+	fixed := s.newLogBranch()
+	s.appendRawHistoryBatches(s.ShardID, fixed, s.newHistoryEvents([]int64{1, 2}, 5001, 0))
+	s.appendRawHistoryBatches(s.ShardID, fixed, s.newHistoryEvents([]int64{3, 4}, 5002, 5001))
+	s.appendRawHistoryBatches(s.ShardID, fixed, s.newHistoryEvents([]int64{3, 4}, 5003, 5001))
+	s.appendRawHistoryBatches(s.ShardID, fixed, s.newHistoryEvents([]int64{5, 6}, 5004, 5003))
+
+	events = s.listHistoryEvents(s.ShardID, fixed, common.FirstEventID, 7)
+	s.Equal(
+		[]int64{1, 2, 3, 4, 5, 6},
+		s.eventIDsOf(events),
+		"one sequence per shard: the uncommitted node is superseded and nothing is lost",
+	)
+}

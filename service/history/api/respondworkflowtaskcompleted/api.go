@@ -458,13 +458,20 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// commit below advances the frontier that makes them visible. A crash
 		// between the two leaves nodes at or past the frontier, which no reader
 		// can observe.
-		if err = flushStagedStreamAppends(
-			ctx,
-			handler.shardContext,
-			ms.GetWorkflowKey().NamespaceID,
-			workflowTaskHandler.stagedStreamAppends,
-		); err != nil {
-			return nil, err
+		//
+		// Skipped once the task has failed, for the same reason the
+		// subscriptions below are. Nothing is about to advance the frontier, so
+		// the bytes would be written for a range no reader can reach, and the
+		// retried attempt writes them again under a new transaction id.
+		if workflowTaskHandler.workflowTaskFailedCause == nil && !workflowTaskHandler.stopProcessing {
+			if err = flushStagedStreamAppends(
+				ctx,
+				handler.shardContext,
+				ms.GetWorkflowKey().NamespaceID,
+				workflowTaskHandler.stagedStreamAppends,
+			); err != nil {
+				return nil, err
+			}
 		}
 
 		// Subscriptions to streams in other executions, resolved here for the

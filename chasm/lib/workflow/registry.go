@@ -107,11 +107,24 @@ var ErrCommandTargetNotFound = errors.New("command target not found in chasm tre
 
 type CommandHandlerOptions struct {
 	WorkflowTaskCompletedEventID int64
-	// Attempt of the workflow task carrying the command, starting at 1. A
-	// retried attempt replays the same commands from the same event id, so a
-	// handler that derives an identity from the event id alone cannot tell the
-	// attempts apart.
-	WorkflowTaskAttempt int32
+
+	// NextTxnID draws the next transaction id from the shard's generator.
+	//
+	// A stream log takes writes from a workflow task and from producers outside
+	// it, and the store resolves a contested node by keeping the higher
+	// transaction id and dropping everything below the highest it has seen. Two
+	// sequences on one log therefore lose data rather than order it: an id from
+	// one is meaningless against an id from the other, and a node left behind by
+	// a write that never committed shadows every later write numbered below it.
+	//
+	// One sequence per shard removes both. A stream's log lives on the shard
+	// that routes its writes, so every producer numbering from that shard's
+	// generator produces ids that only increase, and a failed write leaves a
+	// node that the next one supersedes rather than one that outranks it.
+	//
+	// It also separates the attempts of one workflow task, which an id derived
+	// from the task's own event id cannot do.
+	NextTxnID func() (int64, error)
 }
 
 // CommandHandler is a function for handling a workflow command as part of processing a RespondWorkflowTaskCompleted

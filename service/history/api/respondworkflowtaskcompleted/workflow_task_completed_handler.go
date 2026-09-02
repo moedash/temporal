@@ -345,7 +345,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 
 		handlerOpts := chasmworkflow.CommandHandlerOptions{
 			WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
-			WorkflowTaskAttempt:          handler.mutableState.GetExecutionInfo().GetWorkflowTaskAttempt(),
+			NextTxnID:                    handler.shard.GenerateTaskID,
 		}
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
 

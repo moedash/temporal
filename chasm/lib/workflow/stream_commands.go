@@ -65,9 +65,17 @@ func handleAddStreamMessagesCommand(
 		return err
 	}
 
+	// From the shard, not from this task's event id. Producers outside the
+	// workflow number their writes the same way, and the store only orders two
+	// nodes correctly when both came from one sequence. See NextTxnID.
+	txnID, err := opts.NextTxnID()
+	if err != nil {
+		return err
+	}
+
 	result, err := s.AddMessages(chasmCtx, stream.AddMessagesRequest{
 		Messages: toLibraryMessages(attrs.GetMessages()),
-		TxnID:    streamTxnID(s, opts.WorkflowTaskCompletedEventID, opts.WorkflowTaskAttempt),
+		TxnID:    txnID,
 	})
 	if err != nil {
 		return err
@@ -249,29 +257,6 @@ func (w *Workflow) streamNamed(ctx chasm.MutableContext, name string) (*stream.S
 	}
 	w.Streams[name] = chasm.NewComponentField(ctx, created)
 	return created, nil
-}
-
-// streamTxnID derives a transaction id that advances across workflow tasks and
-// within one, anchored on the task's completed event id and attempt.
-//
-// The attempt is what keeps a retry apart from the attempt it replaces. A
-// failed attempt never commits, so the stream's last committed id does not
-// move, and two attempts anchored on the event id alone would both write the
-// same node under the same id. Storage keys a node by that pair, so the two
-// rows collapse into one and the survivor is whichever reached the database
-// last, not whichever attempt committed. Replay is deterministic, but a
-// re-issued attempt is not a replay: anything the worker re-runs before the
-// completion is durable, a local activity for instance, may return a different
-// value and publish different bytes.
-//
-// A later attempt is always higher, so the store resolves the collision the
-// same way it does for an external producer: the newer transaction id wins.
-func streamTxnID(s *stream.Stream, workflowTaskCompletedEventID int64, attempt int32) int64 {
-	next := workflowTaskCompletedEventID + int64(max(attempt, 1)) - 1
-	if last := s.State.GetLastTxnId(); next <= last {
-		next = last + 1
-	}
-	return next
 }
 
 func toLibraryMessages(in []*streampb.StreamMessage) []*streamlib.StreamMessage {
