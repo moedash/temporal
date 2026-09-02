@@ -21,7 +21,6 @@ class ConsumeWorkflow:
         seen = 0
         while seen < expected:
             for body in await workflow.read_stream(stream_id):
-                sent = float(body.decode().split("|", 1)[0])
-                _observed.observe(sent)
+                _observed.observe(body.decode())
                 seen += 1
         return seen

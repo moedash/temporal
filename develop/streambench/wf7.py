@@ -24,8 +24,7 @@ class ConsumeWorkflow:
         ).topic("tokens", type=str)
         seen = 0
         async for token in tokens.subscribe():
-            sent = float(token.split("|", 1)[0])
-            _observed.observe(sent)
+            _observed.observe(token)
             seen += 1
             if seen >= expected:
                 break
