@@ -42,13 +42,13 @@ func msgs(bodies ...string) []*streampb.StreamMessage {
 func TestAddMessagesAssignsContiguousOffsets(t *testing.T) {
 	s := newTestStream(t, 100)
 
-	first, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c"), TxnID: 1})
+	first, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c")})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), first.FirstOffset)
 	require.Equal(t, int64(3), first.Count)
 	require.Equal(t, int64(3), first.NextOffset)
 
-	second, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("d", "e"), TxnID: 2})
+	second, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("d", "e")})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), second.FirstOffset)
 	require.Equal(t, int64(5), second.NextOffset)
@@ -58,7 +58,7 @@ func TestAddMessagesAssignsContiguousOffsets(t *testing.T) {
 func TestAddMessagesStagesRatherThanPersists(t *testing.T) {
 	s := newTestStream(t, 100)
 
-	res, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b"), TxnID: 7})
+	res, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
 	require.NoError(t, err)
 	require.Len(t, res.Appends, 1)
 
@@ -70,29 +70,15 @@ func TestAddMessagesStagesRatherThanPersists(t *testing.T) {
 	require.NotEmpty(t, res.Appends[0].Blob.Data)
 }
 
-func TestTransactionIDMustAdvance(t *testing.T) {
-	s := newTestStream(t, 100)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), TxnID: 5})
-	require.NoError(t, err)
-
-	// Reusing an ID would leave two rows at one node with no way to tell which
-	// one won, so it is rejected rather than silently accepted.
-	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("b"), TxnID: 5})
-	require.Error(t, err)
-	var invalid *serviceerror.InvalidArgument
-	require.ErrorAs(t, err, &invalid)
-}
-
 func TestDedupReturnsOriginalOffsets(t *testing.T) {
 	s := newTestStream(t, 100)
-	req := AddMessagesRequest{Messages: msgs("a", "b"), ProducerID: "p1", Sequence: 1, TxnID: 1}
+	req := AddMessagesRequest{Messages: msgs("a", "b"), ProducerID: "p1", Sequence: 1}
 
 	first, err := s.AddMessages(nil, req)
 	require.NoError(t, err)
 	require.False(t, first.Deduplicated)
 
 	retry := req
-	retry.TxnID = 2
 	again, err := s.AddMessages(nil, retry)
 	require.NoError(t, err)
 	require.True(t, again.Deduplicated)
@@ -104,14 +90,14 @@ func TestDedupReturnsOriginalOffsets(t *testing.T) {
 func TestDedupRejectsDifferentContent(t *testing.T) {
 	s := newTestStream(t, 100)
 	_, err := s.AddMessages(nil, AddMessagesRequest{
-		Messages: msgs("a"), ProducerID: "p1", Sequence: 1, TxnID: 1,
+		Messages: msgs("a"), ProducerID: "p1", Sequence: 1,
 	})
 	require.NoError(t, err)
 
 	// Returning the recorded offsets here would report success while dropping
 	// the caller's data, which is worse than failing.
 	_, err = s.AddMessages(nil, AddMessagesRequest{
-		Messages: msgs("different"), ProducerID: "p1", Sequence: 1, TxnID: 2,
+		Messages: msgs("different"), ProducerID: "p1", Sequence: 1,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "different content")
@@ -119,12 +105,12 @@ func TestDedupRejectsDifferentContent(t *testing.T) {
 
 func TestExpectedOffsetMismatchReportsHead(t *testing.T) {
 	s := newTestStream(t, 100)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a")})
 	require.NoError(t, err)
 
 	stale := int64(0)
 	_, err = s.AddMessages(nil, AddMessagesRequest{
-		Messages: msgs("b"), ExpectedOffset: &stale, TxnID: 2,
+		Messages: msgs("b"), ExpectedOffset: &stale,
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "stream head is 1")
@@ -134,10 +120,10 @@ func TestOwnerEpochFencesStaleProducer(t *testing.T) {
 	s := newTestStream(t, 100)
 	s.State.OwnerEpoch = 5
 
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), OwnerEpoch: 4, TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), OwnerEpoch: 4})
 	require.Error(t, err)
 
-	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), OwnerEpoch: 5, TxnID: 1})
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), OwnerEpoch: 5})
 	require.NoError(t, err)
 }
 
@@ -146,13 +132,13 @@ func TestFinishWritingFencesOneProducerOnly(t *testing.T) {
 	require.NoError(t, s.FinishWriting(nil, "p1"))
 
 	_, err := s.AddMessages(nil, AddMessagesRequest{
-		Messages: msgs("a"), ProducerID: "p1", Sequence: 1, TxnID: 1,
+		Messages: msgs("a"), ProducerID: "p1", Sequence: 1,
 	})
 	require.Error(t, err)
 
 	// Another producer is unaffected: finishing is per-producer, not a close.
 	_, err = s.AddMessages(nil, AddMessagesRequest{
-		Messages: msgs("a"), ProducerID: "p2", Sequence: 1, TxnID: 2,
+		Messages: msgs("a"), ProducerID: "p2", Sequence: 1,
 	})
 	require.NoError(t, err)
 	require.False(t, s.State.Closed)
@@ -162,7 +148,7 @@ func TestCloseRejectsFurtherAppends(t *testing.T) {
 	s := newTestStream(t, 100)
 	s.Close(time.Now(), nil)
 
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a")})
 	require.Error(t, err)
 	var precondition *serviceerror.FailedPrecondition
 	require.ErrorAs(t, err, &precondition)
@@ -170,22 +156,22 @@ func TestCloseRejectsFurtherAppends(t *testing.T) {
 
 func TestBatchMayNotCrossABucket(t *testing.T) {
 	s := newTestStream(t, 4)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c")})
 	require.NoError(t, err)
 
 	// Offsets 3 and 4 fall in different buckets, and a bucket is a storage
 	// partition, so a node spanning both is not representable.
-	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("d", "e"), TxnID: 2})
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("d", "e")})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "crosses a bucket boundary")
 }
 
 func TestAppendsRollToNewBucket(t *testing.T) {
 	s := newTestStream(t, 4)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 
-	res, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("e"), TxnID: 2})
+	res, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("e")})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), res.Appends[0].Bucket)
 	require.Equal(t, int64(4), res.Appends[0].StartOffset, "the batch opens the second bucket")
@@ -193,7 +179,7 @@ func TestAppendsRollToNewBucket(t *testing.T) {
 
 func TestTruncateRespectsConsumerPin(t *testing.T) {
 	s := newTestStream(t, 100)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 
 	s.State.Consumers["wf-1"] = &streampb.ConsumerCursor{
@@ -215,7 +201,7 @@ func TestTruncateRespectsConsumerPin(t *testing.T) {
 
 func TestTruncateBounds(t *testing.T) {
 	s := newTestStream(t, 100)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
 	require.NoError(t, err)
 
 	_, err = s.Truncate(nil, 1)
@@ -249,8 +235,8 @@ func TestCapTruncatesInline(t *testing.T) {
 	s := newTestStream(t, 4)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 4}
 
-	for i := range 4 {
-		_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b"), TxnID: int64(i + 1)})
+	for range 4 {
+		_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
 		require.NoError(t, err)
 	}
 
@@ -267,7 +253,7 @@ func TestCapYieldsToAConsumerPin(t *testing.T) {
 		WorkflowId: "wf-1", Offset: 1, Active: true,
 	}
 
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 
 	// The cap wants a floor of 2, but a workflow consumer recorded a cursor at 1
@@ -298,7 +284,7 @@ func TestCloseSchedulesRetentionOnlyWhenConfigured(t *testing.T) {
 // that no caller ever populated it. These go through the registration API.
 func TestRegisterConsumerPinsTruncation(t *testing.T) {
 	s := newTestStream(t, 100)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 2, false))
@@ -313,7 +299,7 @@ func TestRegisterConsumerPinsTruncation(t *testing.T) {
 
 func TestAdvanceConsumerReleasesTruncation(t *testing.T) {
 	s := newTestStream(t, 100)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 
@@ -330,7 +316,7 @@ func TestAdvanceConsumerReleasesTruncation(t *testing.T) {
 // recorded range has to stay re-readable.
 func TestAdvanceConsumerNeverRewinds(t *testing.T) {
 	s := newTestStream(t, 100)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 
@@ -344,7 +330,7 @@ func TestAdvanceConsumerNeverRewinds(t *testing.T) {
 
 func TestRegisterConsumerRejectsAnOffsetBelowTheFloor(t *testing.T) {
 	s := newTestStream(t, 100)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	_, err = s.Truncate(nil, 2)
 	require.NoError(t, err)
@@ -357,7 +343,7 @@ func TestRegisterConsumerRejectsAnOffsetBelowTheFloor(t *testing.T) {
 // consumer cannot rewind its own floor by subscribing again.
 func TestRegisterConsumerTwiceKeepsThePin(t *testing.T) {
 	s := newTestStream(t, 100)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 	s.AdvanceConsumer(nil, "workflow:output", 3)
@@ -371,7 +357,7 @@ func TestRegisterConsumerTwiceKeepsThePin(t *testing.T) {
 
 func TestDeregisterConsumerReleasesThePin(t *testing.T) {
 	s := newTestStream(t, 100)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1, false))
 
@@ -387,16 +373,16 @@ func TestMessageCapYieldsToARegisteredConsumer(t *testing.T) {
 	s := newTestStream(t, 100)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
 
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b"), TxnID: 1})
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
 	require.NoError(t, err)
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 
-	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("c", "d"), TxnID: 2})
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("c", "d")})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), s.State.BaseOffset, "the cap must not pass the consumer's pin")
 
 	s.AdvanceConsumer(nil, "workflow:output", 4)
-	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("e"), TxnID: 3})
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("e")})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), s.State.BaseOffset, "once the pin moves the cap applies again")
 }
@@ -412,7 +398,6 @@ func TestStreamProducerTableIsBounded(t *testing.T) {
 			Messages:   msgs("m"),
 			ProducerID: fmt.Sprintf("p%d", i),
 			Sequence:   1,
-			TxnID:      int64(i + 1),
 		})
 		require.NoError(t, err)
 	}
@@ -421,7 +406,6 @@ func TestStreamProducerTableIsBounded(t *testing.T) {
 		Messages:   msgs("one too many"),
 		ProducerID: "p-over",
 		Sequence:   1,
-		TxnID:      int64(MaxProducersPerStream + 1),
 	})
 	var invalid *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalid)
@@ -432,14 +416,12 @@ func TestStreamProducerTableIsBounded(t *testing.T) {
 		Messages:   msgs("still fine"),
 		ProducerID: "p0",
 		Sequence:   2,
-		TxnID:      int64(MaxProducersPerStream + 2),
 	})
 	require.NoError(t, err)
 
 	// An anonymous append is never blocked by the table.
 	_, err = s.AddMessages(nil, AddMessagesRequest{
 		Messages: msgs("anon"),
-		TxnID:    int64(MaxProducersPerStream + 3),
 	})
 	require.NoError(t, err)
 }

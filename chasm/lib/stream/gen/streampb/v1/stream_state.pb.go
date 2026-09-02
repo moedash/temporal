@@ -32,10 +32,7 @@ type StreamState struct {
 	// Visibility frontier. Readers never observe an offset at or past this.
 	HeadOffset int64 `protobuf:"varint,1,opt,name=head_offset,json=headOffset,proto3" json:"head_offset,omitempty"`
 	// Truncation floor. Offsets below this are gone.
-	BaseOffset int64 `protobuf:"varint,2,opt,name=base_offset,json=baseOffset,proto3" json:"base_offset,omitempty"`
-	// Chains log nodes so a stale node from an abandoned append is rejected on
-	// read; see AppendRawHistoryNodesRequest.PrevTransactionID.
-	LastTxnId   int64       `protobuf:"varint,3,opt,name=last_txn_id,json=lastTxnId,proto3" json:"last_txn_id,omitempty"`
+	BaseOffset  int64       `protobuf:"varint,2,opt,name=base_offset,json=baseOffset,proto3" json:"base_offset,omitempty"` // Chains log nodes so a stale node from an abandoned append is rejected on
 	Closed      bool        `protobuf:"varint,4,opt,name=closed,proto3" json:"closed,omitempty"`
 	CloseReason *v1.Payload `protobuf:"bytes,5,opt,name=close_reason,json=closeReason,proto3" json:"close_reason,omitempty"`
 	// Bumped on ownership change so a stale producer's write fails.
@@ -98,13 +95,6 @@ func (x *StreamState) GetHeadOffset() int64 {
 func (x *StreamState) GetBaseOffset() int64 {
 	if x != nil {
 		return x.BaseOffset
-	}
-	return 0
-}
-
-func (x *StreamState) GetLastTxnId() int64 {
-	if x != nil {
-		return x.LastTxnId
 	}
 	return 0
 }
@@ -522,13 +512,12 @@ var File_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto protorefle
 
 const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc = "" +
 	"\n" +
-	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xab\a\n" +
+	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\x8b\a\n" +
 	"\vStreamState\x12\x1f\n" +
 	"\vhead_offset\x18\x01 \x01(\x03R\n" +
 	"headOffset\x12\x1f\n" +
 	"\vbase_offset\x18\x02 \x01(\x03R\n" +
-	"baseOffset\x12\x1e\n" +
-	"\vlast_txn_id\x18\x03 \x01(\x03R\tlastTxnId\x12\x16\n" +
+	"baseOffset\x12\x16\n" +
 	"\x06closed\x18\x04 \x01(\bR\x06closed\x12B\n" +
 	"\fclose_reason\x18\x05 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\vcloseReason\x12\x1f\n" +
 	"\vowner_epoch\x18\x06 \x01(\x03R\n" +

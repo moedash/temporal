@@ -16,8 +16,6 @@ message StreamState {
   // Truncation floor. Offsets below this are gone.
   int64 base_offset = 2;
   // Chains log nodes so a stale node from an abandoned append is rejected on
-  // read; see AppendRawHistoryNodesRequest.PrevTransactionID.
-  int64 last_txn_id = 3;
 
   bool closed = 4;
   temporal.api.common.v1.Payload close_reason = 5;

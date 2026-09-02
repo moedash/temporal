@@ -65,17 +65,8 @@ func handleAddStreamMessagesCommand(
 		return err
 	}
 
-	// From the shard, not from this task's event id. Producers outside the
-	// workflow number their writes the same way, and the store only orders two
-	// nodes correctly when both came from one sequence. See NextTxnID.
-	txnID, err := opts.NextTxnID()
-	if err != nil {
-		return err
-	}
-
 	result, err := s.AddMessages(chasmCtx, stream.AddMessagesRequest{
 		Messages: toLibraryMessages(attrs.GetMessages()),
-		TxnID:    txnID,
 	})
 	if err != nil {
 		return err

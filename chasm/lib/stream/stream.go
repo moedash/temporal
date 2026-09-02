@@ -56,11 +56,6 @@ type AddMessagesRequest struct {
 	// Optional fencing. Rejected if below the stream's current epoch.
 	OwnerEpoch int64
 
-	// Monotonic transaction ID from the shard generator (shard.GenerateTaskID).
-	// It must come from there rather than from stream state: a retry has to
-	// carry a higher ID than the attempt it replaces, and a counter derived
-	// from committed state would hand the retry the same one.
-	TxnID int64
 }
 
 type AddMessagesResult struct {
@@ -188,12 +183,6 @@ func (s *Stream) AddMessages(
 			"batch of %d at offset %d crosses a bucket boundary", count, first)
 	}
 
-	txnID := req.TxnID
-	if txnID <= s.State.LastTxnId {
-		return AddMessagesResult{}, serviceerror.NewInvalidArgumentf(
-			"transaction id %d must exceed the last committed id %d", txnID, s.State.LastTxnId)
-	}
-
 	appendOp := LogAppend{
 		Bucket:      BucketOf(first, s.State.BucketSize),
 		StartOffset: first,
@@ -202,7 +191,6 @@ func (s *Stream) AddMessages(
 	}
 
 	s.State.HeadOffset = first + count
-	s.State.LastTxnId = txnID
 	if req.ProducerID != "" {
 		if s.State.Producers == nil {
 			s.State.Producers = make(map[string]*streampb.ProducerCursor)

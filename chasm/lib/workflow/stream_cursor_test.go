@@ -46,7 +46,7 @@ func newAttachedStream(t *testing.T, ctx chasm.MutableContext, count int) *strea
 	for i := range messages {
 		messages[i] = &streampb.StreamMessage{Kind: streampb.STREAM_MESSAGE_KIND_DATA}
 	}
-	_, err := s.AddMessages(ctx, stream.AddMessagesRequest{Messages: messages, TxnID: 1})
+	_, err := s.AddMessages(ctx, stream.AddMessagesRequest{Messages: messages})
 	require.NoError(t, err)
 
 	return s
@@ -152,14 +152,14 @@ func TestCommitStreamCursorsWithAnEmptyRangeHoldsTheFloor(t *testing.T) {
 		"consuming nothing must not release the floor")
 }
 
-// Two publishes in one workflow task must not share a transaction id, and
-// neither must two attempts of that task. Storage keys a log node by node id
-// and transaction id, so a shared id collapses two writes into one row whose
-// survivor is arrival order rather than which one committed.
+// Two publishes in one workflow task each stage their own batch, at the offsets
+// they landed at.
 //
-// The handler no longer derives an id at all. It takes one from the shard, so
-// what this pins is that it asks each time rather than reusing.
-func TestPublishTakesAFreshTransactionIDPerCommand(t *testing.T) {
+// The offset a batch starts at is the key its row is written under, so two
+// publishes must not collide and a retry of either must address the same row
+// it wrote before. There is no transaction id involved any more: the store
+// resolves a rewrite by replacing, and the frontier decides what a reader sees.
+func TestPublishStagesEachBatchAtItsOwnOffset(t *testing.T) {
 	ctx := newStreamCursorTestContext()
 
 	// A backend, because the handler writes the publish event and that event is
@@ -174,15 +174,7 @@ func TestPublishTakesAFreshTransactionIDPerCommand(t *testing.T) {
 		},
 	}
 	w := &Workflow{MSPointer: chasm.NewMSPointer(backend)}
-
-	issued := 0
-	opts := CommandHandlerOptions{
-		WorkflowTaskCompletedEventID: 10,
-		NextTxnID: func() (int64, error) {
-			issued++
-			return int64(1000 + issued), nil
-		},
-	}
+	opts := CommandHandlerOptions{WorkflowTaskCompletedEventID: 10}
 
 	publish := &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
@@ -190,6 +182,7 @@ func TestPublishTakesAFreshTransactionIDPerCommand(t *testing.T) {
 			AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
 				Messages: []*apistreampb.StreamMessage{
 					{Body: &commonpb.Payload{Data: []byte("x")}},
+					{Body: &commonpb.Payload{Data: []byte("y")}},
 				},
 			},
 		},
@@ -198,9 +191,13 @@ func TestPublishTakesAFreshTransactionIDPerCommand(t *testing.T) {
 	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts))
 	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts))
 
-	require.Equal(t, 2, issued, "each command must draw its own id")
-	require.Equal(t, int64(1002), w.Streams[DefaultStreamName].Get(ctx).State.GetLastTxnId(),
-		"the second publish must commit under the id it was given")
+	staged := w.DrainStreamAppends()
+	require.Len(t, staged, 2)
+	require.Equal(t, int64(0), staged[0].Append.StartOffset)
+	require.Equal(t, int64(2), staged[0].Append.NextOffset)
+	require.Equal(t, int64(2), staged[1].Append.StartOffset)
+	require.Equal(t, int64(4), staged[1].Append.NextOffset)
+	require.Equal(t, int64(4), w.Streams[DefaultStreamName].Get(ctx).State.GetHeadOffset())
 }
 
 type allowAnySize struct{}

@@ -229,22 +229,12 @@ func (h *handler) AddMessages(
 		return nil, err
 	}
 
-	// Straight from the shard, never adjusted against the state just read.
-	// That state can be stale by the time this commits, so renumbering against
-	// it protects nothing, and two writers that both renumbered would land on
-	// the same id. AddMessages rejects an id that does not exceed the committed
-	// one, which is the check that can see the truth.
-	txnID, err := shardCtx.GenerateTaskID()
-	if err != nil {
-		return nil, err
-	}
 
 	addReq := stream.AddMessagesRequest{
 		Messages:   in.GetMessages(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
 		OwnerEpoch: in.GetOwnerEpoch(),
-		TxnID:      txnID,
 	}
 	if in.GetUseExpectedOffset() {
 		expected := in.GetExpectedOffset()
@@ -350,22 +340,12 @@ func (h *handler) AddWorkflowMessages(
 		}
 	}
 
-	// Straight from the shard, never adjusted against the state just read.
-	// That state can be stale by the time this commits, so renumbering against
-	// it protects nothing, and two writers that both renumbered would land on
-	// the same id. AddMessages rejects an id that does not exceed the committed
-	// one, which is the check that can see the truth.
-	txnID, err := shardCtx.GenerateTaskID()
-	if err != nil {
-		return nil, err
-	}
 
 	head := state.GetHeadOffset()
 	addReq := stream.AddMessagesRequest{
 		Messages:   in.GetMessages(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
-		TxnID:      txnID,
 		// Pinned to the head just read, so a workflow task that published
 		// between the read and the commit fails this append rather than
 		// letting it claim offsets whose node it did not write.
