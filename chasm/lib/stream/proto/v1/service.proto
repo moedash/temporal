@@ -55,6 +55,19 @@ service StreamService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  // Internal. History calls these on itself to reach a shard it does not own,
+  // which is the only way a step that spans two executions can work on a
+  // cluster with more than one history host.
+  rpc RegisterStreamConsumer(RegisterStreamConsumerRequest) returns (RegisterStreamConsumerResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc AdvanceConsumerHead(AdvanceConsumerHeadRequest) returns (AdvanceConsumerHeadResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   rpc CloseStream(CloseStreamRequest) returns (CloseStreamResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;

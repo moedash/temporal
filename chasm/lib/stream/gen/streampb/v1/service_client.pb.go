@@ -453,6 +453,92 @@ func (c *StreamServiceLayeredClient) AddWorkflowMessages(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+func (c *StreamServiceLayeredClient) callRegisterStreamConsumerNoRetry(
+	ctx context.Context,
+	request *RegisterStreamConsumerRequest,
+	opts ...grpc.CallOption,
+) (*RegisterStreamConsumerResponse, error) {
+	var response *RegisterStreamConsumerResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("StreamService.RegisterStreamConsumer"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetStreamId(), c.numShards)
+	op := func(ctx context.Context, client StreamServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.RegisterStreamConsumer(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *StreamServiceLayeredClient) RegisterStreamConsumer(
+	ctx context.Context,
+	request *RegisterStreamConsumerRequest,
+	opts ...grpc.CallOption,
+) (*RegisterStreamConsumerResponse, error) {
+	call := func(ctx context.Context) (*RegisterStreamConsumerResponse, error) {
+		return c.callRegisterStreamConsumerNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *StreamServiceLayeredClient) callAdvanceConsumerHeadNoRetry(
+	ctx context.Context,
+	request *AdvanceConsumerHeadRequest,
+	opts ...grpc.CallOption,
+) (*AdvanceConsumerHeadResponse, error) {
+	var response *AdvanceConsumerHeadResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("StreamService.AdvanceConsumerHead"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId(), c.numShards)
+	op := func(ctx context.Context, client StreamServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.AdvanceConsumerHead(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *StreamServiceLayeredClient) AdvanceConsumerHead(
+	ctx context.Context,
+	request *AdvanceConsumerHeadRequest,
+	opts ...grpc.CallOption,
+) (*AdvanceConsumerHeadResponse, error) {
+	call := func(ctx context.Context) (*AdvanceConsumerHeadResponse, error) {
+		return c.callAdvanceConsumerHeadNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
 func (c *StreamServiceLayeredClient) callCloseStreamNoRetry(
 	ctx context.Context,
 	request *CloseStreamRequest,

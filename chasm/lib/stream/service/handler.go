@@ -28,6 +28,12 @@ type handler struct {
 	namespaceRegistry namespace.Registry
 	logger            log.Logger
 
+	// Routes a call to the host that owns a shard. A step spanning two
+	// executions cannot resolve both through the local controller, which
+	// refuses a shard this host does not own, so the far half goes back out
+	// through the service and lands wherever it belongs.
+	routed streampb.StreamServiceClient
+
 	// Appends to one stream are serialized here. The node has to be durable
 	// before the frontier advances, which means writing it outside the
 	// transition that advances the frontier, and two concurrent writers could
@@ -53,11 +59,13 @@ func newHandler(
 	shardController shard.Controller,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	routed streampb.StreamServiceClient,
 ) *handler {
 	return &handler{
 		shardController:   shardController,
 		namespaceRegistry: namespaceRegistry,
 		logger:            logger,
+		routed:            routed,
 		tail:              stream.NewTailCache(stream.TailCacheBytesPerStream, stream.TailCacheMaxStreams),
 	}
 }
@@ -476,10 +484,69 @@ func (h *handler) subscribeToExternalStream(
 	namespaceID string,
 	in *streampb.SubscribeWorkflowInput,
 ) (*streampb.SubscribeWorkflowResponse, error) {
-	streamID := in.GetStreamId()
+	// The stream half goes out and comes back on the shard that owns it. This
+	// handler was routed to the consuming workflow, so the stream may well be
+	// somewhere else, and resolving it here would fail on any cluster with more
+	// than one history host.
+	//
+	// The pin still lands before the cursor, which is the guarantee: interrupted
+	// between them there is a pin holding storage nothing reads, which costs
+	// space, where the other order would leave a cursor with no pin and let
+	// truncation take a range it still points at.
+	registered, err := h.routed.RegisterStreamConsumer(ctx, &streampb.RegisterStreamConsumerRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &streampb.RegisterStreamConsumerInput{
+			Namespace:          in.GetNamespace(),
+			StreamId:           in.GetStreamId(),
+			ConsumerWorkflowId: in.GetWorkflowId(),
+			StartOffset:        in.GetStartOffset(),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	pin := registered.GetFrontendResponse()
 
-	state, err := chasm.ReadComponent(ctx,
-		refFor(namespaceID, streamID), (*stream.Stream).Snapshot, struct{}{})
+	startOffset, _, err := chasm.UpdateComponent(
+		ctx,
+		workflowRef(namespaceID, in.GetWorkflowId()),
+		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, offset int64) (int64, error) {
+			return wf.SubscribeToExternalStream(mctx, chasmworkflow.ExternalStreamSubscription{
+				StreamID:     in.GetStreamId(),
+				CollectionID: pin.GetCollectionId(),
+				BucketSize:   pin.GetBucketSize(),
+				StartOffset:  offset,
+				KnownHead:    pin.GetKnownHead(),
+			})
+		},
+		pin.GetStartOffset(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &streampb.SubscribeWorkflowResponse{
+		FrontendResponse: &streampb.SubscribeWorkflowOutput{StartOffset: startOffset},
+	}, nil
+}
+
+// RegisterStreamConsumer takes the pin, on the shard that owns the stream.
+//
+// Internal. Called by SubscribeWorkflow, which is routed to the consumer and so
+// cannot reach the stream itself. It resolves a negative start offset here,
+// where the frontier is, and hands back everything the cursor needs to address
+// the log, so the consumer records facts rather than readings.
+func (h *handler) RegisterStreamConsumer(
+	ctx context.Context,
+	req *streampb.RegisterStreamConsumerRequest,
+) (*streampb.RegisterStreamConsumerResponse, error) {
+	in := req.GetFrontendRequest()
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
+
+	streamID := in.GetStreamId()
+	ref := refFor(req.GetNamespaceId(), streamID)
+
+	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
 	if err != nil {
 		return nil, err
 	}
@@ -493,38 +560,53 @@ func (h *handler) subscribeToExternalStream(
 			"offset %d is below the stream's floor of %d", startOffset, state.GetBaseOffset())
 	}
 
-	consumerID := "workflow:" + in.GetWorkflowId()
+	consumerID := "workflow:" + in.GetConsumerWorkflowId()
 	if _, _, err := chasm.UpdateComponent(
 		ctx,
-		refFor(namespaceID, streamID),
+		ref,
 		func(s *stream.Stream, mctx chasm.MutableContext, offset int64) (struct{}, error) {
-			return struct{}{}, s.RegisterConsumer(mctx, consumerID, in.GetWorkflowId(), "", offset, true)
+			return struct{}{}, s.RegisterConsumer(
+				mctx, consumerID, in.GetConsumerWorkflowId(), "", offset, true)
 		},
 		startOffset,
 	); err != nil {
 		return nil, err
 	}
 
-	registered, _, err := chasm.UpdateComponent(
-		ctx,
-		workflowRef(namespaceID, in.GetWorkflowId()),
-		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, offset int64) (int64, error) {
-			return wf.SubscribeToExternalStream(mctx, chasmworkflow.ExternalStreamSubscription{
-				StreamID:     streamID,
-				CollectionID: state.GetCollectionId(),
-				BucketSize:   state.GetBucketSize(),
-				StartOffset:  offset,
-				KnownHead:    state.GetHeadOffset(),
-			})
+	return &streampb.RegisterStreamConsumerResponse{
+		FrontendResponse: &streampb.RegisterStreamConsumerOutput{
+			StartOffset:  startOffset,
+			CollectionId: state.GetCollectionId(),
+			BucketSize:   state.GetBucketSize(),
+			KnownHead:    state.GetHeadOffset(),
 		},
-		startOffset,
-	)
-	if err != nil {
+	}, nil
+}
+
+// AdvanceConsumerHead tells one consumer that the frontier moved, on the shard
+// that owns that consumer.
+//
+// Internal. Called by the notify task, which runs on the stream's shard and so
+// cannot reach a consumer living anywhere else.
+func (h *handler) AdvanceConsumerHead(
+	ctx context.Context,
+	req *streampb.AdvanceConsumerHeadRequest,
+) (*streampb.AdvanceConsumerHeadResponse, error) {
+	in := req.GetFrontendRequest()
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
+
+	if _, _, err := chasm.UpdateComponent(
+		ctx,
+		workflowRef(req.GetNamespaceId(), in.GetWorkflowId()),
+		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, at int64) (struct{}, error) {
+			return struct{}{}, wf.AdvanceKnownHead(mctx, in.GetStreamId(), at)
+		},
+		in.GetHeadOffset(),
+	); err != nil {
 		return nil, err
 	}
-
-	return &streampb.SubscribeWorkflowResponse{
-		FrontendResponse: &streampb.SubscribeWorkflowOutput{StartOffset: registered},
+	return &streampb.AdvanceConsumerHeadResponse{
+		FrontendResponse: &streampb.AdvanceConsumerHeadOutput{},
 	}, nil
 }
 

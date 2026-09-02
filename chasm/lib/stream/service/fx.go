@@ -9,6 +9,10 @@ import (
 var HistoryModule = fx.Module(
 	"stream-history",
 	fx.Provide(
+		// Routes a call to the host owning a shard. History needs it too, not
+		// just the frontend: a step that spans two executions has to reach a
+		// shard this host may not own.
+		streampb.NewStreamServiceLayeredClient,
 		newHandler,
 		newRetentionTaskHandler,
 		newNotifyConsumersTaskHandler,

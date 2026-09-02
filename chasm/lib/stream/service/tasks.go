@@ -7,7 +7,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -134,15 +133,22 @@ type notifyConsumersTaskHandler struct {
 
 	namespaceRegistry namespace.Registry
 	logger            log.Logger
+
+	// This task runs on the stream's shard. Its consumers live wherever their
+	// own executions do, so telling them goes back out through the service to
+	// be routed rather than resolved here.
+	routed streampb.StreamServiceClient
 }
 
 func newNotifyConsumersTaskHandler(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	routed streampb.StreamServiceClient,
 ) *notifyConsumersTaskHandler {
 	return &notifyConsumersTaskHandler{
 		namespaceRegistry: namespaceRegistry,
 		logger:            logger,
+		routed:            routed,
 	}
 }
 
@@ -195,17 +201,14 @@ func (h *notifyConsumersTaskHandler) Execute(
 			continue
 		}
 
-		_, _, err := chasm.UpdateComponent(
-			ctx,
-			chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
-				NamespaceID: namespaceID,
-				BusinessID:  consumer.GetWorkflowId(),
-			}),
-			func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, at int64) (struct{}, error) {
-				return struct{}{}, wf.AdvanceKnownHead(mctx, streamID, at)
+		_, err := h.routed.AdvanceConsumerHead(ctx, &streampb.AdvanceConsumerHeadRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &streampb.AdvanceConsumerHeadInput{
+				WorkflowId: consumer.GetWorkflowId(),
+				StreamId:   streamID,
+				HeadOffset: head,
 			},
-			head,
-		)
+		})
 		if err != nil {
 			h.logger.Error("failed to tell a stream consumer that the frontier moved",
 				tag.NewStringTag("stream-id", streamID),

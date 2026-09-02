@@ -234,12 +234,61 @@ message DescribeWorkflowStreamResponse {
   DescribeStreamOutput frontend_response = 1;
 }
 
+// Registering a consumer on a stream in another execution. Split out from
+// SubscribeWorkflow because the two halves live on different shards: the pin
+// goes on the stream, the cursor goes on the consuming workflow, and a handler
+// can only reach the shard it was routed to.
+message RegisterStreamConsumerInput {
+  string namespace = 1;
+  string stream_id = 2;
+  // The workflow that will consume, which names the pin.
+  string consumer_workflow_id = 3;
+  // Negative means from wherever the stream is when the pin is taken. Resolved
+  // here, where the frontier is, and returned so the cursor records a fact.
+  int64 start_offset = 4;
+}
+
+message RegisterStreamConsumerOutput {
+  int64 start_offset = 1;
+  // What the consumer needs to address the log, all decided by the stream.
+  string collection_id = 2;
+  int64 bucket_size = 3;
+  int64 known_head = 4;
+}
+
+// Telling one consumer that the frontier moved. Routed to the consumer, which
+// is not where the stream lives.
+message AdvanceConsumerHeadInput {
+  string namespace = 1;
+  string workflow_id = 2;
+  string stream_id = 3;
+  int64 head_offset = 4;
+}
+
+message AdvanceConsumerHeadOutput {}
+
 message AddWorkflowMessagesRequest {
   string namespace_id = 1;
   AddWorkflowMessagesInput frontend_request = 2;
 }
 message AddWorkflowMessagesResponse {
   AddMessagesOutput frontend_response = 1;
+}
+
+message RegisterStreamConsumerRequest {
+  string namespace_id = 1;
+  RegisterStreamConsumerInput frontend_request = 2;
+}
+message RegisterStreamConsumerResponse {
+  RegisterStreamConsumerOutput frontend_response = 1;
+}
+
+message AdvanceConsumerHeadRequest {
+  string namespace_id = 1;
+  AdvanceConsumerHeadInput frontend_request = 2;
+}
+message AdvanceConsumerHeadResponse {
+  AdvanceConsumerHeadOutput frontend_response = 1;
 }
 
 message CloseStreamRequest {

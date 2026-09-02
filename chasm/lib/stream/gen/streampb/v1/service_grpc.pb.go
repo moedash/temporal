@@ -29,6 +29,8 @@ const (
 	StreamService_PollWorkflowMessages_FullMethodName   = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/PollWorkflowMessages"
 	StreamService_DescribeWorkflowStream_FullMethodName = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/DescribeWorkflowStream"
 	StreamService_AddWorkflowMessages_FullMethodName    = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/AddWorkflowMessages"
+	StreamService_RegisterStreamConsumer_FullMethodName = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/RegisterStreamConsumer"
+	StreamService_AdvanceConsumerHead_FullMethodName    = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/AdvanceConsumerHead"
 	StreamService_CloseStream_FullMethodName            = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/CloseStream"
 	StreamService_TruncateStream_FullMethodName         = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/TruncateStream"
 	StreamService_ListStreams_FullMethodName            = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/ListStreams"
@@ -49,6 +51,11 @@ type StreamServiceClient interface {
 	PollWorkflowMessages(ctx context.Context, in *PollWorkflowMessagesRequest, opts ...grpc.CallOption) (*PollWorkflowMessagesResponse, error)
 	DescribeWorkflowStream(ctx context.Context, in *DescribeWorkflowStreamRequest, opts ...grpc.CallOption) (*DescribeWorkflowStreamResponse, error)
 	AddWorkflowMessages(ctx context.Context, in *AddWorkflowMessagesRequest, opts ...grpc.CallOption) (*AddWorkflowMessagesResponse, error)
+	// Internal. History calls these on itself to reach a shard it does not own,
+	// which is the only way a step that spans two executions can work on a
+	// cluster with more than one history host.
+	RegisterStreamConsumer(ctx context.Context, in *RegisterStreamConsumerRequest, opts ...grpc.CallOption) (*RegisterStreamConsumerResponse, error)
+	AdvanceConsumerHead(ctx context.Context, in *AdvanceConsumerHeadRequest, opts ...grpc.CallOption) (*AdvanceConsumerHeadResponse, error)
 	CloseStream(ctx context.Context, in *CloseStreamRequest, opts ...grpc.CallOption) (*CloseStreamResponse, error)
 	TruncateStream(ctx context.Context, in *TruncateStreamRequest, opts ...grpc.CallOption) (*TruncateStreamResponse, error)
 	// Served on the frontend only: it queries visibility rather than a stream,
@@ -146,6 +153,24 @@ func (c *streamServiceClient) AddWorkflowMessages(ctx context.Context, in *AddWo
 	return out, nil
 }
 
+func (c *streamServiceClient) RegisterStreamConsumer(ctx context.Context, in *RegisterStreamConsumerRequest, opts ...grpc.CallOption) (*RegisterStreamConsumerResponse, error) {
+	out := new(RegisterStreamConsumerResponse)
+	err := c.cc.Invoke(ctx, StreamService_RegisterStreamConsumer_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *streamServiceClient) AdvanceConsumerHead(ctx context.Context, in *AdvanceConsumerHeadRequest, opts ...grpc.CallOption) (*AdvanceConsumerHeadResponse, error) {
+	out := new(AdvanceConsumerHeadResponse)
+	err := c.cc.Invoke(ctx, StreamService_AdvanceConsumerHead_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *streamServiceClient) CloseStream(ctx context.Context, in *CloseStreamRequest, opts ...grpc.CallOption) (*CloseStreamResponse, error) {
 	out := new(CloseStreamResponse)
 	err := c.cc.Invoke(ctx, StreamService_CloseStream_FullMethodName, in, out, opts...)
@@ -196,6 +221,11 @@ type StreamServiceServer interface {
 	PollWorkflowMessages(context.Context, *PollWorkflowMessagesRequest) (*PollWorkflowMessagesResponse, error)
 	DescribeWorkflowStream(context.Context, *DescribeWorkflowStreamRequest) (*DescribeWorkflowStreamResponse, error)
 	AddWorkflowMessages(context.Context, *AddWorkflowMessagesRequest) (*AddWorkflowMessagesResponse, error)
+	// Internal. History calls these on itself to reach a shard it does not own,
+	// which is the only way a step that spans two executions can work on a
+	// cluster with more than one history host.
+	RegisterStreamConsumer(context.Context, *RegisterStreamConsumerRequest) (*RegisterStreamConsumerResponse, error)
+	AdvanceConsumerHead(context.Context, *AdvanceConsumerHeadRequest) (*AdvanceConsumerHeadResponse, error)
 	CloseStream(context.Context, *CloseStreamRequest) (*CloseStreamResponse, error)
 	TruncateStream(context.Context, *TruncateStreamRequest) (*TruncateStreamResponse, error)
 	// Served on the frontend only: it queries visibility rather than a stream,
@@ -235,6 +265,12 @@ func (UnimplementedStreamServiceServer) DescribeWorkflowStream(context.Context, 
 }
 func (UnimplementedStreamServiceServer) AddWorkflowMessages(context.Context, *AddWorkflowMessagesRequest) (*AddWorkflowMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddWorkflowMessages not implemented")
+}
+func (UnimplementedStreamServiceServer) RegisterStreamConsumer(context.Context, *RegisterStreamConsumerRequest) (*RegisterStreamConsumerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterStreamConsumer not implemented")
+}
+func (UnimplementedStreamServiceServer) AdvanceConsumerHead(context.Context, *AdvanceConsumerHeadRequest) (*AdvanceConsumerHeadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AdvanceConsumerHead not implemented")
 }
 func (UnimplementedStreamServiceServer) CloseStream(context.Context, *CloseStreamRequest) (*CloseStreamResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CloseStream not implemented")
@@ -423,6 +459,42 @@ func _StreamService_AddWorkflowMessages_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _StreamService_RegisterStreamConsumer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterStreamConsumerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamServiceServer).RegisterStreamConsumer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamService_RegisterStreamConsumer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamServiceServer).RegisterStreamConsumer(ctx, req.(*RegisterStreamConsumerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _StreamService_AdvanceConsumerHead_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdvanceConsumerHeadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StreamServiceServer).AdvanceConsumerHead(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: StreamService_AdvanceConsumerHead_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StreamServiceServer).AdvanceConsumerHead(ctx, req.(*AdvanceConsumerHeadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _StreamService_CloseStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CloseStreamRequest)
 	if err := dec(in); err != nil {
@@ -537,6 +609,14 @@ var StreamService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AddWorkflowMessages",
 			Handler:    _StreamService_AddWorkflowMessages_Handler,
+		},
+		{
+			MethodName: "RegisterStreamConsumer",
+			Handler:    _StreamService_RegisterStreamConsumer_Handler,
+		},
+		{
+			MethodName: "AdvanceConsumerHead",
+			Handler:    _StreamService_AdvanceConsumerHead_Handler,
 		},
 		{
 			MethodName: "CloseStream",

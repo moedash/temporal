@@ -1374,6 +1374,154 @@ func (this *DescribeWorkflowStreamResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type RegisterStreamConsumerInput to the protobuf v3 wire format
+func (val *RegisterStreamConsumerInput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RegisterStreamConsumerInput from the protobuf v3 wire format
+func (val *RegisterStreamConsumerInput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RegisterStreamConsumerInput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RegisterStreamConsumerInput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RegisterStreamConsumerInput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RegisterStreamConsumerInput
+	switch t := that.(type) {
+	case *RegisterStreamConsumerInput:
+		that1 = t
+	case RegisterStreamConsumerInput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type RegisterStreamConsumerOutput to the protobuf v3 wire format
+func (val *RegisterStreamConsumerOutput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RegisterStreamConsumerOutput from the protobuf v3 wire format
+func (val *RegisterStreamConsumerOutput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RegisterStreamConsumerOutput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RegisterStreamConsumerOutput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RegisterStreamConsumerOutput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RegisterStreamConsumerOutput
+	switch t := that.(type) {
+	case *RegisterStreamConsumerOutput:
+		that1 = t
+	case RegisterStreamConsumerOutput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AdvanceConsumerHeadInput to the protobuf v3 wire format
+func (val *AdvanceConsumerHeadInput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AdvanceConsumerHeadInput from the protobuf v3 wire format
+func (val *AdvanceConsumerHeadInput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AdvanceConsumerHeadInput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AdvanceConsumerHeadInput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AdvanceConsumerHeadInput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AdvanceConsumerHeadInput
+	switch t := that.(type) {
+	case *AdvanceConsumerHeadInput:
+		that1 = t
+	case AdvanceConsumerHeadInput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AdvanceConsumerHeadOutput to the protobuf v3 wire format
+func (val *AdvanceConsumerHeadOutput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AdvanceConsumerHeadOutput from the protobuf v3 wire format
+func (val *AdvanceConsumerHeadOutput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AdvanceConsumerHeadOutput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AdvanceConsumerHeadOutput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AdvanceConsumerHeadOutput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AdvanceConsumerHeadOutput
+	switch t := that.(type) {
+	case *AdvanceConsumerHeadOutput:
+		that1 = t
+	case AdvanceConsumerHeadOutput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type AddWorkflowMessagesRequest to the protobuf v3 wire format
 func (val *AddWorkflowMessagesRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -1440,6 +1588,154 @@ func (this *AddWorkflowMessagesResponse) Equal(that interface{}) bool {
 	case *AddWorkflowMessagesResponse:
 		that1 = t
 	case AddWorkflowMessagesResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type RegisterStreamConsumerRequest to the protobuf v3 wire format
+func (val *RegisterStreamConsumerRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RegisterStreamConsumerRequest from the protobuf v3 wire format
+func (val *RegisterStreamConsumerRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RegisterStreamConsumerRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RegisterStreamConsumerRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RegisterStreamConsumerRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RegisterStreamConsumerRequest
+	switch t := that.(type) {
+	case *RegisterStreamConsumerRequest:
+		that1 = t
+	case RegisterStreamConsumerRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type RegisterStreamConsumerResponse to the protobuf v3 wire format
+func (val *RegisterStreamConsumerResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RegisterStreamConsumerResponse from the protobuf v3 wire format
+func (val *RegisterStreamConsumerResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RegisterStreamConsumerResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RegisterStreamConsumerResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RegisterStreamConsumerResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RegisterStreamConsumerResponse
+	switch t := that.(type) {
+	case *RegisterStreamConsumerResponse:
+		that1 = t
+	case RegisterStreamConsumerResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AdvanceConsumerHeadRequest to the protobuf v3 wire format
+func (val *AdvanceConsumerHeadRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AdvanceConsumerHeadRequest from the protobuf v3 wire format
+func (val *AdvanceConsumerHeadRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AdvanceConsumerHeadRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AdvanceConsumerHeadRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AdvanceConsumerHeadRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AdvanceConsumerHeadRequest
+	switch t := that.(type) {
+	case *AdvanceConsumerHeadRequest:
+		that1 = t
+	case AdvanceConsumerHeadRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AdvanceConsumerHeadResponse to the protobuf v3 wire format
+func (val *AdvanceConsumerHeadResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AdvanceConsumerHeadResponse from the protobuf v3 wire format
+func (val *AdvanceConsumerHeadResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AdvanceConsumerHeadResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AdvanceConsumerHeadResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AdvanceConsumerHeadResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AdvanceConsumerHeadResponse
+	switch t := that.(type) {
+	case *AdvanceConsumerHeadResponse:
+		that1 = t
+	case AdvanceConsumerHeadResponse:
 		that1 = &t
 	default:
 		return false
