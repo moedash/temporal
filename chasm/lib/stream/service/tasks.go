@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
@@ -178,6 +179,17 @@ func (h *notifyConsumersTaskHandler) Execute(
 	}
 	head := state.GetHeadOffset()
 
+	// Collected rather than returned at the first failure, so one unreachable
+	// consumer does not stop the others being told in this pass, and returned
+	// at the end so the task retries rather than dropping the notification.
+	//
+	// Dropping it is not survivable for a consumer on another host. The engine
+	// resolves this ref against the local shard controller, so a consumer whose
+	// shard lives elsewhere fails every time, its known head never advances,
+	// and delivery clips to it: Path C across executions never delivers at all.
+	// A retry does not fix that. It makes it visible, which a warning did not.
+	var notifyErrs []error
+
 	for _, consumer := range state.GetConsumers() {
 		if !consumer.GetExternal() || !consumer.GetActive() || consumer.GetOffset() >= head {
 			continue
@@ -195,16 +207,14 @@ func (h *notifyConsumersTaskHandler) Execute(
 			head,
 		)
 		if err != nil {
-			// One unreachable consumer must not hold up the others, and the
-			// next append schedules this again. A consumer that never comes
-			// back is drained by its own truncation floor, not from here.
-			h.logger.Warn("failed to tell a stream consumer that the frontier moved",
+			h.logger.Error("failed to tell a stream consumer that the frontier moved",
 				tag.NewStringTag("stream-id", streamID),
 				tag.NewStringTag("consumer-workflow-id", consumer.GetWorkflowId()),
 				tag.Error(err))
+			notifyErrs = append(notifyErrs, err)
 		}
 	}
-	return nil
+	return errors.Join(notifyErrs...)
 }
 
 func (h *notifyConsumersTaskHandler) Discard(
