@@ -57,6 +57,10 @@ type streamBaselineResult struct {
 
 	historyBytes  int64
 	historyEvents int64
+	// Set when the workload has no workflow at all, so the history columns are
+	// an absence rather than a measurement. Rendering them as 0.00 next to a
+	// measured figure reads as a comparison that was never made.
+	historyNotApplicable bool
 
 	persistenceRequests int64
 	persistenceByOp     map[string]int64
@@ -205,17 +209,21 @@ func runStreamBaseline(t *testing.T, p streamBaselineParams) streamBaselineResul
 
 	res.messagesSent = runStreamProducer(ctx, t, env, wfID, run.GetRunID(), p, sentAt, &res)
 
-	// Let consumers drain, then let the workflow finish so the history numbers
-	// below are final rather than a mid-flight snapshot. A cell that fails to
-	// drain is reported rather than failed: hitting a limit is a real property
-	// of this pattern and is part of what the benchmark is measuring.
-	require.NoError(t, env.SdkClient().SignalWorkflow(ctx, wfID, run.GetRunID(), streamDoneSignal, nil))
+	// Drain, then stop the consumers, and only then let the workflow finish, so
+	// that no consumer is ever polling an execution that is completing. One that
+	// is counts its own doomed polls as rejections and its client backoff as
+	// delivery latency, which measures the harness rather than the pattern. The
+	// workflow finishes last so the history numbers below are final rather than a
+	// mid-flight snapshot. A cell that fails to drain is reported rather than
+	// failed: hitting a limit is a real property of this pattern and is part of
+	// what the benchmark is measuring.
 	want := int64(res.messagesSent) * int64(p.subscribers)
 	if !waitForDrain(ctx, &receivedTotal, want, 15*time.Second) {
 		t.Logf("drained %d of %d expected deliveries before timeout", receivedTotal.Load(), want)
 	}
 	stopConsumers()
 	consumers.Wait()
+	require.NoError(t, env.SdkClient().SignalWorkflow(ctx, wfID, run.GetRunID(), streamDoneSignal, nil))
 	if err := run.Get(ctx, nil); err != nil {
 		t.Logf("workflow did not complete cleanly: %v", err)
 	}
@@ -356,6 +364,18 @@ func runStreamConsumer(
 	return latencies, lastSeen
 }
 
+// historyPerMsg renders a per-message history figure, keeping a workload with
+// no workflow distinct from one that measured zero.
+func (r streamBaselineResult) historyPerMsg(v int64) string {
+	if r.historyNotApplicable {
+		return "no workflow"
+	}
+	if r.messagesSent == 0 {
+		return "n/a"
+	}
+	return fmt.Sprintf("%.2f", float64(v)/float64(r.messagesSent))
+}
+
 // waitForDrain polls until every consumer has caught up or the deadline passes.
 // It reports rather than asserts, because a cell that cannot drain is a result.
 func waitForDrain(ctx context.Context, got *atomic.Int64, want int64, timeout time.Duration) bool {
@@ -414,7 +434,7 @@ func reportStreamBaseline(t *testing.T, results []streamBaselineResult) {
 		}
 		t.Logf("| %s | %d | %d | %d | %s | %s | %s | %s | %s |",
 			r.params.name, r.messagesSent, r.messagesReceived, r.pollRejections,
-			perMsg(r.historyEvents), perMsg(r.historyBytes),
+			r.historyPerMsg(r.historyEvents), r.historyPerMsg(r.historyBytes),
 			perMsg(r.persistenceRequests),
 			r.latencyP50.Round(time.Millisecond), r.latencyP99.Round(time.Millisecond))
 	}

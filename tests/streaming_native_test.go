@@ -85,11 +85,12 @@ func runNativeStream(t *testing.T, p streamBaselineParams) streamBaselineResult 
 	res.latencyP50 = percentile(all, 0.50)
 	res.latencyP99 = percentile(all, 0.99)
 
-	// Nothing enters workflow history, so these stay zero by construction
-	// rather than by tuning. That is the claim, and reporting it as a measured
-	// zero is the point.
-	res.historyEvents = 0
-	res.historyBytes = 0
+	// This workload has no workflow: the producer and every consumer are external
+	// gRPC clients. So there is no execution to describe and no history figure to
+	// report, which is not the same claim as a measured zero and must not be
+	// rendered as one. What a publish from workflow code costs in history is
+	// measured against a control in stream_publish_cost_test.go.
+	res.historyNotApplicable = true
 
 	for _, rec := range capture.Metric(metrics.PersistenceRequests.Name()) {
 		res.persistenceRequests += recordingCount(rec)
@@ -254,6 +255,6 @@ func logComparisonRow(t *testing.T, design string, r streamBaselineResult) {
 	}
 	t.Logf("| %s | %s | %d | %d | %d | %s | %s | %s | %s |",
 		r.params.name, design, r.messagesSent, r.messagesReceived, r.pollRejections,
-		perMsg(r.historyBytes), perMsg(r.persistenceRequests),
+		r.historyPerMsg(r.historyBytes), perMsg(r.persistenceRequests),
 		r.latencyP50.Round(time.Millisecond), r.latencyP99.Round(time.Millisecond))
 }

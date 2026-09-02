@@ -164,3 +164,18 @@ Designed, not built, and deliberately so. The framework question above has
 lead time, and building the private version first would make it harder to ask.
 Touching the sync-state path on the strength of my own design note, in a
 prototype whose substrate was decided this week, would be the wrong order.
+
+## Decision, 2026-09-02
+
+Not waiting on the answer above to proceed. An external shared store is the
+direction, `stream_log` stays as the working implementation, and replication
+ships undone with this document as the record of why.
+
+The one structural consequence, not yet done: the three persistence methods
+belong on their own store type rather than on `ExecutionStore`, resolved per
+namespace or cluster instead of per shard. That is 13 files including three
+wrapper clients and the mocks, it changes nothing observable, and if CHASM does
+gain an external-data node kind then the framework may own that call path
+instead of the persistence layer. Doing it now risks doing it twice, so it
+waits for either the answer or the first real external store, whichever comes
+first.
