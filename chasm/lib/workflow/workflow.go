@@ -74,6 +74,10 @@ type PendingStreamSubscription struct {
 	// itself is done, but the command still needs its event, because that is
 	// what a replaying worker matches the re-issued command against.
 	AlreadySubscribed bool
+
+	// The event this command already wrote, waiting on its start offset. In
+	// memory only, like the rest of this struct.
+	Event *historypb.HistoryEvent
 }
 
 // StagePendingSubscription records a subscription for the flush to resolve.

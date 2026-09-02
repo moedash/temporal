@@ -895,3 +895,81 @@ func TestResubscribingStillWritesItsEvent(t *testing.T) {
 	// for, so a replaying worker reads a fact rather than a request.
 	require.Equal(t, int64(0), subscribed[1].GetStartOffset())
 }
+
+// A subscribe followed by another command in the same Workflow Task. Every SDK
+// matches issued commands against the events they produced by position, so the
+// subscription's event has to sit where its command did.
+//
+// It used to be written in the flush, which runs after every command, so it
+// landed behind the events of commands issued later and the first replay of
+// any workflow that subscribed before doing anything else would fail.
+func TestStreamSubscribeEventKeepsCommandOrder(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	streamID := "order-src-" + uuid.NewString()
+	s.create(s.ctx(), t, streamID)
+
+	id := "stream-order-" + uuid.NewString()
+	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.ns,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: "stream-order"},
+		TaskQueue:           tq,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "tester",
+	})
+	require.NoError(t, err)
+
+	//nolint:staticcheck // SA1019: deprecated poller is the only one that can emit the command.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			// Subscribe first, then publish. The publish event must come second.
+			return []*commandpb.Command{
+				{
+					CommandType: enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM,
+					Attributes: &commandpb.Command_SubscribeStreamCommandAttributes{
+						SubscribeStreamCommandAttributes: &commandpb.SubscribeStreamCommandAttributes{
+							StreamId: streamID, StartOffset: 0,
+						},
+					},
+				},
+				{
+					CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
+					Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
+						AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
+							Messages: []*streampb.StreamMessage{
+								{Body: &commonpb.Payload{Data: []byte("after subscribe")}},
+							},
+						},
+					},
+				},
+			}, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	var order []enumspb.EventType
+	for _, e := range env.GetHistory(s.ns, &commonpb.WorkflowExecution{WorkflowId: id}) {
+		switch e.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED,
+			enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED:
+			order = append(order, e.GetEventType())
+		}
+	}
+	require.Equal(t, []enumspb.EventType{
+		enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED,
+		enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED,
+	}, order, "the events must be in the order their commands were issued")
+}

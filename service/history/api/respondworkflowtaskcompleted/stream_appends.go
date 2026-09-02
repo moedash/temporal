@@ -72,8 +72,8 @@ func resolveStagedStreamSubscriptions(
 				return serviceerror.NewInternalf(
 					"stream %q was marked already subscribed but has no cursor", pending.StreamID)
 			}
-			wf.RecordStreamSubscribed(
-				pending.StreamID, cursor.Get(chasmCtx).Offset(), completedEventID)
+			chasmworkflow.RecordStreamSubscribedOffset(
+				pending.Event, cursor.Get(chasmCtx).Offset())
 			continue
 		}
 
@@ -85,7 +85,7 @@ func resolveStagedStreamSubscriptions(
 			if err != nil {
 				return err
 			}
-			wf.RecordStreamSubscribed(pending.StreamID, startOffset, completedEventID)
+			chasmworkflow.RecordStreamSubscribedOffset(pending.Event, startOffset)
 			continue
 		}
 
@@ -130,9 +130,11 @@ func resolveStagedStreamSubscriptions(
 			return err
 		}
 
-		// Recorded after the cursor exists, so a crash between them leaves no
-		// event claiming a subscription that was never made.
-		wf.RecordStreamSubscribed(pending.StreamID, startOffset, completedEventID)
+		// Completed after the cursor exists. The event was written where the
+		// command was, but nothing outside this transaction sees either until
+		// the commit below, so a crash in between leaves no event claiming a
+		// subscription that was never made.
+		chasmworkflow.RecordStreamSubscribedOffset(pending.Event, startOffset)
 	}
 	return nil
 }

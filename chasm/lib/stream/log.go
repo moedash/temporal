@@ -107,8 +107,12 @@ func WriteAppend(
 		TransactionID:     op.TxnID,
 		PrevTransactionID: op.PrevTxnID,
 		IsNewBranch:       op.IsNewBucket,
-		Info:              fmt.Sprintf("stream:%s:%s", namespaceID, collectionID),
-		History:           op.Blob,
+		// Prefixed so the history scavenger leaves it alone. Without that it
+		// reads the tag as a workflow identity, fails to find the execution,
+		// and deletes the bucket out from under a live stream.
+		Info: fmt.Sprintf("%sstream:%s:%s",
+			persistence.NonExecutionGarbageCleanupInfoPrefix, namespaceID, collectionID),
+		History: op.Blob,
 	})
 	return err
 }

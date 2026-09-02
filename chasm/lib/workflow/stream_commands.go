@@ -105,7 +105,7 @@ func handleSubscribeStreamCommand(
 	wf *Workflow,
 	_ Validator,
 	command *commandpb.Command,
-	_ CommandHandlerOptions,
+	opts CommandHandlerOptions,
 ) error {
 	attrs := command.GetSubscribeStreamCommandAttributes()
 	if attrs == nil {
@@ -129,6 +129,8 @@ func handleSubscribeStreamCommand(
 		StreamID:          streamID,
 		StartOffset:       attrs.GetStartOffset(),
 		AlreadySubscribed: already,
+		Event: wf.ReserveStreamSubscribedEvent(
+			streamID, opts.WorkflowTaskCompletedEventID),
 	})
 	return nil
 }
@@ -165,21 +167,34 @@ func (streamSubscribedEvent) CherryPick(
 	return ErrEventNotCherryPickable
 }
 
-// RecordStreamSubscribed writes the event for a resolved subscription.
-func (w *Workflow) RecordStreamSubscribed(
+// ReserveStreamSubscribedEvent writes the event a subscribe command owes,
+// leaving the start offset for the flush to fill in.
+//
+// Written here rather than where the offset becomes known, because an SDK
+// matches the commands a workflow issued against the events they produced by
+// position. The flush runs after every command, so an event written there
+// would sit behind the events of commands that were issued later, and the
+// first replay of a workflow that subscribed before doing anything else would
+// fail on the mismatch.
+func (w *Workflow) ReserveStreamSubscribedEvent(
 	streamID string,
-	startOffset int64,
 	workflowTaskCompletedEventID int64,
-) {
-	w.AddHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED, func(e *historypb.HistoryEvent) {
+) *historypb.HistoryEvent {
+	return w.AddHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_WorkflowStreamSubscribedEventAttributes{
 			WorkflowStreamSubscribedEventAttributes: &historypb.WorkflowStreamSubscribedEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 				StreamId:                     streamID,
-				StartOffset:                  startOffset,
 			},
 		}
 	})
+}
+
+// RecordStreamSubscribedOffset completes a reserved event. Safe to do after the
+// fact because the builder serializes the batch at commit, which is after the
+// flush that resolves the offset.
+func RecordStreamSubscribedOffset(event *historypb.HistoryEvent, startOffset int64) {
+	event.GetWorkflowStreamSubscribedEventAttributes().StartOffset = startOffset
 }
 
 // streamMessagesAddedEvent is the event a publish writes.

@@ -4,6 +4,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	apistreampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
@@ -147,22 +152,57 @@ func TestCommitStreamCursorsWithAnEmptyRangeHoldsTheFloor(t *testing.T) {
 		"consuming nothing must not release the floor")
 }
 
-// A retried workflow task replays the same commands from the same completed
-// event id. Storage keys a log node by node id and transaction id, so two
-// attempts under one id collapse into a single row whose survivor is decided by
-// arrival order rather than by which attempt committed.
-func TestStreamTxnIDSeparatesWorkflowTaskAttempts(t *testing.T) {
-	s := &stream.Stream{State: &streampb.StreamState{}}
+// Two publishes in one workflow task must not share a transaction id, and
+// neither must two attempts of that task. Storage keys a log node by node id
+// and transaction id, so a shared id collapses two writes into one row whose
+// survivor is arrival order rather than which one committed.
+//
+// The handler no longer derives an id at all. It takes one from the shard, so
+// what this pins is that it asks each time rather than reusing.
+func TestPublishTakesAFreshTransactionIDPerCommand(t *testing.T) {
+	ctx := newStreamCursorTestContext()
 
-	first := streamTxnID(s, 10, 1)
-	retry := streamTxnID(s, 10, 2)
-	require.Greater(t, retry, first, "a retry must supersede the attempt it replaces")
+	// A backend, because the handler writes the publish event and that event is
+	// part of what the command owes.
+	backend := &chasm.MockNodeBackend{
+		HandleAddHistoryEvent: func(
+			t enumspb.EventType, set func(*historypb.HistoryEvent),
+		) *historypb.HistoryEvent {
+			e := &historypb.HistoryEvent{EventType: t}
+			set(e)
+			return e
+		},
+	}
+	w := &Workflow{MSPointer: chasm.NewMSPointer(backend)}
 
-	// An unset attempt still has to produce the pre-existing id, so a caller
-	// that does not populate it is not silently shifted.
-	require.Equal(t, first, streamTxnID(s, 10, 0))
+	issued := 0
+	opts := CommandHandlerOptions{
+		WorkflowTaskCompletedEventID: 10,
+		NextTxnID: func() (int64, error) {
+			issued++
+			return int64(1000 + issued), nil
+		},
+	}
 
-	// The committed id still wins when it has moved past the event id.
-	s.State.LastTxnId = 50
-	require.Equal(t, int64(51), streamTxnID(s, 10, 1))
+	publish := &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
+		Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
+			AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
+				Messages: []*apistreampb.StreamMessage{
+					{Body: &commonpb.Payload{Data: []byte("x")}},
+				},
+			},
+		},
+	}
+
+	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts))
+	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts))
+
+	require.Equal(t, 2, issued, "each command must draw its own id")
+	require.Equal(t, int64(1002), w.Streams[DefaultStreamName].Get(ctx).State.GetLastTxnId(),
+		"the second publish must commit under the id it was given")
 }
+
+type allowAnySize struct{}
+
+func (allowAnySize) IsValidPayloadSize(int) bool { return true }
