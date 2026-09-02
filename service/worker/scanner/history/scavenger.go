@@ -216,6 +216,18 @@ func (s *Scavenger) filterTask(
 		return nil
 	}
 
+	// Not a workflow execution's history, so its owner deletes it and this
+	// scavenger must not. Checked before the parse, because the tag parses
+	// into a namespace that does not exist and that reads as garbage.
+	if persistence.IsNonExecutionGarbageCleanupInfo(branch.Info) {
+		metrics.HistoryScavengerSkipCount.With(s.metricsHandler).Record(1)
+
+		s.Lock()
+		defer s.Unlock()
+		s.hbd.SkipCount++
+		return nil
+	}
+
 	namespaceID, workflowID, runID, err := persistence.SplitHistoryGarbageCleanupInfo(branch.Info)
 	if err != nil {
 		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info), tag.Error(err))

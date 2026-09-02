@@ -1184,3 +1184,36 @@ func ConstructHistoryTaskAPI(
 ) string {
 	return baseAPI + taskCategory.Name()
 }
+
+// AppendStreamLog writes one batch of a stream log
+func (p *executionRateLimitedPersistenceClient) AppendStreamLog(
+	ctx context.Context,
+	request *InternalAppendStreamLogRequest,
+) error {
+	if err := allow(ctx, "AppendStreamLog", request.ShardID, p.systemRateLimiter, p.namespaceRateLimiter, p.shardRateLimiter); err != nil {
+		return err
+	}
+	return p.persistence.AppendStreamLog(ctx, request)
+}
+
+// ReadStreamLog returns the batches covering a range
+func (p *executionRateLimitedPersistenceClient) ReadStreamLog(
+	ctx context.Context,
+	request *InternalReadStreamLogRequest,
+) (*InternalReadStreamLogResponse, error) {
+	if err := allow(ctx, "ReadStreamLog", request.ShardID, p.systemRateLimiter, p.namespaceRateLimiter, p.shardRateLimiter); err != nil {
+		return nil, err
+	}
+	return p.persistence.ReadStreamLog(ctx, request)
+}
+
+// DeleteStreamLogBucket drops a whole bucket
+func (p *executionRateLimitedPersistenceClient) DeleteStreamLogBucket(
+	ctx context.Context,
+	request *InternalDeleteStreamLogBucketRequest,
+) error {
+	if err := allow(ctx, "DeleteStreamLogBucket", request.ShardID, p.systemRateLimiter, p.namespaceRateLimiter, p.shardRateLimiter); err != nil {
+		return err
+	}
+	return p.persistence.DeleteStreamLogBucket(ctx, request)
+}

@@ -1,0 +1,456 @@
+package stream
+
+import (
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+// Built directly rather than through NewStream: these exercise state
+// transitions, and NewStream also wires a visibility field that needs a live
+// context. Construction through the real path is covered end to end in
+// tests/stream_test.go.
+func newTestStream(t *testing.T, bucketSize int64) *Stream {
+	t.Helper()
+	return &Stream{
+		State: &streampb.StreamState{
+			CollectionId: "col-1",
+			BucketSize:   bucketSize,
+			Producers:    make(map[string]*streampb.ProducerCursor),
+			Consumers:    make(map[string]*streampb.ConsumerCursor),
+		},
+	}
+}
+
+func msgs(bodies ...string) []*streampb.StreamMessage {
+	out := make([]*streampb.StreamMessage, len(bodies))
+	for i, b := range bodies {
+		out[i] = &streampb.StreamMessage{
+			Body: &commonpb.Payload{Data: []byte(b)},
+			Kind: streampb.STREAM_MESSAGE_KIND_DATA,
+		}
+	}
+	return out
+}
+
+func TestAddMessagesAssignsContiguousOffsets(t *testing.T) {
+	s := newTestStream(t, 100)
+
+	first, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c")})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), first.FirstOffset)
+	require.Equal(t, int64(3), first.Count)
+	require.Equal(t, int64(3), first.NextOffset)
+
+	second, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("d", "e")})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), second.FirstOffset)
+	require.Equal(t, int64(5), second.NextOffset)
+	require.Equal(t, int64(5), s.State.HeadOffset)
+}
+
+func TestAddMessagesWritesTheBatchIntoTheComponent(t *testing.T) {
+	s := newTestStream(t, 100)
+
+	res, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
+	require.NoError(t, err)
+	require.NotEmpty(t, res.Blob.Data)
+
+	// Keyed by the offset it starts at, which is the key a retry of this
+	// append writes under, so the retry replaces rather than races.
+	require.Len(t, s.Batches, 1)
+	_, ok := s.Batches[0]
+	require.True(t, ok, "the batch must be keyed by its first offset")
+	require.Equal(t, int64(2), s.State.HeadOffset)
+}
+
+func TestDedupReturnsOriginalOffsets(t *testing.T) {
+	s := newTestStream(t, 100)
+	req := AddMessagesRequest{Messages: msgs("a", "b"), ProducerID: "p1", Sequence: 1}
+
+	first, err := s.AddMessages(nil, req)
+	require.NoError(t, err)
+	require.False(t, first.Deduplicated)
+
+	retry := req
+	again, err := s.AddMessages(nil, retry)
+	require.NoError(t, err)
+	require.True(t, again.Deduplicated)
+	require.Equal(t, first.FirstOffset, again.FirstOffset)
+	require.Nil(t, again.Blob, "a deduplicated retry writes nothing")
+	require.Equal(t, int64(2), s.State.HeadOffset, "a retry must not advance the head")
+}
+
+func TestDedupRejectsDifferentContent(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{
+		Messages: msgs("a"), ProducerID: "p1", Sequence: 1,
+	})
+	require.NoError(t, err)
+
+	// Returning the recorded offsets here would report success while dropping
+	// the caller's data, which is worse than failing.
+	_, err = s.AddMessages(nil, AddMessagesRequest{
+		Messages: msgs("different"), ProducerID: "p1", Sequence: 1,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "different content")
+}
+
+func TestExpectedOffsetMismatchReportsHead(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a")})
+	require.NoError(t, err)
+
+	stale := int64(0)
+	_, err = s.AddMessages(nil, AddMessagesRequest{
+		Messages: msgs("b"), ExpectedOffset: &stale,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "stream head is 1")
+}
+
+func TestOwnerEpochFencesStaleProducer(t *testing.T) {
+	s := newTestStream(t, 100)
+	s.State.OwnerEpoch = 5
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), OwnerEpoch: 4})
+	require.Error(t, err)
+
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), OwnerEpoch: 5})
+	require.NoError(t, err)
+}
+
+func TestFinishWritingFencesOneProducerOnly(t *testing.T) {
+	s := newTestStream(t, 100)
+	require.NoError(t, s.FinishWriting(nil, "p1"))
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{
+		Messages: msgs("a"), ProducerID: "p1", Sequence: 1,
+	})
+	require.Error(t, err)
+
+	// Another producer is unaffected: finishing is per-producer, not a close.
+	_, err = s.AddMessages(nil, AddMessagesRequest{
+		Messages: msgs("a"), ProducerID: "p2", Sequence: 1,
+	})
+	require.NoError(t, err)
+	require.False(t, s.State.Closed)
+}
+
+func TestCloseRejectsFurtherAppends(t *testing.T) {
+	s := newTestStream(t, 100)
+	s.Close(time.Now(), nil)
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a")})
+	require.Error(t, err)
+	var precondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &precondition)
+}
+
+func TestReadSpansBatchesAndStartsAtTheBatchHoldingTheOffset(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c")})
+	require.NoError(t, err)
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("d", "e")})
+	require.NoError(t, err)
+	require.Len(t, s.Batches, 2)
+
+	// A read from offset 1 lands inside the first batch. It gets that batch
+	// whole, because a consumer asks for an offset and not for a batch, and
+	// the batch is the smallest thing stored.
+	blobs, starts, err := s.ReadBatches(nil, 1, 5, 0)
+	require.NoError(t, err)
+	require.Len(t, blobs, 2)
+	require.Equal(t, []int64{0, 3}, starts)
+
+	// A read wholly inside the second batch does not drag the first along.
+	blobs, starts, err = s.ReadBatches(nil, 3, 5, 0)
+	require.NoError(t, err)
+	require.Len(t, blobs, 1)
+	require.Equal(t, []int64{3}, starts)
+}
+
+func TestReclaimDropsOnlyBatchesFullyBelowTheFloor(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c")})
+	require.NoError(t, err)
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("d", "e")})
+	require.NoError(t, err)
+
+	// The floor lands mid-batch, so that batch stays: offsets above the floor
+	// are still readable and they live in it.
+	require.NoError(t, s.Truncate(nil, 1))
+	require.Len(t, s.Batches, 2)
+
+	// Now the whole first batch is below the floor and can go.
+	require.NoError(t, s.Truncate(nil, 3))
+	require.Len(t, s.Batches, 1)
+	_, ok := s.Batches[3]
+	require.True(t, ok, "the batch holding readable offsets must survive")
+}
+
+func TestTruncateDoesNotStopAtAConsumer(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
+	require.NoError(t, err)
+
+	s.State.Consumers["wf-1"] = &streampb.ConsumerCursor{
+		WorkflowId: "wf-1", Offset: 2, Active: true,
+	}
+
+	// The floor used to stop here. It protected nothing, because nothing
+	// released a consumer when it finished, so a capped stream with any
+	// consumer ever registered grew without bound. A consumer that falls below
+	// the floor is told where the stream now starts instead.
+	err = s.Truncate(nil, 3)
+	require.NoError(t, err, "an active consumer must not hold the floor")
+	require.Equal(t, int64(3), s.State.BaseOffset)
+}
+
+func TestTruncateBounds(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
+	require.NoError(t, err)
+
+	err = s.Truncate(nil, 1)
+	require.NoError(t, err)
+	err = s.Truncate(nil, 0)
+	require.Error(t, err, "truncation must not go backwards")
+	err = s.Truncate(nil, 3)
+	require.Error(t, err, "truncation must not pass the head")
+}
+
+func TestBucketArithmetic(t *testing.T) {
+	require.Equal(t, int64(0), BucketOf(0, 10))
+	require.Equal(t, int64(0), BucketOf(9, 10))
+	require.Equal(t, int64(1), BucketOf(10, 10))
+
+	// Node ids are bucket-relative and start at 1, because the store rejects 0.
+	require.Equal(t, int64(20), BucketStart(2, 10))
+}
+
+func TestReclaimableBuckets(t *testing.T) {
+	// Only buckets lying entirely below the floor are reclaimable, so nothing a
+	// reader can still ask for is ever dropped.
+	require.Empty(t, ReclaimableBuckets(0, 3, 4))
+	require.Equal(t, []int64{0}, ReclaimableBuckets(0, 4, 4))
+	require.Equal(t, []int64{0, 1}, ReclaimableBuckets(0, 8, 4))
+	require.Equal(t, []int64{1}, ReclaimableBuckets(4, 8, 4))
+	require.Empty(t, ReclaimableBuckets(4, 5, 4))
+}
+
+func TestCapTruncatesInline(t *testing.T) {
+	s := newTestStream(t, 4)
+	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 4}
+
+	for range 4 {
+		_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
+		require.NoError(t, err)
+	}
+
+	// Eight appended, four retained, so the floor sits at 4 and bucket 0 is
+	// entirely below it.
+	require.Equal(t, int64(8), s.State.HeadOffset)
+	require.Equal(t, int64(4), s.State.BaseOffset)
+}
+
+func TestCapAppliesEvenWithAConsumer(t *testing.T) {
+	s := newTestStream(t, 100)
+	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
+	s.State.Consumers["wf-1"] = &streampb.ConsumerCursor{
+		WorkflowId: "wf-1", Offset: 1, Active: true,
+	}
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
+	require.NoError(t, err)
+
+	// The cap applies. It used to yield to the consumer's cursor at 1, which is
+	// how a cap became a no-op for the whole life of a stream.
+	require.Equal(t, int64(2), s.State.BaseOffset, "the cap must apply")
+}
+
+func TestCloseSchedulesRetentionOnlyWhenConfigured(t *testing.T) {
+	now := time.Now()
+
+	plain := newTestStream(t, 100)
+	require.True(t, plain.Close(now, nil).IsZero(), "no retention configured, nothing to schedule")
+
+	withRetention := newTestStream(t, 100)
+	withRetention.State.Lifecycle = &streampb.StreamLifecycle{
+		Retention: durationpb.New(time.Hour),
+	}
+	at := withRetention.Close(now, nil)
+	require.Equal(t, now.Add(time.Hour), at)
+	require.NotNil(t, withRetention.State.CloseTime)
+
+	// Closing twice must not re-arm deletion.
+	require.True(t, withRetention.Close(now, nil).IsZero())
+}
+
+// The pin test above sets State.Consumers by hand, which is why nothing caught
+// that no caller ever populated it. These go through the registration API.
+func TestRegisterConsumerDoesNotPinTruncation(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
+	require.NoError(t, err)
+
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 2, false))
+
+	// Registering says who to wake, not what to keep.
+	err = s.Truncate(nil, 3)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), s.State.BaseOffset)
+}
+
+func TestAdvanceConsumerTracksWhereAConsumerHasReached(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
+	require.NoError(t, err)
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
+
+	// The cursor is what decides whether this consumer is worth waking, and
+	// nothing else now depends on it.
+	s.AdvanceConsumer(nil, "workflow:output", 3)
+	require.Equal(t, int64(3), s.State.Consumers["workflow:output"].Offset)
+}
+
+// Lowering the pin would hand back a guarantee already written to History: a
+// recorded range has to stay re-readable.
+func TestAdvanceConsumerNeverRewinds(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
+	require.NoError(t, err)
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
+
+	s.AdvanceConsumer(nil, "workflow:output", 3)
+	s.AdvanceConsumer(nil, "workflow:output", 1)
+
+	pin, ok := s.consumerPin()
+	require.True(t, ok)
+	require.Equal(t, int64(3), pin)
+}
+
+func TestRegisterConsumerRejectsAnOffsetBelowTheFloor(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
+	require.NoError(t, err)
+	err = s.Truncate(nil, 2)
+	require.NoError(t, err)
+
+	err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1, false)
+	require.ErrorContains(t, err, "below the stream's floor")
+}
+
+// Resubscribing reactivates the existing pin rather than resetting it, so a
+// consumer cannot rewind its own floor by subscribing again.
+func TestRegisterConsumerTwiceKeepsThePin(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
+	require.NoError(t, err)
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
+	s.AdvanceConsumer(nil, "workflow:output", 3)
+
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
+
+	pin, ok := s.consumerPin()
+	require.True(t, ok)
+	require.Equal(t, int64(3), pin)
+}
+
+func TestDeregisterConsumerReleasesThePin(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
+	require.NoError(t, err)
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1, false))
+
+	s.DeregisterConsumer(nil, "workflow:output")
+
+	err = s.Truncate(nil, 4)
+	require.NoError(t, err)
+}
+
+// The cap is a storage bound, not a licence to drop a range a consumer has
+// recorded a cursor for, so it stops at the pin and storage grows instead.
+func TestMessageCapAppliesWithARegisteredConsumer(t *testing.T) {
+	s := newTestStream(t, 100)
+	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
+	require.NoError(t, err)
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
+
+	// A consumer sitting at 0 used to hold the floor there for good. The cap is
+	// what the stream was asked for, so the cap is what it gets, and a consumer
+	// left behind finds out when it reads.
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("c", "d")})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), s.State.BaseOffset, "the cap applies")
+
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("e")})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), s.State.BaseOffset)
+}
+
+// A caller sending a fresh producer id per request would otherwise grow the
+// component state until no append fits, which leaves the stream unwritable for
+// good rather than failing the call that caused it.
+func TestStreamProducerTableIsBounded(t *testing.T) {
+	s := newTestStream(t, 100000)
+
+	for i := range MaxProducersPerStream {
+		_, err := s.AddMessages(nil, AddMessagesRequest{
+			Messages:   msgs("m"),
+			ProducerID: fmt.Sprintf("p%d", i),
+			Sequence:   1,
+		})
+		require.NoError(t, err)
+	}
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{
+		Messages:   msgs("one too many"),
+		ProducerID: "p-over",
+		Sequence:   1,
+	})
+	var invalid *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalid)
+
+	// A producer already tracked keeps working, so the cap cannot wedge the
+	// producers that filled it.
+	_, err = s.AddMessages(nil, AddMessagesRequest{
+		Messages:   msgs("still fine"),
+		ProducerID: "p0",
+		Sequence:   2,
+	})
+	require.NoError(t, err)
+
+	// An anonymous append is never blocked by the table.
+	_, err = s.AddMessages(nil, AddMessagesRequest{
+		Messages: msgs("anon"),
+	})
+	require.NoError(t, err)
+}
+
+// Each consumer holds a truncation floor, so an unbounded table pins storage as
+// well as growing state.
+func TestStreamConsumerTableIsBounded(t *testing.T) {
+	s := newTestStream(t, 100000)
+
+	for i := range MaxConsumersPerStream {
+		require.NoError(t, s.RegisterConsumer(
+			nil, fmt.Sprintf("c%d", i), "wf", "run", 0, true))
+	}
+
+	err := s.RegisterConsumer(nil, "c-over", "wf", "run", 0, true)
+	var invalid *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalid)
+
+	// Re-registering an existing consumer is an update, not a new entry.
+	require.NoError(t, s.RegisterConsumer(nil, "c0", "wf", "run", 0, true))
+}

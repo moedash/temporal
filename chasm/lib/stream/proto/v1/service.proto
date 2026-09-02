@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+import "chasm/lib/stream/proto/v1/request_response.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+service StreamService {
+  rpc CreateStream(CreateStreamRequest) returns (CreateStreamResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc AddMessages(AddMessagesRequest) returns (AddMessagesResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc FinishWriting(FinishWritingRequest) returns (FinishWritingResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc SubscribeWorkflow(SubscribeWorkflowRequest) returns (SubscribeWorkflowResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc PollMessages(PollMessagesRequest) returns (PollMessagesResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
+
+  rpc DescribeStream(DescribeStreamRequest) returns (DescribeStreamResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // Routed on the owner, because the stream it reads has no id of its own.
+  rpc PollWorkflowMessages(PollWorkflowMessagesRequest) returns (PollWorkflowMessagesResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
+
+  rpc DescribeWorkflowStream(DescribeWorkflowStreamRequest) returns (DescribeWorkflowStreamResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc AddWorkflowMessages(AddWorkflowMessagesRequest) returns (AddWorkflowMessagesResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // Internal. History calls these on itself to reach a shard it does not own,
+  // which is the only way a step that spans two executions can work on a
+  // cluster with more than one history host.
+  rpc RegisterStreamConsumer(RegisterStreamConsumerRequest) returns (RegisterStreamConsumerResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc AdvanceConsumerHead(AdvanceConsumerHeadRequest) returns (AdvanceConsumerHeadResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc CloseStream(CloseStreamRequest) returns (CloseStreamResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc TruncateStream(TruncateStreamRequest) returns (TruncateStreamResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // Served on the frontend only: it queries visibility rather than a stream,
+  // so there is no business ID to route on and nothing for a shard to answer.
+  rpc ListStreams(ListStreamsRequest) returns (ListStreamsResponse) {
+    option (temporal.server.api.routing.v1.routing).random = true;
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc DeleteStream(DeleteStreamRequest) returns (DeleteStreamResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.stream_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+}

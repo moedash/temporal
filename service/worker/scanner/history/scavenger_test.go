@@ -744,3 +744,61 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 	s.Equal(2, hbd.CurrentPage)
 	s.Equal(0, len(hbd.NextPageToken))
 }
+
+// A branch that is not a workflow execution's history must survive the
+// scavenger. It deletes a branch whose execution it cannot find, and a stream
+// log has no execution to find, so without the marker it reclaims live data
+// once the branch passes the minimum age.
+func (s *ScavengerTestSuite) TestSkipsBranchesThatAreNotExecutionHistory() {
+	streamInfo := persistence.NonExecutionGarbageCleanupInfoPrefix + "stream:namespaceID1:collection1"
+
+	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), protomock.Eq(&persistence.GetAllHistoryTreeBranchesRequest{
+		PageSize: pageSize,
+	})).Return(&persistence.GetAllHistoryTreeBranchesResponse{
+		Branches: []persistence.HistoryBranchDetail{
+			{
+				BranchInfo: &persistencespb.HistoryBranch{
+					TreeId:   treeID1,
+					BranchId: branchID1,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     streamInfo,
+			},
+			{
+				BranchInfo: &persistencespb.HistoryBranch{
+					TreeId:   treeID2,
+					BranchId: branchID2,
+				},
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
+			},
+		},
+	}, nil)
+
+	// Only the workflow branch is looked up, and only it is deleted. The stream
+	// branch is never described, because describing it is what produced the
+	// not-found the scavenger read as garbage.
+	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+		NamespaceId: "namespaceID2",
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflowID2",
+			RunId:      "runID2",
+		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
+	}).Return(nil, serviceerror.NewNotFound(""))
+	branchToken2, err := s.scavenger.serializer.HistoryBranchToBlob(&persistencespb.HistoryBranch{
+		TreeId:   treeID2,
+		BranchId: branchID2,
+	})
+	s.Nil(err)
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
+		ShardID:     common.WorkflowIDToHistoryShard("namespaceID2", "workflowID2", s.scavenger.numShards),
+		BranchToken: branchToken2.Data,
+	})).Return(nil)
+
+	hbd, err := s.scavenger.Run(context.Background())
+	s.Nil(err)
+	s.Equal(1, hbd.SkipCount, "the stream branch must be skipped, not collected")
+	s.Equal(1, hbd.SuccessCount)
+	s.Equal(0, hbd.ErrorCount)
+}

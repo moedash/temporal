@@ -48,3 +48,9 @@
 
 # Ignoring AI agent files
 .agents/
+
+# Compiled output of develop/streamdemo.
+/streamdemo
+
+# Review scaffolding, kept out of the repo
+/prompt.txt

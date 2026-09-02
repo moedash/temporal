@@ -475,3 +475,86 @@ func (m *sqlExecutionStore) GetHistoryTreeContainingBranch(
 		TreeInfos: treeInfos,
 	}, nil
 }
+
+// AppendStreamLog writes one batch of a stream log.
+//
+// A plain upsert, which is the whole point of this table. The key is the offset
+// the batch starts at, so a retry of an append replaces the row it wrote before
+// rather than competing with it, and there is no transaction-id chain for two
+// writers to invert. What a reader may see is decided by the frontier the
+// stream component commits, not by anything here.
+func (m *sqlExecutionStore) AppendStreamLog(
+	ctx context.Context,
+	request *p.InternalAppendStreamLogRequest,
+) error {
+	nsID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return err
+	}
+	_, err = m.DB.InsertIntoStreamLog(ctx, &sqlplugin.StreamLogRow{
+		ShardID:      request.ShardID,
+		NamespaceID:  nsID,
+		CollectionID: request.CollectionID,
+		Bucket:       request.Bucket,
+		StartOffset:  request.StartOffset,
+		NextOffset:    request.NextOffset,
+		Data:         request.Node.Data,
+		DataEncoding: request.Node.EncodingType.String(),
+	})
+	if err != nil {
+		return serviceerror.NewUnavailablef("AppendStreamLog: %v", err)
+	}
+	return nil
+}
+
+// ReadStreamLog returns the batches covering the requested range, beginning
+// with the batch that contains MinOffset rather than the one that starts at it.
+func (m *sqlExecutionStore) ReadStreamLog(
+	ctx context.Context,
+	request *p.InternalReadStreamLogRequest,
+) (*p.InternalReadStreamLogResponse, error) {
+	nsID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := m.DB.RangeSelectFromStreamLog(ctx, sqlplugin.StreamLogSelectFilter{
+		ShardID:      request.ShardID,
+		NamespaceID:  nsID,
+		CollectionID: request.CollectionID,
+		Bucket:       request.Bucket,
+		MinOffset:    request.MinOffset,
+		MaxOffset:    request.MaxOffset,
+		PageSize:     request.PageSize,
+	})
+	if err != nil {
+		return nil, serviceerror.NewUnavailablef("ReadStreamLog: %v", err)
+	}
+
+	resp := &p.InternalReadStreamLogResponse{}
+	for _, row := range rows {
+		resp.Batches = append(resp.Batches, p.NewDataBlob(row.Data, row.DataEncoding))
+		resp.StartOffsets = append(resp.StartOffsets, row.StartOffset)
+	}
+	return resp, nil
+}
+
+// DeleteStreamLogBucket drops a whole bucket.
+func (m *sqlExecutionStore) DeleteStreamLogBucket(
+	ctx context.Context,
+	request *p.InternalDeleteStreamLogBucketRequest,
+) error {
+	nsID, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return err
+	}
+	_, err = m.DB.DeleteFromStreamLog(ctx, sqlplugin.StreamLogDeleteFilter{
+		ShardID:      request.ShardID,
+		NamespaceID:  nsID,
+		CollectionID: request.CollectionID,
+		Bucket:       request.Bucket,
+	})
+	if err != nil {
+		return serviceerror.NewUnavailablef("DeleteStreamLogBucket: %v", err)
+	}
+	return nil
+}

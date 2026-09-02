@@ -2,15 +2,20 @@ package workflow
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/stream"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -39,6 +44,298 @@ type Workflow struct {
 
 	// Updates indexed by update ID, used to store the update components.
 	Updates chasm.Map[string, *WorkflowUpdate]
+
+	// Streams the workflow owns, keyed by stream name. Co-located with the
+	// workflow so publishing rides its commit rather than crossing executions.
+	Streams chasm.Map[string, *stream.Stream]
+
+	// Positions in streams the workflow consumes, keyed by stream name. Held
+	// here rather than on the stream so that folding in a delivered range
+	// commits with the event that records it.
+	StreamCursors chasm.Map[string, *stream.Cursor]
+
+	// Log nodes staged by stream commands during this workflow task. In memory
+	// only, and drained before the transaction commits: the bytes have to be
+	// durable before the frontier that makes them visible is.
+
+	// Subscribe commands whose stream is in another execution, so the addressing
+	// has to be looked up before a cursor can be made. In memory only, drained
+	// by the flush before commit.
+	pendingStreamSubscriptions []PendingStreamSubscription
+}
+
+// PendingStreamSubscription is a subscribe command whose stream lives in
+// another execution, waiting for the flush to look up its addressing.
+type PendingStreamSubscription struct {
+	StreamID    string
+	StartOffset int64
+	// The workflow already holds a cursor for this stream. The subscription
+	// itself is done, but the command still needs its event, because that is
+	// what a replaying worker matches the re-issued command against.
+	AlreadySubscribed bool
+
+	// The event this command already wrote, waiting on its start offset. In
+	// memory only, like the rest of this struct.
+	Event *historypb.HistoryEvent
+}
+
+// StagePendingSubscription records a subscription for the flush to resolve.
+func (w *Workflow) StagePendingSubscription(sub PendingStreamSubscription) {
+	w.pendingStreamSubscriptions = append(w.pendingStreamSubscriptions, sub)
+}
+
+// DrainStreamSubscriptions returns and clears the staged subscriptions.
+func (w *Workflow) DrainStreamSubscriptions() []PendingStreamSubscription {
+	out := w.pendingStreamSubscriptions
+	w.pendingStreamSubscriptions = nil
+	return out
+}
+
+// streamConsumerID names this workflow's pin on a stream it owns. An attached
+// stream has exactly one consumer, but the stream's map is keyed by consumer,
+// so the entry still needs a stable name.
+func streamConsumerID(streamName string) string {
+	return "workflow:" + streamName
+}
+
+// SubscribeToOwnedStream registers this workflow as a consumer of a stream it
+// owns, returning the offset the subscription actually starts from.
+//
+// A negative start offset means "from wherever the stream is now". That is
+// resolved here and stored, so the first recorded range begins at a fact rather
+// than at a reading that would land somewhere else on replay.
+func (w *Workflow) SubscribeToOwnedStream(
+	mctx chasm.MutableContext,
+	name string,
+	startOffset int64,
+) (int64, error) {
+	field, ok := w.Streams[name]
+	if !ok {
+		return 0, serviceerror.NewNotFoundf("workflow does not own a stream named %q", name)
+	}
+	owned := field.Get(mctx)
+	state, err := owned.Snapshot(mctx, struct{}{})
+	if err != nil {
+		return 0, err
+	}
+
+	if startOffset < 0 {
+		startOffset = state.GetHeadOffset()
+	}
+	if startOffset < state.GetBaseOffset() {
+		return 0, serviceerror.NewFailedPreconditionf(
+			"offset %d is below the stream's floor of %d", startOffset, state.GetBaseOffset())
+	}
+
+	if w.StreamCursors == nil {
+		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
+	}
+	if existing, ok := w.StreamCursors[name]; ok {
+		// Resubscribing must not rewind a cursor: ranges below it are already
+		// recorded in History, and moving back would replay them as new.
+		return existing.Get(mctx).Offset(), nil
+	}
+
+	cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
+		StreamID:     name,
+		CollectionID: state.GetCollectionId(),
+		BucketSize:   state.GetBucketSize(),
+		StartOffset:  startOffset,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	// Pin the stream's floor in the same transaction. Registered separately it
+	// could be lost while the cursor survived, and truncation would then be
+	// free to take a range the cursor still points at.
+	key := mctx.ExecutionKey()
+	if err := owned.RegisterConsumer(mctx, streamConsumerID(name), key.BusinessID, key.RunID, startOffset, false); err != nil {
+		return 0, err
+	}
+
+	w.StreamCursors[name] = chasm.NewComponentField(mctx, cursor)
+	return startOffset, nil
+}
+
+// ExternalStreamSubscription describes a stream in another execution. The
+// addressing is copied in at subscribe time so delivery never has to reach
+// across executions to find the log.
+type ExternalStreamSubscription struct {
+	StreamID     string
+	CollectionID string
+	BucketSize   int64
+	StartOffset  int64
+	KnownHead    int64
+}
+
+// SubscribeToExternalStream registers this workflow as a consumer of a stream
+// it does not own, returning the offset the subscription starts from.
+func (w *Workflow) SubscribeToExternalStream(
+	mctx chasm.MutableContext,
+	req ExternalStreamSubscription,
+) (int64, error) {
+	if w.StreamCursors == nil {
+		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
+	}
+	if existing, ok := w.StreamCursors[req.StreamID]; ok {
+		// Resubscribing must not rewind: ranges below the cursor are already
+		// recorded in History, and moving back would replay them as new.
+		return existing.Get(mctx).Offset(), nil
+	}
+
+	cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
+		StreamID:     req.StreamID,
+		External:     true,
+		CollectionID: req.CollectionID,
+		BucketSize:   req.BucketSize,
+		StartOffset:  req.StartOffset,
+	})
+	if err != nil {
+		return 0, err
+	}
+	cursor.AdvanceKnownHead(mctx, req.KnownHead)
+	w.StreamCursors[req.StreamID] = chasm.NewComponentField(mctx, cursor)
+	return req.StartOffset, nil
+}
+
+// ExportStreamSubscriptions returns the subscriptions a successor run has to
+// inherit.
+//
+// Only subscriptions to streams in other executions are exported. A stream this
+// workflow owns lives in this execution and does not itself survive the run
+// transition yet (§8a), so carrying a cursor for one would leave the successor
+// pointing at a stream it cannot reach.
+func (w *Workflow) ExportStreamSubscriptions(ctx chasm.Context) []ExternalStreamSubscription {
+	var out []ExternalStreamSubscription
+	for _, field := range w.StreamCursors {
+		cursor := field.Get(ctx)
+		if !cursor.IsExternal() {
+			continue
+		}
+		out = append(out, ExternalStreamSubscription{
+			StreamID:     cursor.StreamID(),
+			CollectionID: cursor.CollectionID(),
+			BucketSize:   cursor.BucketSize(),
+			StartOffset:  cursor.Offset(),
+			KnownHead:    cursor.KnownHead(),
+		})
+	}
+	// Stable order, so a successor's state does not depend on map iteration.
+	slices.SortFunc(out, func(a, b ExternalStreamSubscription) int {
+		return strings.Compare(a.StreamID, b.StreamID)
+	})
+	return out
+}
+
+// ImportStreamSubscriptions installs subscriptions inherited from the run this
+// one continues. The offset carries over unchanged: offsets are global to the
+// stream, so the successor resumes exactly where its predecessor stopped and
+// the stream itself is untouched.
+func (w *Workflow) ImportStreamSubscriptions(
+	mctx chasm.MutableContext,
+	subscriptions []ExternalStreamSubscription,
+) error {
+	for _, sub := range subscriptions {
+		if _, err := w.SubscribeToExternalStream(mctx, sub); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AdvanceKnownHead records how far a stream in another execution has moved.
+//
+// A workflow cannot read that frontier itself while closing its own
+// transaction, so the stream pushes it here. Writing it dirties this execution,
+// and the transaction close then sees the cursor is behind and schedules a
+// workflow task, which is the same path an owned stream takes.
+func (w *Workflow) AdvanceKnownHead(mctx chasm.MutableContext, streamID string, head int64) error {
+	field, ok := w.StreamCursors[streamID]
+	if !ok {
+		return serviceerror.NewNotFoundf("workflow does not consume stream %q", streamID)
+	}
+	field.Get(mctx).AdvanceKnownHead(mctx, head)
+	return nil
+}
+
+// StreamCursorsBehind reports whether any subscription still has offsets it has
+// not been given.
+//
+// This is the one place a stream wakes a workflow. Publishing deliberately
+// never does, because a stream item is data produced by an execution rather
+// than a decision input to it. An active subscription is different: the
+// workflow asked to be told, so leaving it to wait for some unrelated task
+// would make delivery depend on traffic that has nothing to do with the stream.
+func (w *Workflow) StreamCursorsBehind(ctx chasm.Context) bool {
+	for name, field := range w.StreamCursors {
+		cursor := field.Get(ctx)
+
+		// An external stream's frontier is whatever it last pushed here: this
+		// execution cannot read the real one without reaching into another.
+		if cursor.IsExternal() {
+			if cursor.Offset() < cursor.KnownHead() {
+				return true
+			}
+			continue
+		}
+
+		owned, ok := w.Streams[name]
+		if !ok {
+			continue
+		}
+		state, err := owned.Get(ctx).Snapshot(ctx, struct{}{})
+		if err != nil {
+			continue
+		}
+		if cursor.Offset() < state.GetHeadOffset() {
+			return true
+		}
+	}
+	return false
+}
+
+// CommitStreamCursors folds every staged range into its cursor and returns the
+// ranges to record. Called while the workflow task's transaction is open, so
+// the advance and the event that carries the range land together.
+//
+// A cursor with nothing staged is skipped, but a cursor staged with an empty
+// range is not: replay has to see that the subscription was live and observed
+// nothing.
+func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*streampb.StreamCursor {
+	if w.StreamCursors == nil {
+		return nil
+	}
+
+	names := make([]string, 0, len(w.StreamCursors))
+	for name := range w.StreamCursors {
+		names = append(names, name)
+	}
+	// Recorded order has to be stable, or replay compares against a different
+	// event than the one the original execution wrote.
+	slices.Sort(names)
+
+	var recorded []*streampb.StreamCursor
+	for _, name := range names {
+		cursor := w.StreamCursors[name].Get(mctx)
+		from, to, ok := cursor.Commit(mctx)
+		if !ok {
+			continue
+		}
+
+		// Let the floor follow the cursor. Anything below it is recorded as
+		// consumed, so nothing needs to re-read it.
+		if field, ok := w.Streams[name]; ok {
+			field.Get(mctx).AdvanceConsumer(mctx, streamConsumerID(name), to)
+		}
+
+		recorded = append(recorded, &streampb.StreamCursor{
+			StreamId:   cursor.StreamID(),
+			FromOffset: from,
+			ToOffset:   to,
+		})
+	}
+	return recorded
 }
 
 func NewWorkflow(
@@ -316,4 +613,77 @@ func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter
 
 func (w *Workflow) WorkflowTypeName() string {
 	return w.GetWorkflowTypeName()
+}
+
+// OwnedStreamState returns the state of a stream this workflow owns, or nil if
+// it owns none by that name.
+//
+// An attached stream has no id of its own, so this is the only way to see its
+// frontier from outside the execution. Reading it needs the owner's component,
+// which is why it lives here rather than on the stream.
+//
+// Absent is not an error. An owned stream is created by the first publish to
+// it, so a reader that arrives before the workflow has published anything is
+// the ordinary case rather than a mistake, and from outside the execution
+// "not created yet" and "never will be" are the same observation.
+func (w *Workflow) OwnedStreamState(
+	ctx chasm.Context,
+	name string,
+) (*streamlib.StreamState, error) {
+	field, ok := w.Streams[name]
+	if !ok {
+		return nil, nil
+	}
+	return field.Get(ctx).Snapshot(ctx, struct{}{})
+}
+
+// OwnedStream returns the attached stream itself, or nil when the workflow has
+// not created it yet. Reads that need the payload and not just the frontier go
+// through here, so both come from one view of the component.
+func (w *Workflow) OwnedStream(
+	ctx chasm.Context,
+	name string,
+) *stream.Stream {
+	field, ok := w.Streams[name]
+	if !ok {
+		return nil
+	}
+	return field.Get(ctx)
+}
+
+// EnsureOwnedStream creates a stream this workflow owns if the first writer to
+// it is not the workflow itself, and returns its state either way.
+//
+// An outside writer needs the stream's collection id and bucket size to write
+// its log node, and both are decided when the stream is created. So the first
+// append from outside costs one transition to create the stream and learn
+// them, and none after that.
+func (w *Workflow) EnsureOwnedStream(
+	mctx chasm.MutableContext,
+	name string,
+) (*streamlib.StreamState, error) {
+	s, err := w.streamNamed(mctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return s.Snapshot(mctx, struct{}{})
+}
+
+// AppendToOwnedStream appends to a stream this workflow owns on behalf of a
+// writer outside the execution.
+//
+// The workflow's own publishes go through the command handler, which advances
+// the frontier inside the Workflow Task's commit. This is the other producer:
+// it advances the same frontier in a transition of its own, so the two are
+// serialized by the execution rather than by anything the stream does.
+func (w *Workflow) AppendToOwnedStream(
+	mctx chasm.MutableContext,
+	name string,
+	req stream.AddMessagesRequest,
+) (stream.AddMessagesResult, error) {
+	s, err := w.streamNamed(mctx, name)
+	if err != nil {
+		return stream.AddMessagesResult{}, err
+	}
+	return s.AddMessages(mctx, req)
 }
