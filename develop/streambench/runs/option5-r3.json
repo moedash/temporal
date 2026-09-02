@@ -1,0 +1,70 @@
+{
+  "design": "option5-temporal-log",
+  "workload": {
+    "token_rate": 40,
+    "duration_s": 20,
+    "message_bytes": 20
+  },
+  "tokens_published": 800,
+  "tokens_observed": 800,
+  "latency_p50_ms": 204.255126953125,
+  "latency_p90_ms": 559.772705078125,
+  "latency_p99_ms": 840.625244140625,
+  "latency_max_ms": 874.212890625,
+  "latency_first10_ms": [
+    287.3,
+    258.6,
+    230.7,
+    202.1,
+    174.2,
+    145.2,
+    116.4,
+    87.5,
+    57.7,
+    26.5
+  ],
+  "latency_last10_ms": [
+    202.3,
+    175.4,
+    146.5,
+    118.0,
+    89.4,
+    60.4,
+    31.2,
+    192.3,
+    163.5,
+    134.1
+  ],
+  "wall_s": 23.430002212524414,
+  "temporal_ops": {
+    "UpdateWorkflowExecution": 1663.0,
+    "AppendStreamLog": 785.0,
+    "ListNexusEndpoints": 2.0,
+    "ReadHistoryBranch": 62.0,
+    "GetCurrentExecution": 754.0,
+    "GetTimerTasks": 46.0,
+    "UpsertClusterMembership": 8.0,
+    "ReadStreamLog": 62.0,
+    "ListNamespaces": 44.0,
+    "GetTaskQueueUserData": 1.0,
+    "GetTransferTasks": 63.0,
+    "UpdateTaskQueue": 9.0,
+    "RangeCompleteTimerTasks": 1.0,
+    "RangeCompleteTransferTasks": 1.0,
+    "RangeCompleteVisibilityTasks": 1.0,
+    "GetVisibilityTasks": 1.0,
+    "GetCurrentClusterMetadata": 1.0,
+    "GetTaskQueue": 19.0,
+    "GetNamespace": 3140.0
+  },
+  "redis_ops": {
+    "info": 1
+  },
+  "workflow_tasks": 0,
+  "workflow_task_seconds": 0.0,
+  "history_events": 201,
+  "history_bytes": 25154,
+  "notes": [],
+  "temporal_ops_total": 6663,
+  "redis_ops_total": 1
+}

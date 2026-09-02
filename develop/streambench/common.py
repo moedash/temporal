@@ -54,15 +54,27 @@ def scrape_temporal_ops(addr: str = "127.0.0.1:8000") -> dict[str, float]:
     return out
 
 
-def scrape_redis_ops(container: str = "bench-redis") -> dict[str, int]:
-    """Redis command counts, so the cost that moved out of Temporal is still counted."""
-    try:
-        raw = subprocess.run(
-            ["docker", "exec", container, "redis-cli", "info", "commandstats"],
-            capture_output=True, text=True, timeout=20,
-        ).stdout
-    except Exception:
-        return {}
+def scrape_redis_ops(container: str = "bench-redis", port: int = 6399) -> dict[str, int]:
+    """Redis command counts, so the cost that moved out of Temporal is still counted.
+
+    Reads a local server first and falls back to a container, because either is
+    a legitimate way to run the Option 7 half and a silently empty scrape
+    reports the cost that moved to Redis as zero.
+    """
+    raw = ""
+    for cmd in (
+        ["redis-cli", "-p", str(port), "info", "commandstats"],
+        ["docker", "exec", container, "redis-cli", "info", "commandstats"],
+    ):
+        try:
+            done = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        except Exception:
+            continue
+        if done.returncode == 0 and "cmdstat_" in done.stdout:
+            raw = done.stdout
+            break
+    if not raw:
+        raise RuntimeError("no Redis commandstats from either a local server or a container")
     out: dict[str, int] = {}
     for line in raw.splitlines():
         if not line.startswith("cmdstat_"):

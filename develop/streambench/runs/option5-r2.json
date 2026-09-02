@@ -1,0 +1,70 @@
+{
+  "design": "option5-temporal-log",
+  "workload": {
+    "token_rate": 40,
+    "duration_s": 20,
+    "message_bytes": 20
+  },
+  "tokens_published": 800,
+  "tokens_observed": 800,
+  "latency_p50_ms": 524.697021484375,
+  "latency_p90_ms": 921.5791015625,
+  "latency_p99_ms": 1006.705078125,
+  "latency_max_ms": 1021.299072265625,
+  "latency_first10_ms": [
+    8.7,
+    990.9,
+    962.3,
+    933.8,
+    902.4,
+    871.9,
+    841.0,
+    809.4,
+    779.4,
+    751.0
+  ],
+  "latency_last10_ms": [
+    831.8,
+    799.6,
+    768.2,
+    738.2,
+    709.4,
+    680.5,
+    651.4,
+    623.8,
+    595.2,
+    566.6
+  ],
+  "wall_s": 24.12905478477478,
+  "temporal_ops": {
+    "ListNexusEndpoints": 3.0,
+    "GetNamespace": 3200.0,
+    "UpdateTaskQueue": 12.0,
+    "ReadStreamLog": 24.0,
+    "GetCurrentClusterMetadata": 1.0,
+    "RangeCompleteOutboundTasks": 1.0,
+    "RangeCompleteTransferTasks": 1.0,
+    "GetTaskQueueUserData": 2.0,
+    "GetTransferTasks": 24.0,
+    "AppendStreamLog": 800.0,
+    "GetTimerTasks": 54.0,
+    "GetCurrentExecution": 784.0,
+    "UpdateWorkflowExecution": 1632.0,
+    "GetTaskQueue": 25.0,
+    "UpdateShard": 1.0,
+    "ReadHistoryBranch": 24.0,
+    "ListNamespaces": 52.0,
+    "UpsertClusterMembership": 9.0,
+    "RangeCompleteTimerTasks": 1.0
+  },
+  "redis_ops": {
+    "info": 1
+  },
+  "workflow_tasks": 0,
+  "workflow_task_seconds": 0.0,
+  "history_events": 81,
+  "history_bytes": 10049,
+  "notes": [],
+  "temporal_ops_total": 6650,
+  "redis_ops_total": 1
+}
