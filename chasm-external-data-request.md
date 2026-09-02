@@ -1,181 +1,123 @@
-# CHASM needs a node kind for data a component owns but does not store inline
+# Where a stream's bytes live: asked, and answered
 
-Audience: CHASM owners. Written from the streaming prototype (AI-198), which
-hit this, but the gap is not specific to streams.
+Status: **answered 2026-09-02.** This started as a request to CHASM owners for a
+node kind covering data a component owns but does not store inline. The answer
+is that it is already planned, so the request is withdrawn and this file is the
+record of the answer and what it means for the prototype.
 
-## The ask
+## The answer
 
-A CHASM component can own bulk data that is too large to live in mutable
-state. Today it has no way to say so, so the framework does not know the data
-exists: it does not replicate it, does not reclaim it, and does not count it.
-Every component with this shape has to hand-roll all three.
+Yichao Yang: the underlying event storage in CHASM is planned to be exposed in
+**H2, with replication and lifecycle**. Roey Berman confirmed that streaming was
+expected to use it. So the general capability is coming, and nothing in this
+prototype should be built to substitute for it.
 
-Requested: a node kind that holds a locator for externally stored data plus
-enough metadata for the framework to replicate and reclaim it. The concrete
-proposal for the replication half is in "A protocol that works" below.
+That closes the question this file originally asked. Not by argument, but
+because the work is scheduled and owned elsewhere.
 
-## What exists today
+## Why the question came up
 
-Four node kinds, in `chasm.proto:27-32`: component, data, collection, pointer.
-All four store their bytes inline, in `WorkflowMutableState.chasm_nodes`
-(`workflow_mutable_state.proto:19`). That is the correct design for state. It is
-not a place to put payload:
+A stream's messages cannot live in mutable state. All four CHASM node kinds
+store their bytes inline (`chasm.proto:27-32`) in
+`WorkflowMutableState.chasm_nodes` (`workflow_mutable_state.proto:19`), and:
 
 - `chasmNodeSizes` (`mutable_state_impl.go:170`) feeds `approximateSize`
 - checked against `MutableStateSizeLimitError`, 8 MB, warn at 1 MB
   (`dynamicconfig/constants.go:473-481`)
 - over the error limit the execution is **force-terminated**
   (`context.go:1381`, `maxMutableStateSizeExceeded`)
-- the check is archetype-tagged, so a standalone CHASM entity is subject to it
-  exactly as a workflow is
+- archetype-tagged, so a standalone stream entity is subject to it exactly as a
+  workflow is
 
-For scale: a measured 100k-token stream is 5.84 MB of payload. Inline, that is
-one long agent conversation before the entity is killed, and every append
+Measured: a 100k-token stream is 5.84 MB of payload. Inline, that is one long
+agent conversation past the warn and approaching the limit, and every append
 rewrites the whole record on the way there.
 
-So the bytes go in a side store. That part is not controversial and it is what
-history already does: the branch token lives in mutable state, the bytes live
-in `history_node`. The gap is that history's arrangement is bespoke. There is
-no general way to express it, so the next component to need it starts over.
+## Prior art, which reached the same ceiling
 
-## Working assumption: the store is external and shared
+Dan Davison and Sean Kane built a CHASM streaming component about a year ago,
+on `seandan/streaming` in `temporalio/temporal`. It is roughly 1500 lines under
+the same `chasm/lib/stream/` path this prototype uses, with `AddToStream` and
+`PollStream` on the frontend and one end-to-end test. Its component is:
 
-For the streaming prototype the current implementation is a `stream_log` table
-in the execution database, but **the intended target is an external shared
-store**, not Temporal's own database. That is the right assumption for this
-request, and it sharpens it: the locator points outside the database entirely,
-so there is no chance of the framework quietly reaching the bytes through an
-existing persistence path. It has to be told.
+```go
+type Stream struct {
+    chasm.UnimplementedComponent
+    *streampb.StreamState                          // head, tail
+    Messages chasm.Map[int64, *commonpb.Payload]   // one data node per message
+}
+```
 
-It also surfaces the one thing the current prototype has in the wrong place:
-`AppendStreamLog`, `ReadStreamLog` and `DeleteStreamLogBucket` are methods on
-`ExecutionStore` (`persistence_interface.go:168-175`), implemented in
-`sql/history_store.go` and `cassandra/history_store.go`. That presumes the log
-lives in the execution database. Under an external store it needs to be its own
-store type, resolved per namespace or per cluster rather than per shard.
+Roey Berman flagged its ceiling at the time: limited to about 5 MB of total
+payload because everything is in mutable state. The same note enumerated three
+ways out, and they are the same three this prototype arrived at independently:
+CHASM nodes in separate cells, payloads written outside mutable state by
+repurposing history, or payloads replaced by pointers to a blob store.
 
-Two consequences of an external store that this design has to answer, and they
-are worth being explicit about because they are not improvements:
+Worth being plain about it: this prototype's first substrate was the second of
+those, and the request this file used to make was the third. Neither was a new
+idea. Finding that out after the fact is the cost of not having read
+`#crew-streaming` first.
 
-**There is no transaction across the two systems.** The bytes and the frontier
-commit separately. Ordering is therefore load-bearing: write bytes, then commit
-the frontier. Crashing in between leaves bytes nobody references, which is
-reclaimable garbage. The reverse order leaves a frontier whose bytes never
-landed, which is unrecoverable data loss discovered by a reader. Idempotent
-writes keyed by offset make the safe order safe to retry.
+## The one thing that is not settled
 
-**Durability has to be real.** Redis has been named as a candidate. Its default
-configuration is not durable, and a stream that a customer is told is durable
-cannot be backed by a cache. Whatever the store is, it needs durable
-acknowledgement before the frontier advances, or the ordering rule above buys
-nothing.
+Dan Davison's guidance is to not make the storage realistic: use something based
+on `chasm.Map` and assume it has the properties it needs, because the value of
+this prototype is exploring user-facing behaviour that other design sessions
+might miss. That is a coherent position and it is what the prior art does.
 
-## What the framework would have to do
+It does not carry the benchmark, which is the other half of AI-198. The point of
+measuring client-side streaming against server-side streaming is to find out
+what each costs, and a substrate that force-terminates the entity partway
+through the workload cannot produce a number anyone should quote. The two goals
+want different things from the same prototype, and that is the disagreement to
+resolve rather than paper over.
 
-**Replicate.** Component state already replicates: `sync_state_retriever.go:415`
-ships `UpdatedChasmNodes` inside `SyncWorkflowStateMutationAttributes`, scoped
-by `exclusive_start_versioned_transition`. External bytes do not, so today a
-standby holds a frontier and no data, discovered at failover.
+Separately, Paul Nordstrom has asked for a discussion before this goes further,
+on the grounds that the data team owns backend storage for the stream affordance
+and this is not a place for a one-off, and that the short-term path agreed with
+Max was a client-side Redis connection. That is an ownership question, not a
+technical one, and it is not mine to settle here.
 
-Whether the framework has to ship the bytes at all depends on the store, and
-this is the one question an external store genuinely improves. If the store is
-itself multi-region, replication of the payload is the store's problem and
-Temporal ships only the reference, which it already does. If the store is
-regional, Temporal ships the payload, and now two systems have to fail over
-consistently. The framework should therefore treat "who replicates the bytes"
-as a property of the store rather than assuming either answer.
+## What the prototype assumes in the meantime
 
-**Reclaim.** When the owning component completes or truncates, something has to
-delete the bytes. Inline data gets this free. External data needs the framework
-to run a reclamation hook, and to tolerate the store having already lost them.
+An external shared store, with `stream_log` as the working implementation. Not
+because it should ship, but because the benchmark needs a substrate that does
+not fall over inside the workload. When CHASM event storage lands, this is the
+piece that gets deleted.
 
-**Account.** External bytes are invisible to `approximateSize`, which is correct
-for the force-terminate check and wrong for quota. A namespace can currently
-write unbounded external payload with no accounting anywhere.
+The consequence already recorded: the three persistence methods sit on
+`ExecutionStore` (`persistence_interface.go:168-175`), which presumes the log is
+shard-local. Under any external store that is the wrong home. Given the answer
+above, moving it is probably wasted work, so it stays as it is.
 
-## A protocol that works
+## What replication does, until then
 
-For the regional-store case, where Temporal does ship the payload. Offered as a
-concrete proposal rather than the only option.
+Nothing. A standby holds a frontier and no bytes, so a failover breaks every
+reader. That is now a documented limitation of a prototype rather than a gap to
+close, because the replication of stream bytes arrives with CHASM event storage
+in H2.
 
-Three properties make shipping the payload viable rather than fetching it back
-the way history events are fetched through branch tokens. All three follow from
-keying a record by the offset it starts at:
+The protocol sketch that used to be the point of this file is kept below,
+because it is cheap to keep and it is a concrete answer to one question that
+CHASM event storage will have to answer too: how a receiver tells a sender which
+byte ranges it already holds.
 
-- **Applying is idempotent.** Same key, same record. Duplicate and retry freely.
-- **Records are independent.** No chain, no previous-record pointer, so
-  out-of-order arrival is harmless.
-- **A record is self-describing.** It carries the range it covers, so a receiver
-  needs no context to place it.
+Three properties, all from keying a record by the offset it starts at. Applying
+a record is idempotent, so duplicates and retries are free. Records are
+independent, so out-of-order arrival is harmless. A record is self-describing,
+so a receiver needs no context to place it. Together they make shipping the
+payload viable rather than fetching it back the way history events are.
 
 Carry the records in the message that already carries the frontier, and apply
-records before state. Both are idempotent, so a failure in between replays
-harmlessly. Ordering is then free, which matters because it is the thing most
-likely to be got wrong: shipped separately, the frontier can arrive first and
-the standby holds offsets whose bytes never landed.
+records before state. Ordering is then free, which matters because it is the
+thing most likely to be got wrong: shipped separately, the frontier can arrive
+first and the standby holds offsets whose bytes never landed.
 
-**Which records to ship** is the part with a real choice in it. The state delta
-is versioned and the records are not, so the sender cannot tell from what
-already exists which records go with it.
-
-*Receiver reports a watermark.* The standby says, per collection, the offset it
-holds records through, and the sender ships from there to the frontier. No
-stored state anywhere. Needs somewhere to put a per-entity offset on the way
-back, since receiver progress travels today as a per-shard task-id
-acknowledgement.
-
-*Version the ranges.* Each append writes a small child node keyed by its start
-offset holding the range it covered. Those nodes are versioned like any other,
-so "nodes updated since transition X" yields exactly the ranges appended since
-X. No protocol change, and it rides machinery that already exists. Costs a node
-per append in mutable state, which is the thing this whole design is trying to
-avoid, and it needs continuation built separately.
-
-**Prefer the watermark, because it makes the size cap free.** A cap is needed
-either way: a stream can append a great deal between two syncs, and
-`sync_state_retriever` has no byte cap today. With a watermark, a message that
-cannot carry the whole range carries a prefix, and the receiver's next watermark
-resumes exactly there. The cap and the resume are the same mechanism, with no
-continuation token and no resumption state.
-
-## Questions for CHASM owners
-
-1. Is an external-data node kind something you want in the model, or is the
-   position that components needing this should keep doing it privately the way
-   history does?
-2. If it is wanted, does the framework ship the bytes, or is that delegated to
-   the store based on a declared property of it?
-3. Where should a byte cap on `sync_state_retriever` live: in the
-   external-data handling, or in the sync path generally?
-4. Does external data need to count against a namespace quota, and is there an
-   existing place for that?
-
-## Still unresolved, and not a framework question
-
-A stream written from both sides of a failover. Two clusters appending assign
-the same offsets to different bytes, and idempotent-by-offset then means last
-writer wins, silently. The right answer is single-writer ownership, the way an
-execution already has an owning cluster, with appends elsewhere rejected or
-forwarded. That is a design question for the stream component, not for CHASM.
-
-## Status
-
-Designed, not built, and deliberately so. The framework question above has
-lead time, and building the private version first would make it harder to ask.
-Touching the sync-state path on the strength of my own design note, in a
-prototype whose substrate was decided this week, would be the wrong order.
-
-## Decision, 2026-09-02
-
-Not waiting on the answer above to proceed. An external shared store is the
-direction, `stream_log` stays as the working implementation, and replication
-ships undone with this document as the record of why.
-
-The one structural consequence, not yet done: the three persistence methods
-belong on their own store type rather than on `ExecutionStore`, resolved per
-namespace or cluster instead of per shard. That is 13 files including three
-wrapper clients and the mocks, it changes nothing observable, and if CHASM does
-gain an external-data node kind then the framework may own that call path
-instead of the persistence layer. Doing it now risks doing it twice, so it
-waits for either the answer or the first real external store, whichever comes
-first.
+For which records to ship, have the receiver report the offset it holds through,
+per collection, and ship from there to the frontier. It needs a back-channel
+that does not exist, since receiver progress travels today as a per-shard
+task-id acknowledgement. It pays for itself by making the byte cap free: a
+message that cannot carry the whole range carries a prefix, and the receiver's
+next report resumes exactly there, with no continuation token and no resumption
+state.
