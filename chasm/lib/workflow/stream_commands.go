@@ -71,10 +71,6 @@ func handleAddStreamMessagesCommand(
 	if err != nil {
 		return err
 	}
-	for _, op := range result.Appends {
-		wf.StageStreamAppend(s.State.GetCollectionId(), op)
-	}
-
 	// Written even when a producer sequence deduplicated the append, because
 	// the command was still issued and the event is what the replaying worker
 	// matches it against. It names the original offsets, which is what a

@@ -74,7 +74,7 @@ func TestSubscribeRegistersTheConsumer(t *testing.T) {
 	require.True(t, consumer.GetActive())
 
 	// And it does not hold the floor.
-	_, err = owned.Truncate(ctx, 1)
+	err = owned.Truncate(ctx, 1)
 	require.NoError(t, err)
 }
 
@@ -188,13 +188,15 @@ func TestPublishStagesEachBatchAtItsOwnOffset(t *testing.T) {
 	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts))
 	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts))
 
-	staged := w.DrainStreamAppends()
-	require.Len(t, staged, 2)
-	require.Equal(t, int64(0), staged[0].Append.StartOffset)
-	require.Equal(t, int64(2), staged[0].Append.NextOffset)
-	require.Equal(t, int64(2), staged[1].Append.StartOffset)
-	require.Equal(t, int64(4), staged[1].Append.NextOffset)
-	require.Equal(t, int64(4), w.Streams[DefaultStreamName].Get(ctx).State.GetHeadOffset())
+	// Both publishes committed with the workflow task, so the batches are on
+	// the component keyed by the offsets they start at.
+	owned := w.Streams[DefaultStreamName].Get(ctx)
+	require.Len(t, owned.Batches, 2)
+	_, ok := owned.Batches[0]
+	require.True(t, ok)
+	_, ok = owned.Batches[2]
+	require.True(t, ok)
+	require.Equal(t, int64(4), owned.State.GetHeadOffset())
 }
 
 type allowAnySize struct{}
@@ -221,7 +223,7 @@ func TestConsumerOutrunByTruncationIsToldSo(t *testing.T) {
 	require.NoError(t, err)
 
 	// The stream moves past where this consumer is sitting.
-	_, err = owned.Truncate(ctx, 3)
+	err = owned.Truncate(ctx, 3)
 	require.NoError(t, err, "a consumer must not hold the floor")
 
 	cursor := w.StreamCursors[DefaultStreamName].Get(ctx)

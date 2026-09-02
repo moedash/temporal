@@ -2,6 +2,8 @@ package stream
 
 import (
 	"crypto/sha256"
+	"maps"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -25,6 +27,14 @@ type Stream struct {
 	chasm.UnimplementedComponent
 
 	State *streampb.StreamState
+
+	// Batches holds the payload, each keyed by the offset it starts at. They are
+	// data nodes, so they replicate with the component and are reclaimed with
+	// it, and a retry addresses the same key rather than racing it.
+	//
+	// They also live in mutable state, which caps a stream at the execution
+	// size limit. That is the trade for not owning a store.
+	Batches chasm.Map[int64, *commonpb.DataBlob]
 
 	// Present so streams are listable. Operators need to find them the same way
 	// they find workflows, and without this the only way to reach a stream is
@@ -66,13 +76,9 @@ type AddMessagesResult struct {
 	// appended and the original offsets are returned.
 	Deduplicated bool
 
-	// Staged nodes for the caller to persist before the frontier is observable.
-	// Empty when deduplicated.
-	Appends []LogAppend
-
-	// Buckets the message cap pushed below the readable floor. Safe to delete
-	// once this transition commits, never before.
-	ReclaimableBuckets []int64
+	// The bytes this append wrote, so a caller can prime a cache without
+	// reading them back. Nil when deduplicated.
+	Blob *commonpb.DataBlob
 }
 
 func NewStream(ctx chasm.MutableContext, req NewStreamRequest) (*Stream, error) {
@@ -86,6 +92,7 @@ func NewStream(ctx chasm.MutableContext, req NewStreamRequest) (*Stream, error) 
 	}
 	return &Stream{
 		Visibility: visibility,
+		Batches:    make(chasm.Map[int64, *commonpb.DataBlob]),
 		State: &streampb.StreamState{
 			CollectionId: req.CollectionID,
 			BucketSize:   bucketSize,
@@ -126,10 +133,9 @@ func (s *Stream) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-// AddMessages assigns a contiguous offset range and stages the bytes. It does
-// not persist: the caller writes the staged nodes and only then is the new
-// frontier observable, which is the ordering that makes a torn append invisible
-// rather than corrupting.
+// AddMessages assigns a contiguous offset range and writes the bytes into the
+// component, so the payload and the frontier commit in one transaction. A torn
+// append is therefore not a state anyone can observe.
 func (s *Stream) AddMessages(
 	mctx chasm.MutableContext,
 	req AddMessagesRequest,
@@ -174,20 +180,11 @@ func (s *Stream) AddMessages(
 
 	first := s.State.HeadOffset
 	count := int64(len(req.Messages))
-	if BucketOf(first, s.State.BucketSize) != BucketOf(first+count-1, s.State.BucketSize) {
-		// A node may not straddle a bucket, because a bucket is a storage
-		// partition. Splitting is the caller's job for now; rejecting keeps
-		// the invariant explicit rather than silently producing a bad node.
-		return AddMessagesResult{}, serviceerror.NewInvalidArgumentf(
-			"batch of %d at offset %d crosses a bucket boundary", count, first)
-	}
 
-	appendOp := LogAppend{
-		Bucket:      BucketOf(first, s.State.BucketSize),
-		StartOffset: first,
-		NextOffset:  first + int64(len(req.Messages)),
-		Blob:        blob,
+	if s.Batches == nil {
+		s.Batches = make(chasm.Map[int64, *commonpb.DataBlob])
 	}
+	s.Batches[first] = chasm.NewDataField(mctx, blob)
 
 	s.State.HeadOffset = first + count
 	if req.ProducerID != "" {
@@ -202,12 +199,12 @@ func (s *Stream) AddMessages(
 		}
 	}
 
+	s.applyCap()
 	result := AddMessagesResult{
-		FirstOffset:        first,
-		NextOffset:         s.State.HeadOffset,
-		Count:              count,
-		Appends:            []LogAppend{appendOp},
-		ReclaimableBuckets: s.applyCap(),
+		FirstOffset: first,
+		NextOffset:  s.State.HeadOffset,
+		Count:       count,
+		Blob:        blob,
 	}
 	s.notifyConsumers(mctx)
 	return result, nil
@@ -356,32 +353,141 @@ func (s *Stream) CloseAndSchedule(mctx chasm.MutableContext, reason *commonpb.Pa
 // base is an error naming where the stream now starts, the same answer a log
 // with a retention window gives anywhere else, and a great deal better than a
 // silent gap or a cap that never applies.
-func (s *Stream) Truncate(_ chasm.MutableContext, newBase int64) ([]int64, error) {
+func (s *Stream) Truncate(_ chasm.MutableContext, newBase int64) error {
 	if newBase < s.State.BaseOffset {
-		return nil, serviceerror.NewInvalidArgumentf(
+		return serviceerror.NewInvalidArgumentf(
 			"cannot truncate backwards from %d to %d", s.State.BaseOffset, newBase)
 	}
 	if newBase > s.State.HeadOffset {
-		return nil, serviceerror.NewInvalidArgumentf(
+		return serviceerror.NewInvalidArgumentf(
 			"cannot truncate past head offset %d", s.State.HeadOffset)
 	}
-	reclaimable := ReclaimableBuckets(s.State.BaseOffset, newBase, s.State.BucketSize)
 	s.State.BaseOffset = newBase
-	return reclaimable, nil
+	s.reclaim(newBase)
+	return nil
+}
+
+// reclaim drops batches lying entirely below the readable floor. A batch
+// straddling the floor stays, because the offsets above it are still readable.
+func (s *Stream) reclaim(newBase int64) {
+	starts := s.batchStarts()
+	for i, start := range starts {
+		end := s.State.HeadOffset
+		if i+1 < len(starts) {
+			end = starts[i+1]
+		}
+		if end > newBase {
+			return
+		}
+		delete(s.Batches, start)
+	}
+}
+
+// batchStarts returns the batch keys in offset order. Reading and reclaiming
+// both need where a batch ends, which is where the next one begins.
+func (s *Stream) batchStarts() []int64 {
+	return slices.Sorted(maps.Keys(s.Batches))
+}
+
+// WindowRequest asks for whatever a reader can be given from an offset.
+type WindowRequest struct {
+	From        int64
+	MaxMessages int32
+	Topics      []string
+}
+
+// Window is one read's worth: the frontier it was served against, the batches
+// covering the range, and the range itself.
+type Window struct {
+	State  *streampb.StreamState
+	Blobs  []*commonpb.DataBlob
+	Starts []int64
+	To     int64
+	Limit  int
+}
+
+// ReadWindow serves a read from the component, so the frontier and the bytes
+// come from one view. Read separately they can disagree, because the frontier
+// moves while the bytes are being fetched.
+func (s *Stream) ReadWindow(ctx chasm.Context, req WindowRequest) (Window, error) {
+	if req.From < s.State.BaseOffset {
+		return Window{}, serviceerror.NewFailedPreconditionf(
+			"offset %d has been truncated, the stream starts at %d", req.From, s.State.BaseOffset)
+	}
+	if req.From > s.State.HeadOffset {
+		return Window{}, serviceerror.NewInvalidArgumentf(
+			"offset %d is past the stream head %d", req.From, s.State.HeadOffset)
+	}
+
+	limit := int(req.MaxMessages)
+	if limit <= 0 {
+		limit = DefaultMaxMessagesPerPoll
+	}
+	w := Window{State: common.CloneProto(s.State), To: req.From, Limit: limit}
+	if req.From == s.State.HeadOffset {
+		return w, nil
+	}
+
+	// Clip to what the caller can actually be given. One offset is one message,
+	// so the bound is exact. Without it a poll for a single message off a long
+	// stream materialises every batch to the head before trimming.
+	w.To = min(s.State.HeadOffset, req.From+int64(limit))
+	blobs, starts, err := s.ReadBatches(ctx, req.From, w.To, 0)
+	if err != nil {
+		return Window{}, err
+	}
+	w.Blobs, w.Starts = blobs, starts
+	return w, nil
+}
+
+// ReadBatches returns the batches covering [from, to), oldest first, alongside
+// the offset each one starts at. A read landing mid-batch gets the batch
+// holding it, because a consumer asks for an offset rather than for a batch.
+// Blobs come back unparsed: decoding user payloads is the SDK's job.
+func (s *Stream) ReadBatches(
+	ctx chasm.Context,
+	from int64,
+	to int64,
+	maxBatches int,
+) ([]*commonpb.DataBlob, []int64, error) {
+	if from >= to {
+		return nil, nil, nil
+	}
+	var blobs []*commonpb.DataBlob
+	var starts []int64
+	all := s.batchStarts()
+	for i, start := range all {
+		end := s.State.HeadOffset
+		if i+1 < len(all) {
+			end = all[i+1]
+		}
+		if end <= from {
+			continue
+		}
+		if start >= to {
+			break
+		}
+		blobs = append(blobs, s.Batches[start].Get(ctx))
+		starts = append(starts, start)
+		if maxBatches > 0 && len(blobs) >= maxBatches {
+			break
+		}
+	}
+	return blobs, starts, nil
 }
 
 // applyCap advances the readable floor when the stream is over its message cap.
 // Evaluated at the end of a successful append rather than by a sweeper: the
 // append transition is already writing, so folding the check into it costs
 // nothing and keeps the cap tight instead of eventually true.
-func (s *Stream) applyCap() []int64 {
+func (s *Stream) applyCap() {
 	maxItems := s.State.GetLifecycle().GetMaxItems()
 	if maxItems <= 0 {
-		return nil
+		return
 	}
 	readable := s.State.HeadOffset - s.State.BaseOffset
 	if readable <= maxItems {
-		return nil
+		return
 	}
 	// The cap applies. It used to yield to the slowest consumer, which meant a
 	// capped stream with any consumer at all grew without bound, because
@@ -389,11 +495,10 @@ func (s *Stream) applyCap() []int64 {
 	// up is told where the stream now starts.
 	newBase := s.State.HeadOffset - maxItems
 	if newBase <= s.State.BaseOffset {
-		return nil
+		return
 	}
-	reclaimable := ReclaimableBuckets(s.State.BaseOffset, newBase, s.State.BucketSize)
 	s.State.BaseOffset = newBase
-	return reclaimable
+	s.reclaim(newBase)
 }
 
 // RegisterConsumer pins the stream's readable floor at offset on behalf of an

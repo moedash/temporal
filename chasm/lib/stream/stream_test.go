@@ -55,19 +55,19 @@ func TestAddMessagesAssignsContiguousOffsets(t *testing.T) {
 	require.Equal(t, int64(5), s.State.HeadOffset)
 }
 
-func TestAddMessagesStagesRatherThanPersists(t *testing.T) {
+func TestAddMessagesWritesTheBatchIntoTheComponent(t *testing.T) {
 	s := newTestStream(t, 100)
 
 	res, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
 	require.NoError(t, err)
-	require.Len(t, res.Appends, 1)
+	require.NotEmpty(t, res.Blob.Data)
 
-	// The batch is addressed by the offsets it covers, which is the key a
-	// retry of this append would write under.
-	require.Equal(t, int64(0), res.Appends[0].Bucket)
-	require.Equal(t, int64(0), res.Appends[0].StartOffset)
-	require.Equal(t, int64(2), res.Appends[0].NextOffset)
-	require.NotEmpty(t, res.Appends[0].Blob.Data)
+	// Keyed by the offset it starts at, which is the key a retry of this
+	// append writes under, so the retry replaces rather than races.
+	require.Len(t, s.Batches, 1)
+	_, ok := s.Batches[0]
+	require.True(t, ok, "the batch must be keyed by its first offset")
+	require.Equal(t, int64(2), s.State.HeadOffset)
 }
 
 func TestDedupReturnsOriginalOffsets(t *testing.T) {
@@ -83,7 +83,7 @@ func TestDedupReturnsOriginalOffsets(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, again.Deduplicated)
 	require.Equal(t, first.FirstOffset, again.FirstOffset)
-	require.Empty(t, again.Appends)
+	require.Nil(t, again.Blob, "a deduplicated retry writes nothing")
 	require.Equal(t, int64(2), s.State.HeadOffset, "a retry must not advance the head")
 }
 
@@ -154,27 +154,46 @@ func TestCloseRejectsFurtherAppends(t *testing.T) {
 	require.ErrorAs(t, err, &precondition)
 }
 
-func TestBatchMayNotCrossABucket(t *testing.T) {
-	s := newTestStream(t, 4)
+func TestReadSpansBatchesAndStartsAtTheBatchHoldingTheOffset(t *testing.T) {
+	s := newTestStream(t, 100)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c")})
 	require.NoError(t, err)
-
-	// Offsets 3 and 4 fall in different buckets, and a bucket is a storage
-	// partition, so a node spanning both is not representable.
 	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("d", "e")})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "crosses a bucket boundary")
+	require.NoError(t, err)
+	require.Len(t, s.Batches, 2)
+
+	// A read from offset 1 lands inside the first batch. It gets that batch
+	// whole, because a consumer asks for an offset and not for a batch, and
+	// the batch is the smallest thing stored.
+	blobs, starts, err := s.ReadBatches(nil, 1, 5, 0)
+	require.NoError(t, err)
+	require.Len(t, blobs, 2)
+	require.Equal(t, []int64{0, 3}, starts)
+
+	// A read wholly inside the second batch does not drag the first along.
+	blobs, starts, err = s.ReadBatches(nil, 3, 5, 0)
+	require.NoError(t, err)
+	require.Len(t, blobs, 1)
+	require.Equal(t, []int64{3}, starts)
 }
 
-func TestAppendsRollToNewBucket(t *testing.T) {
-	s := newTestStream(t, 4)
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
+func TestReclaimDropsOnlyBatchesFullyBelowTheFloor(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c")})
+	require.NoError(t, err)
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("d", "e")})
 	require.NoError(t, err)
 
-	res, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("e")})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), res.Appends[0].Bucket)
-	require.Equal(t, int64(4), res.Appends[0].StartOffset, "the batch opens the second bucket")
+	// The floor lands mid-batch, so that batch stays: offsets above the floor
+	// are still readable and they live in it.
+	require.NoError(t, s.Truncate(nil, 1))
+	require.Len(t, s.Batches, 2)
+
+	// Now the whole first batch is below the floor and can go.
+	require.NoError(t, s.Truncate(nil, 3))
+	require.Len(t, s.Batches, 1)
+	_, ok := s.Batches[3]
+	require.True(t, ok, "the batch holding readable offsets must survive")
 }
 
 func TestTruncateDoesNotStopAtAConsumer(t *testing.T) {
@@ -190,7 +209,7 @@ func TestTruncateDoesNotStopAtAConsumer(t *testing.T) {
 	// released a consumer when it finished, so a capped stream with any
 	// consumer ever registered grew without bound. A consumer that falls below
 	// the floor is told where the stream now starts instead.
-	_, err = s.Truncate(nil, 3)
+	err = s.Truncate(nil, 3)
 	require.NoError(t, err, "an active consumer must not hold the floor")
 	require.Equal(t, int64(3), s.State.BaseOffset)
 }
@@ -200,11 +219,11 @@ func TestTruncateBounds(t *testing.T) {
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
 	require.NoError(t, err)
 
-	_, err = s.Truncate(nil, 1)
+	err = s.Truncate(nil, 1)
 	require.NoError(t, err)
-	_, err = s.Truncate(nil, 0)
+	err = s.Truncate(nil, 0)
 	require.Error(t, err, "truncation must not go backwards")
-	_, err = s.Truncate(nil, 3)
+	err = s.Truncate(nil, 3)
 	require.Error(t, err, "truncation must not pass the head")
 }
 
@@ -285,7 +304,7 @@ func TestRegisterConsumerDoesNotPinTruncation(t *testing.T) {
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 2, false))
 
 	// Registering says who to wake, not what to keep.
-	_, err = s.Truncate(nil, 3)
+	err = s.Truncate(nil, 3)
 	require.NoError(t, err)
 	require.Equal(t, int64(3), s.State.BaseOffset)
 }
@@ -322,7 +341,7 @@ func TestRegisterConsumerRejectsAnOffsetBelowTheFloor(t *testing.T) {
 	s := newTestStream(t, 100)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
-	_, err = s.Truncate(nil, 2)
+	err = s.Truncate(nil, 2)
 	require.NoError(t, err)
 
 	err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1, false)
@@ -353,7 +372,7 @@ func TestDeregisterConsumerReleasesThePin(t *testing.T) {
 
 	s.DeregisterConsumer(nil, "workflow:output")
 
-	_, err = s.Truncate(nil, 4)
+	err = s.Truncate(nil, 4)
 	require.NoError(t, err)
 }
 

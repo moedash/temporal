@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
@@ -158,23 +157,6 @@ type logStore interface {
 	GetExecutionManager() persistence.ExecutionManager
 }
 
-func (h *handler) reclaim(
-	ctx context.Context,
-	shardCtx logStore,
-	namespaceID, collectionID string,
-	buckets []int64,
-) {
-	for _, b := range buckets {
-		if err := stream.DeleteBucket(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
-			namespaceID, collectionID, b); err != nil {
-			h.logger.Warn("failed to reclaim a truncated stream bucket",
-				tag.NewStringTag("collection-id", collectionID),
-				tag.NewInt64("bucket", b),
-				tag.Error(err))
-		}
-	}
-}
-
 func (h *handler) CreateStream(
 	ctx context.Context,
 	req *streampb.CreateStreamRequest,
@@ -217,18 +199,11 @@ func (h *handler) AddMessages(
 
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
-		namespace.ID(req.GetNamespaceId()), in.GetStreamId())
-	if err != nil {
-		return nil, err
-	}
-
 	ref := refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId())
 	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
 	if err != nil {
 		return nil, err
 	}
-
 
 	addReq := stream.AddMessagesRequest{
 		Messages:   in.GetMessages(),
@@ -247,22 +222,6 @@ func (h *handler) AddMessages(
 		addReq.ExpectedOffset = &head
 	}
 
-	// Dry run against the state we read, so the node is written at the offsets
-	// the commit will claim. The transition below recomputes it identically.
-	staged := &stream.Stream{State: state}
-	preview, err := staged.AddMessages(nil, addReq)
-	if err != nil {
-		return nil, err
-	}
-	if !preview.Deduplicated {
-		for _, op := range preview.Appends {
-			if err := stream.WriteAppend(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
-				req.GetNamespaceId(), state.GetCollectionId(), op); err != nil {
-				return nil, err
-			}
-		}
-	}
-
 	result, _, err := chasm.UpdateComponent(ctx, ref, (*stream.Stream).AddMessages, addReq)
 	if err != nil {
 		return nil, err
@@ -272,12 +231,9 @@ func (h *handler) AddMessages(
 	// retry carrying different bytes at the same offsets, and caching it would
 	// serve those bytes to a reader that must never see them.
 	if !result.Deduplicated {
-		for _, op := range preview.Appends {
-			h.tail.Put(logKey(req.GetNamespaceId(), state.GetCollectionId()),
-				result.FirstOffset, result.NextOffset, op.Blob)
-		}
+		h.tail.Put(logKey(req.GetNamespaceId(), state.GetCollectionId()),
+			result.FirstOffset, result.NextOffset, result.Blob)
 	}
-	h.reclaim(ctx, shardCtx, req.GetNamespaceId(), state.GetCollectionId(), result.ReclaimableBuckets)
 
 	return &streampb.AddMessagesResponse{
 		FrontendResponse: &streampb.AddMessagesOutput{
@@ -314,12 +270,6 @@ func (h *handler) AddWorkflowMessages(
 
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
-		namespace.ID(req.GetNamespaceId()), in.GetWorkflowId())
-	if err != nil {
-		return nil, err
-	}
-
 	ref := workflowRef(req.GetNamespaceId(), in.GetWorkflowId())
 
 	state, err := chasm.ReadComponent(ctx, ref,
@@ -340,7 +290,6 @@ func (h *handler) AddWorkflowMessages(
 		}
 	}
 
-
 	head := state.GetHeadOffset()
 	addReq := stream.AddMessagesRequest{
 		Messages:   in.GetMessages(),
@@ -350,22 +299,6 @@ func (h *handler) AddWorkflowMessages(
 		// between the read and the commit fails this append rather than
 		// letting it claim offsets whose node it did not write.
 		ExpectedOffset: &head,
-	}
-
-	// Dry run against the state we read, so the node is written at the offsets
-	// the commit will claim, exactly as the standalone path does.
-	staged := &stream.Stream{State: state}
-	preview, err := staged.AddMessages(nil, addReq)
-	if err != nil {
-		return nil, err
-	}
-	if !preview.Deduplicated {
-		for _, op := range preview.Appends {
-			if err := stream.WriteAppend(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
-				req.GetNamespaceId(), state.GetCollectionId(), op); err != nil {
-				return nil, err
-			}
-		}
 	}
 
 	result, _, err := chasm.UpdateComponent(ctx, ref,
@@ -380,12 +313,9 @@ func (h *handler) AddWorkflowMessages(
 	// write whose commit failed can be superseded by a retry carrying different
 	// bytes at the same offsets.
 	if !result.Deduplicated {
-		for _, op := range preview.Appends {
-			h.tail.Put(logKey(req.GetNamespaceId(), state.GetCollectionId()),
-				result.FirstOffset, result.NextOffset, op.Blob)
-		}
+		h.tail.Put(logKey(req.GetNamespaceId(), state.GetCollectionId()),
+			result.FirstOffset, result.NextOffset, result.Blob)
 	}
-	h.reclaim(ctx, shardCtx, req.GetNamespaceId(), state.GetCollectionId(), result.ReclaimableBuckets)
 
 	return &streampb.AddWorkflowMessagesResponse{
 		FrontendResponse: &streampb.AddMessagesOutput{
@@ -597,12 +527,6 @@ func (h *handler) PollMessages(
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
-		namespace.ID(req.GetNamespaceId()), in.GetStreamId())
-	if err != nil {
-		return nil, err
-	}
-
 	ref := refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId())
 	from := in.GetFromOffset()
 
@@ -619,8 +543,12 @@ func (h *handler) PollMessages(
 		}
 	}
 
-	out, err := h.readWindow(ctx, shardCtx, req.GetNamespaceId(), state, from,
-		in.GetMaxMessages(), in.GetTopics())
+	wreq := stream.WindowRequest{From: from, MaxMessages: in.GetMaxMessages(), Topics: in.GetTopics()}
+	w, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).ReadWindow, wreq)
+	if err != nil {
+		return nil, err
+	}
+	out, err := formatWindow(w, wreq)
 	if err != nil {
 		return nil, err
 	}
@@ -640,12 +568,6 @@ func (h *handler) PollWorkflowMessages(
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
-		namespace.ID(req.GetNamespaceId()), in.GetWorkflowId())
-	if err != nil {
-		return nil, err
-	}
-
 	ref := workflowRef(req.GetNamespaceId(), in.GetWorkflowId())
 	name := ownedStreamName(in.GetStreamName())
 	from := in.GetFromOffset()
@@ -662,8 +584,12 @@ func (h *handler) PollWorkflowMessages(
 		}
 	}
 
-	out, err := h.readWindow(ctx, shardCtx, req.GetNamespaceId(), state, from,
-		in.GetMaxMessages(), in.GetTopics())
+	wreq := stream.WindowRequest{From: from, MaxMessages: in.GetMaxMessages(), Topics: in.GetTopics()}
+	w, err := chasm.ReadComponent(ctx, ref, readOwnedWindow, ownedWindowRequest{Name: name, Window: wreq})
+	if err != nil {
+		return nil, err
+	}
+	out, err := formatWindow(w, wreq)
 	if err != nil {
 		return nil, err
 	}
@@ -673,76 +599,66 @@ func (h *handler) PollWorkflowMessages(
 // readWindow serves a reader's window out of a frontier the caller resolved.
 // Standalone and attached streams differ only in where that frontier comes
 // from, so nothing past it is aware of the difference.
-func (h *handler) readWindow(
-	ctx context.Context,
-	shardCtx logStore,
-	namespaceID string,
-	state *streampb.StreamState,
-	from int64,
-	maxMessages int32,
-	topics []string,
-) (*streampb.PollMessagesOutput, error) {
-	if from < state.GetBaseOffset() {
-		return nil, serviceerror.NewFailedPreconditionf(
-			"offset %d has been truncated, the stream starts at %d", from, state.GetBaseOffset())
-	}
-	if from > state.GetHeadOffset() {
-		return nil, serviceerror.NewInvalidArgumentf(
-			"offset %d is past the stream head %d", from, state.GetHeadOffset())
-	}
-
+// formatWindow turns a component read into the wire response. The read happens
+// in the component, so the frontier and the bytes it was served with cannot
+// disagree.
+func formatWindow(w stream.Window, req stream.WindowRequest) (*streampb.PollMessagesOutput, error) {
 	out := &streampb.PollMessagesOutput{
-		NextOffset:  from,
-		HeadOffset:  state.GetHeadOffset(),
-		Closed:      state.GetClosed(),
-		CloseReason: state.GetCloseReason(),
+		NextOffset:  req.From,
+		HeadOffset:  w.State.GetHeadOffset(),
+		Closed:      w.State.GetClosed(),
+		CloseReason: w.State.GetCloseReason(),
 	}
-	if from == state.GetHeadOffset() {
+	if req.From == w.State.GetHeadOffset() {
 		return out, nil
 	}
 
-	limit := int(maxMessages)
-	if limit <= 0 {
-		limit = stream.DefaultMaxMessagesPerPoll
-	}
-
-	// Clip the read to what the caller can be given. One offset is one message,
-	// so this bound is exact. Without it a poll for a single message off a large
-	// stream reads every batch from the offset to the head before trimming, and
-	// the whole stream lands in memory on the history host.
-	//
-	// A topic filter can leave the page short of the limit. That is fine: the
-	// response carries next_offset, so the caller reads on from there.
-	to := min(state.GetHeadOffset(), from+int64(limit))
-
-	// The frontier always comes from the component, so the cache can only save
-	// a read, never widen what the reader is allowed to see.
-	key := logKey(namespaceID, state.GetCollectionId())
-	blobs, startOffsets, cached := h.tail.Get(key, from, to)
-	if !cached {
-		var err error
-		blobs, startOffsets, err = stream.ReadRange(ctx, shardCtx.GetExecutionManager(),
-			shardCtx.GetShardID(), namespaceID, state.GetCollectionId(), state.GetBucketSize(),
-			from, to, 0)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	messages, next, err := stream.CollectMessages(blobs, startOffsets, from, to, limit, topics)
+	messages, next, err := stream.CollectMessages(w.Blobs, w.Starts, req.From, w.To, w.Limit, req.Topics)
 	if err != nil {
 		return nil, err
 	}
-	if next < to && len(messages) == 0 && len(topics) > 0 {
+	if next < w.To && len(messages) == 0 && len(req.Topics) > 0 {
 		// A page that filtered everything out still has to advance, or the
 		// caller loops forever on the same offsets. Limited to a filtered read
 		// on purpose: for any other reason a page comes back short, moving the
 		// reader past offsets it was never given would hide the short read.
-		next = to
+		next = w.To
 	}
 	out.Messages = messages
 	out.NextOffset = next
 	return out, nil
+}
+
+// ownedWindowRequest names which attached stream to read and what to read.
+type ownedWindowRequest struct {
+	Name   string
+	Window stream.WindowRequest
+}
+
+// readOwnedWindow reads a stream attached to a workflow.
+//
+// A closed execution can take no more publishes, from its own Workflow Task or
+// from anywhere else, so its stream is finished whether or not a producer said
+// so. Without that a reader tailing a workflow that ended stays parked forever.
+func readOwnedWindow(
+	wf *chasmworkflow.Workflow,
+	cctx chasm.Context,
+	req ownedWindowRequest,
+) (stream.Window, error) {
+	s := wf.OwnedStream(cctx, req.Name)
+	if s == nil {
+		// Nothing published yet, which reads as an empty stream so a reader can
+		// attach before the first append.
+		return stream.Window{State: &streampb.StreamState{Closed: !cctx.ExecutionInfo().CloseTime.IsZero()}, To: req.Window.From}, nil
+	}
+	w, err := s.ReadWindow(cctx, req.Window)
+	if err != nil {
+		return stream.Window{}, err
+	}
+	if !cctx.ExecutionInfo().CloseTime.IsZero() {
+		w.State.Closed = true
+	}
+	return w, nil
 }
 
 // ownedStreamState snapshots an attached stream through the component that
@@ -927,30 +843,15 @@ func (h *handler) TruncateStream(
 ) (*streampb.TruncateStreamResponse, error) {
 	in := req.GetFrontendRequest()
 
-	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
-		namespace.ID(req.GetNamespaceId()), in.GetStreamId())
-	if err != nil {
-		return nil, err
-	}
-
-	reclaimable, _, err := chasm.UpdateComponent(
+	if _, _, err := chasm.UpdateComponent(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
-		func(s *stream.Stream, mctx chasm.MutableContext, newBase int64) ([]int64, error) {
-			return s.Truncate(mctx, newBase)
+		func(s *stream.Stream, mctx chasm.MutableContext, newBase int64) (struct{}, error) {
+			return struct{}{}, s.Truncate(mctx, newBase)
 		},
 		in.GetNewBaseOffset(),
-	)
-	if err != nil {
+	); err != nil {
 		return nil, err
-	}
-
-	if len(reclaimable) > 0 {
-		state, err := chasm.ReadComponent(ctx,
-			refFor(req.GetNamespaceId(), in.GetStreamId()), (*stream.Stream).Snapshot, struct{}{})
-		if err == nil {
-			h.reclaim(ctx, shardCtx, req.GetNamespaceId(), state.GetCollectionId(), reclaimable)
-		}
 	}
 	return &streampb.TruncateStreamResponse{FrontendResponse: &streampb.TruncateStreamOutput{}}, nil
 }
@@ -965,21 +866,7 @@ func (h *handler) DeleteStream(
 	in := req.GetFrontendRequest()
 	key := chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: in.GetStreamId()}
 
-	// The log has to go before the execution that names it. Read the state to
-	// find the buckets while the execution is still there to be read.
-	ref := chasm.NewComponentRef[*stream.Stream](key)
-	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
-	if err != nil {
-		return nil, err
-	}
-	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
-		namespace.ID(req.GetNamespaceId()), in.GetStreamId())
-	if err != nil {
-		return nil, err
-	}
-	deleteLogBuckets(h.withCallerInfo(ctx, req.GetNamespaceId()), shardCtx, h.logger,
-		req.GetNamespaceId(), state)
-
+	// The payload is component state, so deleting the execution takes it too.
 	if err := chasm.DeleteExecution[*stream.Stream](ctx, key, chasm.DeleteExecutionRequest{}); err != nil {
 		return nil, err
 	}

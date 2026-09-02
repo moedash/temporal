@@ -57,7 +57,6 @@ type Workflow struct {
 	// Log nodes staged by stream commands during this workflow task. In memory
 	// only, and drained before the transaction commits: the bytes have to be
 	// durable before the frontier that makes them visible is.
-	pendingStreamAppends []PendingStreamAppend
 
 	// Subscribe commands whose stream is in another execution, so the addressing
 	// has to be looked up before a cursor can be made. In memory only, drained
@@ -90,21 +89,6 @@ func (w *Workflow) DrainStreamSubscriptions() []PendingStreamSubscription {
 	out := w.pendingStreamSubscriptions
 	w.pendingStreamSubscriptions = nil
 	return out
-}
-
-// PendingStreamAppend is a staged log write awaiting the flush that must
-// precede the workflow task's own commit.
-type PendingStreamAppend struct {
-	CollectionID string
-	Append       stream.LogAppend
-}
-
-// StageStreamAppend records a log write for the flush before commit.
-func (w *Workflow) StageStreamAppend(collectionID string, op stream.LogAppend) {
-	w.pendingStreamAppends = append(w.pendingStreamAppends, PendingStreamAppend{
-		CollectionID: collectionID,
-		Append:       op,
-	})
 }
 
 // streamConsumerID names this workflow's pin on a stream it owns. An attached
@@ -352,13 +336,6 @@ func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*streampb.St
 		})
 	}
 	return recorded
-}
-
-// DrainStreamAppends returns and clears the staged writes.
-func (w *Workflow) DrainStreamAppends() []PendingStreamAppend {
-	out := w.pendingStreamAppends
-	w.pendingStreamAppends = nil
-	return out
 }
 
 func NewWorkflow(
@@ -658,6 +635,20 @@ func (w *Workflow) OwnedStreamState(
 		return nil, nil
 	}
 	return field.Get(ctx).Snapshot(ctx, struct{}{})
+}
+
+// OwnedStream returns the attached stream itself, or nil when the workflow has
+// not created it yet. Reads that need the payload and not just the frontier go
+// through here, so both come from one view of the component.
+func (w *Workflow) OwnedStream(
+	ctx chasm.Context,
+	name string,
+) *stream.Stream {
+	field, ok := w.Streams[name]
+	if !ok {
+		return nil
+	}
+	return field.Get(ctx)
 }
 
 // EnsureOwnedStream creates a stream this workflow owns if the first writer to

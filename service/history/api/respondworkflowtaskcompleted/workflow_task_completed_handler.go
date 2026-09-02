@@ -63,7 +63,6 @@ type (
 		// internal state
 		// Log writes staged by stream commands, flushed before this workflow
 		// task commits.
-		stagedStreamAppends                 []chasmworkflow.PendingStreamAppend
 		stagedStreamSubscriptions           []chasmworkflow.PendingStreamSubscription
 		hasBufferedEventsOrMessages         bool
 		workflowTaskFailedCause             *workflowTaskFailedCause
@@ -358,12 +357,10 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 					return nil, chasmErr
 				}
 				err = chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
-				// Stream commands stage log writes instead of performing them,
+				// A subscribe to a stream in another execution stages itself,
 				// since a command handler holds the state lock and has no
-				// context for I/O. Collect them for the flush that has to
-				// precede this workflow task's commit.
-				handler.stagedStreamAppends = append(
-					handler.stagedStreamAppends, chasmWorkflow.DrainStreamAppends()...)
+				// context for the lookup it needs. Collect them for the
+				// resolution that has to precede this task's commit.
 				handler.stagedStreamSubscriptions = append(
 					handler.stagedStreamSubscriptions, chasmWorkflow.DrainStreamSubscriptions()...)
 				// Fall back to the HSM handler either when the command type is not supported by CHASM (disabled

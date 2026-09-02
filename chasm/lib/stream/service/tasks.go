@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -56,7 +55,6 @@ func (h *retentionTaskHandler) Execute(
 	_ *streampb.StreamRetentionTask,
 ) error {
 	namespaceID := ref.NamespaceID
-	streamID := ref.BusinessID
 
 	// Runs outside a request, so nothing has tagged the context yet. Deletions
 	// still have to be attributed to the namespace they belong to.
@@ -64,49 +62,8 @@ func (h *retentionTaskHandler) Execute(
 		ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundLowCallerInfo(name.String()))
 	}
 
-	shardCtx, err := h.shardController.GetShardByNamespaceWorkflow(
-		namespace.ID(namespaceID), streamID)
-	if err != nil {
-		return err
-	}
-
-	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
-	if err != nil {
-		return err
-	}
-
-	deleteLogBuckets(ctx, shardCtx, h.logger, namespaceID, state)
-
+	// The payload is component state, so deleting the execution takes it too.
 	return chasm.DeleteExecution[*stream.Stream](ctx, ref.ExecutionKey, chasm.DeleteExecutionRequest{})
-}
-
-// deleteLogBuckets drops every bucket tree a stream still holds.
-//
-// Log data first, then the execution. The other order would drop the only
-// record of which buckets exist: a tree is located by arithmetic from the
-// collection id, which lives on the execution and is recorded nowhere else, so
-// once the execution is gone nothing can name the trees to delete them.
-//
-// A bucket that fails to delete is logged and skipped rather than aborting the
-// sweep, because the alternative is refusing to delete the stream at all.
-// Correctness does not depend on the cleanup, storage does.
-func deleteLogBuckets(
-	ctx context.Context,
-	shardCtx historyi.ShardContext,
-	logger log.Logger,
-	namespaceID string,
-	state *streampb.StreamState,
-) {
-	lastBucket := stream.BucketOf(max(state.GetHeadOffset()-1, 0), state.GetBucketSize())
-	for b := stream.BucketOf(state.GetBaseOffset(), state.GetBucketSize()); b <= lastBucket; b++ {
-		if err := stream.DeleteBucket(ctx, shardCtx.GetExecutionManager(), shardCtx.GetShardID(),
-			namespaceID, state.GetCollectionId(), b); err != nil {
-			logger.Warn("failed to delete a stream bucket, its storage is leaked",
-				tag.NewStringTag("collection-id", state.GetCollectionId()),
-				tag.NewInt64("bucket", b),
-				tag.Error(err))
-		}
-	}
 }
 
 func (h *retentionTaskHandler) Discard(
