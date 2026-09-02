@@ -13,8 +13,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/serialization"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
@@ -27,28 +26,14 @@ import (
 // a range and staging it in one transaction: staged first and read after, a
 // failed read would leave a range that the worker never received but that the
 // completion would still record as consumed.
-// streamAddress is everything needed to read a stream's log without loading
-// the stream component: buckets derive from the collection id arithmetically.
-type streamAddress struct {
-	collectionID string
-	bucketSize   int64
-	// The shard the log lives on, which is the stream's own, not the
-	// consumer's. They differ whenever the stream is in another execution.
-	shardID int32
-}
-
-// logShardID resolves the shard holding a stream's log. History nodes are
-// stored per shard, so reading an external stream from the consumer's shard
-// finds nothing at all rather than failing loudly.
-func logShardID(
-	shardContext historyi.ShardContext,
-	namespaceID string,
-	cursor *stream.Cursor,
-) int32 {
-	if !cursor.IsExternal() {
-		return shardContext.GetShardID()
-	}
-	return shardContext.GetConfig().GetShardID(namespace.ID(namespaceID), cursor.StreamID())
+// streamOrigin says where a subscribed stream lives, which decides how its
+// payload is read. The payload is component state now, so an external stream is
+// read from its own execution and an owned one from the consumer's.
+type streamOrigin struct {
+	external bool
+	// The name the consumer knows the stream by, which is how an owned one is
+	// found on the consumer's own component.
+	name string
 }
 
 // deliveryFrontier is the offset a delivery clips to. For a stream this
@@ -86,30 +71,27 @@ func deliveryFrontier(
 	return state.GetHeadOffset(), nil
 }
 
-// readDeliverable reads [from, to) from the stream's log and returns the
-// messages along with the offset the range actually reaches, which the byte cap
-// can pull back short of `to`.
 func readDeliverable(
 	ctx context.Context,
-	execMgr persistence.ExecutionManager,
-	shardID int32,
+	chasmCtx chasm.Context,
+	wf *chasmworkflow.Workflow,
 	namespaceID string,
+	name string,
 	cursor *stream.Cursor,
 	from, to int64,
 ) ([]*streampb.StreamMessage, int64, error) {
 	if to <= from {
 		return nil, from, nil
 	}
-	blobs, startOffsets, err := stream.ReadRange(
-		ctx, execMgr, shardID, namespaceID,
-		cursor.CollectionID(), cursor.BucketSize(), from, to, 0)
+	w, err := readWindowFor(ctx, chasmCtx, wf, namespaceID, name, cursor.IsExternal(),
+		cursor.StreamID(), from, to)
 	if err != nil {
 		return nil, 0, err
 	}
 	// The collected run is contiguous from `from`, so the byte cap recomputes
 	// the same end offset the read would have reported.
 	collected, _, err := stream.CollectMessages(
-		blobs, startOffsets, from, to, stream.MaxConsumeItemsPerTask, nil)
+		w.Blobs, w.Starts, from, w.To, stream.MaxConsumeItemsPerTask, nil)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -117,6 +99,39 @@ func readDeliverable(
 	// trimming decides how far the recorded range reaches.
 	collected, readTo := stream.CapByBytes(collected, from, stream.MaxConsumeBytesPerTask)
 	return stream.ToAPIMessages(collected), readTo, nil
+}
+
+// readWindowFor reads a range from whichever component holds it.
+//
+// An external stream resolves through the local shard controller, so a stream
+// on a shard this host does not own is not reachable. An owned stream is read
+// from the consumer's own already-loaded component, which is both cheaper and
+// the only safe order: re-entering this execution through the engine while its
+// task is being built would contend with the lock already held.
+func readWindowFor(
+	ctx context.Context,
+	chasmCtx chasm.Context,
+	wf *chasmworkflow.Workflow,
+	namespaceID string,
+	name string,
+	external bool,
+	streamID string,
+	from, to int64,
+) (stream.Window, error) {
+	req := stream.WindowRequest{From: from, MaxMessages: int32(to - from)}
+	if !external {
+		s := wf.OwnedStream(chasmCtx, name)
+		if s == nil {
+			return stream.Window{To: from}, nil
+		}
+		return s.ReadWindow(chasmCtx, req)
+	}
+	return chasm.ReadComponent(ctx,
+		chasm.NewComponentRef[*stream.Stream](chasm.ExecutionKey{
+			NamespaceID: namespaceID,
+			BusinessID:  streamID,
+		}),
+		(*stream.Stream).ReadWindow, req)
 }
 
 // DeliverStreamSlices hands the next range to a task built outside this
@@ -139,7 +154,7 @@ func deliverStreamSlices(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	ms historyi.MutableState,
-) ([]*streampb.StreamSlice, map[string]streamAddress, error) {
+) ([]*streampb.StreamSlice, map[string]streamOrigin, error) {
 	if !ms.HasChasmWorkflowComponent() {
 		return nil, nil, nil
 	}
@@ -166,11 +181,10 @@ func deliverStreamSlices(
 	slices.Sort(names)
 
 	maxItems := stream.MaxConsumeItemsPerTask
-	execMgr := shardContext.GetExecutionManager()
 	namespaceID := ms.GetExecutionInfo().GetNamespaceId()
 
 	slicesOut := make([]*streampb.StreamSlice, 0, len(names))
-	addresses := make(map[string]streamAddress, len(names))
+	addresses := make(map[string]streamOrigin, len(names))
 	for _, name := range names {
 		cursor := wf.StreamCursors[name].Get(chasmCtx)
 
@@ -192,9 +206,8 @@ func deliverStreamSlices(
 			to = min(from+int64(maxItems), head)
 		}
 
-		shardID := logShardID(shardContext, namespaceID, cursor)
 		messages, next, err := readDeliverable(
-			ctx, execMgr, shardID, namespaceID, cursor, from, to)
+			ctx, chasmCtx, wf, namespaceID, name, cursor, from, to)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -221,13 +234,55 @@ func deliverStreamSlices(
 			ToOffset:   next,
 			Messages:   messages,
 		})
-		addresses[cursor.StreamID()] = streamAddress{
-			collectionID: cursor.CollectionID(),
-			bucketSize:   cursor.BucketSize(),
-			shardID:      shardID,
+		addresses[cursor.StreamID()] = streamOrigin{
+			external: cursor.IsExternal(),
+			name:     name,
 		}
 	}
 	return slicesOut, addresses, nil
+}
+
+// ownedRange names a range of a stream the consumer owns.
+type ownedRange struct {
+	name string
+	req  stream.WindowRequest
+}
+
+// readRecordedRange re-supplies a range a completed task recorded.
+//
+// It runs after the execution lock is released, so the consumer's own component
+// is read back through the engine like any other. Both kinds resolve through
+// the local shard controller, so a stream on a shard this host does not own is
+// not reachable.
+func readRecordedRange(
+	ctx context.Context,
+	consumer definition.WorkflowKey,
+	origin streamOrigin,
+	streamID string,
+	from, to int64,
+) (stream.Window, error) {
+	req := stream.WindowRequest{From: from, MaxMessages: int32(to - from)}
+	if origin.external {
+		return chasm.ReadComponent(ctx,
+			chasm.NewComponentRef[*stream.Stream](chasm.ExecutionKey{
+				NamespaceID: consumer.NamespaceID,
+				BusinessID:  streamID,
+			}),
+			(*stream.Stream).ReadWindow, req)
+	}
+	return chasm.ReadComponent(ctx,
+		chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
+			NamespaceID: consumer.NamespaceID,
+			BusinessID:  consumer.WorkflowID,
+		}),
+		func(wf *chasmworkflow.Workflow, cctx chasm.Context, r ownedRange) (stream.Window, error) {
+			s := wf.OwnedStream(cctx, r.name)
+			if s == nil {
+				return stream.Window{To: r.req.From}, nil
+			}
+			return s.ReadWindow(cctx, r.req)
+		},
+		ownedRange{name: origin.name, req: req})
 }
 
 // attachReplaySlices re-supplies the payloads for ranges that earlier workflow
@@ -241,9 +296,9 @@ func deliverStreamSlices(
 // task, so each range travels with the id of the event that recorded it.
 func attachReplaySlices(
 	ctx context.Context,
-	shardContext historyi.ShardContext,
+	consumer definition.WorkflowKey,
 	namespaceID string,
-	addresses map[string]streamAddress,
+	addresses map[string]streamOrigin,
 	resp *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory,
 ) error {
 	// Only a workflow with a live subscription has anything to re-supply, and
@@ -266,8 +321,6 @@ func attachReplaySlices(
 		return err
 	}
 
-	execMgr := shardContext.GetExecutionManager()
-
 	for _, event := range events {
 		for _, recorded := range event.GetWorkflowTaskCompletedEventAttributes().GetStreamCursors() {
 			address, ok := addresses[recorded.GetStreamId()]
@@ -279,15 +332,14 @@ func attachReplaySlices(
 
 			var messages []*streampb.StreamMessage
 			if recorded.GetToOffset() > recorded.GetFromOffset() {
-				blobs, startOffsets, err := stream.ReadRange(
-					ctx, execMgr, address.shardID, namespaceID,
-					address.collectionID, address.bucketSize,
-					recorded.GetFromOffset(), recorded.GetToOffset(), 0)
+				w, err := readRecordedRange(ctx, consumer, address,
+					recorded.GetStreamId(),
+					recorded.GetFromOffset(), recorded.GetToOffset())
 				if err != nil {
 					return err
 				}
 				collected, _, err := stream.CollectMessages(
-					blobs, startOffsets,
+					w.Blobs, w.Starts,
 					recorded.GetFromOffset(), recorded.GetToOffset(),
 					int(recorded.GetToOffset()-recorded.GetFromOffset()), nil)
 				if err != nil {

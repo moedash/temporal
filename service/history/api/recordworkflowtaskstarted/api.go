@@ -51,7 +51,7 @@ func Invoke(
 
 	var workflowKey definition.WorkflowKey
 	var resp *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory
-	var streamAddresses map[string]streamAddress
+	var streamAddresses map[string]streamOrigin
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -279,7 +279,7 @@ func Invoke(
 
 	// After the history is attached, because the ranges to re-supply are read
 	// out of the events being sent.
-	if err := attachReplaySlices(ctx, shardContext, workflowKey.GetNamespaceID(), streamAddresses, resp); err != nil {
+	if err := attachReplaySlices(ctx, workflowKey, workflowKey.GetNamespaceID(), streamAddresses, resp); err != nil {
 		return nil, err
 	}
 	return resp, nil
