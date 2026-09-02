@@ -23,10 +23,7 @@ const LongPollBuffer = 3 * time.Second
 
 // Tail-cache bounds. Sized for many modest streams rather than a few large
 // ones, which is the shape this primitive targets.
-const (
-	TailCacheBytesPerStream = 1 << 20
-	TailCacheMaxStreams     = 4096
-)
+const ()
 
 // MaxConsumeItemsPerTask bounds one Workflow Task's slice. A byte cap alone is
 // not enough: a burst of tiny messages stays under it while still making one

@@ -50,8 +50,6 @@ type handler struct {
 	// per distinct id a caller names, including ids that resolve to nothing.
 	// Unrelated streams sharing a stripe only serialize with each other.
 	appendLk [appendStripes]sync.Mutex
-
-	tail *stream.TailCache
 }
 
 func newHandler(
@@ -65,21 +63,11 @@ func newHandler(
 		namespaceRegistry: namespaceRegistry,
 		logger:            logger,
 		routed:            routed,
-		tail:              stream.NewTailCache(stream.TailCacheBytesPerStream, stream.TailCacheMaxStreams),
 	}
 }
 
 func streamKey(namespaceID, streamID string) string {
 	return namespaceID + "/" + streamID
-}
-
-// logKey identifies the cached bytes by the log they came from, not by the name
-// the caller used to reach it. A stream id can be reused: delete or close one
-// and create another with the same id, and the new stream starts at offset 0
-// again. Keyed by name, the old stream's entries would still match, and a
-// reader of the new stream would be served bytes from the old one.
-func logKey(namespaceID, collectionID string) string {
-	return namespaceID + "/" + collectionID
 }
 
 // withCallerInfo tags the context so the stream's direct persistence calls are
@@ -227,14 +215,6 @@ func (h *handler) AddMessages(
 		return nil, err
 	}
 
-	// Only after the commit. A write whose commit failed can be superseded by a
-	// retry carrying different bytes at the same offsets, and caching it would
-	// serve those bytes to a reader that must never see them.
-	if !result.Deduplicated {
-		h.tail.Put(logKey(req.GetNamespaceId(), state.GetCollectionId()),
-			result.FirstOffset, result.NextOffset, result.Blob)
-	}
-
 	return &streampb.AddMessagesResponse{
 		FrontendResponse: &streampb.AddMessagesOutput{
 			FirstOffset:  result.FirstOffset,
@@ -307,14 +287,6 @@ func (h *handler) AddWorkflowMessages(
 		}, addReq)
 	if err != nil {
 		return nil, err
-	}
-
-	// Only after the commit, for the same reason as the standalone path: a
-	// write whose commit failed can be superseded by a retry carrying different
-	// bytes at the same offsets.
-	if !result.Deduplicated {
-		h.tail.Put(logKey(req.GetNamespaceId(), state.GetCollectionId()),
-			result.FirstOffset, result.NextOffset, result.Blob)
 	}
 
 	return &streampb.AddWorkflowMessagesResponse{
