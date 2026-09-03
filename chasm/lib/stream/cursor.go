@@ -54,6 +54,7 @@ func NewCursor(_ chasm.MutableContext, req NewCursorRequest) (*Cursor, error) {
 			CollectionId: req.CollectionID,
 			BucketSize:   req.BucketSize,
 			Offset:       req.StartOffset,
+			StartOffset:  req.StartOffset,
 			External:     req.External,
 			KnownHead:    req.StartOffset,
 		},
@@ -156,4 +157,11 @@ func (c *Cursor) AdvanceKnownHead(_ chasm.MutableContext, head int64) {
 	if head > c.State.KnownHead {
 		c.State.KnownHead = head
 	}
+}
+
+// StartOffset is where this subscription began reading. Replay needs it to tell
+// a consumer that has committed nothing apart from one whose recording events
+// are simply not in the history page it was handed.
+func (c *Cursor) StartOffset() int64 {
+	return c.State.StartOffset
 }

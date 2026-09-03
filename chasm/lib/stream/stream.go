@@ -506,12 +506,12 @@ func (s *Stream) applyCap() {
 	s.reclaim(newBase)
 }
 
-// RegisterConsumer pins the stream's readable floor at offset on behalf of an
-// in-workflow consumer, so truncation and the message cap cannot take a range
-// the consumer has not read yet.
+// RegisterConsumer records an in-workflow consumer so appends know who to wake.
 //
-// Without this the interlock in Truncate and applyCap has nothing to consult:
-// a consumer's cursor lives in its own execution, and the stream cannot see it.
+// It says who to notify, not what to keep. Neither Truncate nor applyCap
+// consults it: a consumer that never deregistered would otherwise hold the
+// floor forever, and a capped stream has to stay bounded whatever its consumers
+// are doing. A consumer left below the floor learns that when it next reads.
 func (s *Stream) RegisterConsumer(
 	_ chasm.MutableContext,
 	consumerID string,
@@ -560,13 +560,10 @@ func (s *Stream) AdvanceConsumer(_ chasm.MutableContext, consumerID string, offs
 	consumer.Offset = offset
 }
 
-// DeregisterConsumer releases the floor a consumer was holding.
-func (s *Stream) DeregisterConsumer(_ chasm.MutableContext, consumerID string) {
-	if consumer, ok := s.State.Consumers[consumerID]; ok {
-		consumer.Active = false
-	}
-}
-
+// consumerPin is the lowest offset any active consumer has reached. Nothing in
+// the write path consults it, by the decision above; it is how the consumer
+// table is read back, and what asserts that a re-registration cannot rewind a
+// consumer's recorded position.
 func (s *Stream) consumerPin() (int64, bool) {
 	var pin int64
 	found := false
@@ -580,6 +577,13 @@ func (s *Stream) consumerPin() (int64, bool) {
 		}
 	}
 	return pin, found
+}
+
+// DeregisterConsumer releases the floor a consumer was holding.
+func (s *Stream) DeregisterConsumer(_ chasm.MutableContext, consumerID string) {
+	if consumer, ok := s.State.Consumers[consumerID]; ok {
+		consumer.Active = false
+	}
 }
 
 func marshalBatch(messages []*streampb.StreamMessage) (*commonpb.DataBlob, error) {

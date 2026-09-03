@@ -353,9 +353,13 @@ type WorkflowStreamCursor struct {
 	// the event that closes that task, then folded into offset. An empty range
 	// is still recorded: a task where the subscription saw nothing is a fact
 	// replay has to reproduce.
-	PendingFrom   int64 `protobuf:"varint,5,opt,name=pending_from,json=pendingFrom,proto3" json:"pending_from,omitempty"`
-	PendingTo     int64 `protobuf:"varint,6,opt,name=pending_to,json=pendingTo,proto3" json:"pending_to,omitempty"`
-	HasPending    bool  `protobuf:"varint,7,opt,name=has_pending,json=hasPending,proto3" json:"has_pending,omitempty"`
+	PendingFrom int64 `protobuf:"varint,5,opt,name=pending_from,json=pendingFrom,proto3" json:"pending_from,omitempty"`
+	PendingTo   int64 `protobuf:"varint,6,opt,name=pending_to,json=pendingTo,proto3" json:"pending_to,omitempty"`
+	HasPending  bool  `protobuf:"varint,7,opt,name=has_pending,json=hasPending,proto3" json:"has_pending,omitempty"`
+	// Where this subscription began reading. Retained separately from offset,
+	// which advances, because replay has to tell "committed nothing yet" apart
+	// from "the events recording what was committed are not in this page".
+	StartOffset   int64 `protobuf:"varint,10,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -451,6 +455,13 @@ func (x *WorkflowStreamCursor) GetHasPending() bool {
 		return x.HasPending
 	}
 	return false
+}
+
+func (x *WorkflowStreamCursor) GetStartOffset() int64 {
+	if x != nil {
+		return x.StartOffset
+	}
+	return 0
 }
 
 type StreamLifecycle struct {
@@ -550,7 +561,7 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x16\n" +
 	"\x06offset\x18\x03 \x01(\x03R\x06offset\x12\x16\n" +
 	"\x06active\x18\x04 \x01(\bR\x06active\x12\x1a\n" +
-	"\bexternal\x18\x05 \x01(\bR\bexternal\"\xaf\x02\n" +
+	"\bexternal\x18\x05 \x01(\bR\bexternal\"\xd2\x02\n" +
 	"\x14WorkflowStreamCursor\x12\x1b\n" +
 	"\tstream_id\x18\x01 \x01(\tR\bstreamId\x12#\n" +
 	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12\x1f\n" +
@@ -564,7 +575,9 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\n" +
 	"pending_to\x18\x06 \x01(\x03R\tpendingTo\x12\x1f\n" +
 	"\vhas_pending\x18\a \x01(\bR\n" +
-	"hasPending\"g\n" +
+	"hasPending\x12!\n" +
+	"\fstart_offset\x18\n" +
+	" \x01(\x03R\vstartOffset\"g\n" +
 	"\x0fStreamLifecycle\x127\n" +
 	"\tretention\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\tretention\x12\x1b\n" +
 	"\tmax_items\x18\x02 \x01(\x03R\bmaxItemsB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"

@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/serialization"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"google.golang.org/protobuf/proto"
 )
 
 // deliverStreamSlices hands the next range of every stream this workflow
@@ -34,6 +35,13 @@ type streamOrigin struct {
 	// The name the consumer knows the stream by, which is how an owned one is
 	// found on the consumer's own component.
 	name string
+
+	// Where the subscription began, and how far its completed tasks have
+	// committed. Together they say exactly which offsets replay owes the
+	// worker, so a re-supply that comes up short can be detected instead of
+	// silently handing the workflow less than it originally saw.
+	start     int64
+	committed int64
 }
 
 // deliveryFrontier is the offset a delivery clips to. For a stream this
@@ -235,12 +243,25 @@ func deliverStreamSlices(
 			Messages:   messages,
 		})
 		addresses[cursor.StreamID()] = streamOrigin{
-			external: cursor.IsExternal(),
-			name:     name,
+			external:  cursor.IsExternal(),
+			name:      name,
+			start:     cursor.StartOffset(),
+			committed: cursor.Offset(),
 		}
 	}
 	return slicesOut, addresses, nil
 }
+
+// Bounds on one cold replay's re-supply. History holds offsets and not payloads,
+// so replaying a consumer means re-reading every range its completed tasks
+// recorded, and that grows with the workflow's whole life rather than with the
+// task being started. These cap one response; a consumer past them cannot be
+// replayed by this path at all, which is a limit of the design rather than of
+// the numbers.
+const (
+	maxReplayMessages = 100_000
+	maxReplayBytes    = 64 << 20
+)
 
 // ownedRange names a range of a stream the consumer owns.
 type ownedRange struct {
@@ -321,6 +342,12 @@ func attachReplaySlices(
 		return err
 	}
 
+	// How far the recorded ranges reach, per stream, so the coverage check
+	// below can tell a complete re-supply from a short one.
+	reached := make(map[string]int64, len(addresses))
+	totalMessages := 0
+	totalBytes := 0
+
 	for _, event := range events {
 		for _, recorded := range event.GetWorkflowTaskCompletedEventAttributes().GetStreamCursors() {
 			address, ok := addresses[recorded.GetStreamId()]
@@ -336,7 +363,7 @@ func attachReplaySlices(
 					recorded.GetStreamId(),
 					recorded.GetFromOffset(), recorded.GetToOffset())
 				if err != nil {
-					return err
+					return replayReadError(consumer, recorded, err)
 				}
 				collected, _, err := stream.CollectMessages(
 					w.Blobs, w.Starts,
@@ -346,6 +373,25 @@ func attachReplaySlices(
 					return err
 				}
 				messages = stream.ToAPIMessages(collected)
+
+				totalMessages += len(messages)
+				for _, m := range messages {
+					totalBytes += proto.Size(m)
+				}
+				// Bounded because every prior task's range is re-read into one
+				// response, so a long-lived consumer's cold replay grows with
+				// its whole history. Refused rather than trimmed: a short
+				// re-supply is what replay cannot survive.
+				if totalMessages > maxReplayMessages || totalBytes > maxReplayBytes {
+					return serviceerror.NewFailedPreconditionf(
+						"replaying workflow %q needs more than %d messages or %d bytes of stream history to re-supply; "+
+							"the consumed ranges cannot be re-delivered in one response",
+						consumer.GetWorkflowID(), maxReplayMessages, maxReplayBytes)
+				}
+			}
+
+			if to := recorded.GetToOffset(); to > reached[recorded.GetStreamId()] {
+				reached[recorded.GetStreamId()] = to
 			}
 
 			// Attached even when empty: the task observed nothing, and replay
@@ -359,7 +405,41 @@ func attachReplaySlices(
 			})
 		}
 	}
+
+	// The events carried here are one page. A consumer whose recording events
+	// run past it would be re-supplied with only part of what its History says
+	// it consumed, and would then replay against fewer messages than the
+	// original run saw. The cursor knows how far it has committed, so that is
+	// checked rather than assumed.
+	for streamID, address := range addresses {
+		got, ok := reached[streamID]
+		if !ok {
+			got = address.start
+		}
+		if got < address.committed {
+			return serviceerror.NewFailedPreconditionf(
+				"workflow %q consumed stream %q through offset %d but its history page only records through %d; "+
+					"re-supplying the rest needs the events beyond this page",
+				consumer.GetWorkflowID(), streamID, address.committed, got)
+		}
+	}
 	return nil
+}
+
+// replayReadError says why a range a completed task recorded can no longer be
+// read. Truncation and deletion are the reachable causes, and neither is
+// recoverable for this workflow: without the bytes it can never replay, and
+// without replaying it can never start another task. The bare read error names
+// offsets and no workflow, which is not enough to act on.
+func replayReadError(
+	consumer definition.WorkflowKey,
+	recorded *streampb.StreamCursor,
+	cause error,
+) error {
+	return serviceerror.NewFailedPreconditionf(
+		"workflow %q cannot replay: stream %q no longer holds offsets [%d,%d) that one of its completed tasks consumed (%v)",
+		consumer.GetWorkflowID(), recorded.GetStreamId(),
+		recorded.GetFromOffset(), recorded.GetToOffset(), cause)
 }
 
 // eventsOfResponse reads the events the response is carrying, whichever of the

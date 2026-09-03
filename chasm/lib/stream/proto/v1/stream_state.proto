@@ -98,6 +98,11 @@ message WorkflowStreamCursor {
   int64 pending_from = 5;
   int64 pending_to = 6;
   bool has_pending = 7;
+
+  // Where this subscription began reading. Retained separately from offset,
+  // which advances, because replay has to tell "committed nothing yet" apart
+  // from "the events recording what was committed are not in this page".
+  int64 start_offset = 10;
 }
 
 message StreamLifecycle {
