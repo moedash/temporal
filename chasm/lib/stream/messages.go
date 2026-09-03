@@ -2,6 +2,7 @@ package stream
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	streampb "go.temporal.io/api/stream/v1"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"google.golang.org/protobuf/proto"
@@ -97,4 +98,28 @@ func CapByBytes(
 		}
 	}
 	return messages, from + int64(len(messages))
+}
+
+// checkBatchBytes rejects an append that is too large to store or too large to
+// ever hand back.
+//
+// The per-message bound matters on its own: a message is never split, so one
+// that exceeds a consumer's byte budget can never be delivered, and CapByBytes
+// would hand it over alone forever rather than reject it. The batch bound is
+// the storage side, since a batch is written as a single node.
+func checkBatchBytes(messages []*streamlib.StreamMessage) error {
+	total := 0
+	for i, m := range messages {
+		size := proto.Size(m)
+		if size > MaxMessageBytes {
+			return serviceerror.NewInvalidArgumentf(
+				"message %d is %d bytes, over the %d byte limit", i, size, MaxMessageBytes)
+		}
+		total += size
+	}
+	if total > MaxBatchBytes {
+		return serviceerror.NewInvalidArgumentf(
+			"batch is %d bytes, over the %d byte limit", total, MaxBatchBytes)
+	}
+	return nil
 }

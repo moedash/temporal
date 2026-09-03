@@ -21,10 +21,6 @@ const LongPollTimeout = 20 * time.Second
 // own deadline fires.
 const LongPollBuffer = 3 * time.Second
 
-// Tail-cache bounds. Sized for many modest streams rather than a few large
-// ones, which is the shape this primitive targets.
-const ()
-
 // MaxConsumeItemsPerTask bounds one Workflow Task's slice. A byte cap alone is
 // not enough: a burst of tiny messages stays under it while still making one
 // task's drain arbitrarily long. Whichever bound binds first, the rest is
@@ -51,3 +47,23 @@ const MaxConsumersPerStream = 1000
 
 // MaxListPageSize bounds a visibility page when the caller does not.
 const MaxListPageSize = 1000
+
+// MaxMessageBytes bounds one message. A message is never split, so this is also
+// the smallest unit a reader can be asked to materialise.
+const MaxMessageBytes = 1 << 20
+
+// MaxBatchBytes bounds one append. It is deliberately equal to
+// MaxConsumeBytesPerTask: a batch is written as one node and read back whole,
+// so a batch larger than a task's byte budget could never be delivered.
+const MaxBatchBytes = MaxConsumeBytesPerTask
+
+// MaxOwnedStreamsPerWorkflow bounds how many named streams one execution can
+// carry. Each is a component in the workflow's mutable state, so an unbounded
+// count grows that state until the size limit terminates the execution. The
+// name comes from the caller, and any caller in the namespace can pick a new
+// one, which is what makes this reachable from outside.
+const MaxOwnedStreamsPerWorkflow = 100
+
+// MaxStreamNameLength bounds a name before it becomes a map key in mutable
+// state, for the same reason.
+const MaxStreamNameLength = 255

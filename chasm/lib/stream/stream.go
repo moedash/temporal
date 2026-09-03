@@ -150,6 +150,9 @@ func (s *Stream) AddMessages(
 		return AddMessagesResult{}, serviceerror.NewInvalidArgumentf(
 			"batch of %d exceeds the limit of %d messages", len(req.Messages), MaxMessagesPerBatch)
 	}
+	if err := checkBatchBytes(req.Messages); err != nil {
+		return AddMessagesResult{}, err
+	}
 
 	blob, err := marshalBatch(req.Messages)
 	if err != nil {
@@ -419,8 +422,10 @@ func (s *Stream) ReadWindow(ctx chasm.Context, req WindowRequest) (Window, error
 			"offset %d is past the stream head %d", req.From, s.State.HeadOffset)
 	}
 
+	// Clamped at both ends. The caller picks the page size, and an unclamped
+	// one lets a single poll ask the store to materialise the whole stream.
 	limit := int(req.MaxMessages)
-	if limit <= 0 {
+	if limit <= 0 || limit > DefaultMaxMessagesPerPoll {
 		limit = DefaultMaxMessagesPerPoll
 	}
 	w := Window{State: common.CloneProto(s.State), To: req.From, Limit: limit}

@@ -248,6 +248,20 @@ func (w *Workflow) streamNamed(ctx chasm.MutableContext, name string) (*stream.S
 		return field.Get(ctx), nil
 	}
 
+	// Checked only on the create path, so an existing stream is never refused
+	// for room. The name arrives from the caller and every distinct one adds a
+	// component to this execution's mutable state, so without a bound an
+	// outside writer can grow that state until the size limit terminates the
+	// workflow.
+	if len(name) > stream.MaxStreamNameLength {
+		return nil, serviceerror.NewInvalidArgumentf(
+			"stream name is %d characters, over the %d limit", len(name), stream.MaxStreamNameLength)
+	}
+	if len(w.Streams) >= stream.MaxOwnedStreamsPerWorkflow {
+		return nil, serviceerror.NewFailedPreconditionf(
+			"workflow already owns %d streams, the limit", stream.MaxOwnedStreamsPerWorkflow)
+	}
+
 	// Keyed on the execution so the identity is stable for the workflow, and
 	// distinct from any other workflow reusing the same name.
 	created, err := stream.NewStream(ctx, stream.NewStreamRequest{
