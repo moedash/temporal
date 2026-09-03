@@ -54,10 +54,6 @@ type Workflow struct {
 	// commits with the event that records it.
 	StreamCursors chasm.Map[string, *stream.Cursor]
 
-	// Log nodes staged by stream commands during this workflow task. In memory
-	// only, and drained before the transaction commits: the bytes have to be
-	// durable before the frontier that makes them visible is.
-
 	// Subscribe commands whose stream is in another execution, so the addressing
 	// has to be looked up before a cursor can be made. In memory only, drained
 	// by the flush before commit.

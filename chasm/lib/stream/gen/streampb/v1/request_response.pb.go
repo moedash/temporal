@@ -413,6 +413,10 @@ type SubscribeWorkflowInput struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	WorkflowId string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	// Optional. Pins to one run, so a caller that has continued as new is not
+	// silently redirected to the successor's stream, which starts empty and at
+	// offset zero. Empty means whichever run is current.
+	OwnerRunId string `protobuf:"bytes,6,opt,name=owner_run_id,json=ownerRunId,proto3" json:"owner_run_id,omitempty"`
 	// Name of the stream within the Workflow, for a stream it owns.
 	StreamName string `protobuf:"bytes,3,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
 	// Id of a standalone stream in another execution. Exactly one of this and
@@ -465,6 +469,13 @@ func (x *SubscribeWorkflowInput) GetNamespace() string {
 func (x *SubscribeWorkflowInput) GetWorkflowId() string {
 	if x != nil {
 		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *SubscribeWorkflowInput) GetOwnerRunId() string {
+	if x != nil {
+		return x.OwnerRunId
 	}
 	return ""
 }
@@ -767,6 +778,10 @@ type PollWorkflowMessagesInput struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	WorkflowId string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	// Optional. Pins to one run, so a caller that has continued as new is not
+	// silently redirected to the successor's stream, which starts empty and at
+	// offset zero. Empty means whichever run is current.
+	OwnerRunId string `protobuf:"bytes,8,opt,name=owner_run_id,json=ownerRunId,proto3" json:"owner_run_id,omitempty"`
 	// Empty means the workflow's default output stream.
 	StreamName  string `protobuf:"bytes,3,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
 	FromOffset  int64  `protobuf:"varint,4,opt,name=from_offset,json=fromOffset,proto3" json:"from_offset,omitempty"`
@@ -822,6 +837,13 @@ func (x *PollWorkflowMessagesInput) GetWorkflowId() string {
 	return ""
 }
 
+func (x *PollWorkflowMessagesInput) GetOwnerRunId() string {
+	if x != nil {
+		return x.OwnerRunId
+	}
+	return ""
+}
+
 func (x *PollWorkflowMessagesInput) GetStreamName() string {
 	if x != nil {
 		return x.StreamName
@@ -858,10 +880,14 @@ func (x *PollWorkflowMessagesInput) GetWaitNewMessages() bool {
 }
 
 type DescribeWorkflowStreamInput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	WorkflowId    string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	StreamName    string                 `protobuf:"bytes,3,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	WorkflowId string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	// Optional. Pins to one run, so a caller that has continued as new is not
+	// silently redirected to the successor's stream, which starts empty and at
+	// offset zero. Empty means whichever run is current.
+	OwnerRunId    string `protobuf:"bytes,4,opt,name=owner_run_id,json=ownerRunId,proto3" json:"owner_run_id,omitempty"`
+	StreamName    string `protobuf:"bytes,3,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -910,6 +936,13 @@ func (x *DescribeWorkflowStreamInput) GetWorkflowId() string {
 	return ""
 }
 
+func (x *DescribeWorkflowStreamInput) GetOwnerRunId() string {
+	if x != nil {
+		return x.OwnerRunId
+	}
+	return ""
+}
+
 func (x *DescribeWorkflowStreamInput) GetStreamName() string {
 	if x != nil {
 		return x.StreamName
@@ -923,6 +956,10 @@ type AddWorkflowMessagesInput struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	WorkflowId string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	// Optional. Pins to one run, so a caller that has continued as new is not
+	// silently redirected to the successor's stream, which starts empty and at
+	// offset zero. Empty means whichever run is current.
+	OwnerRunId string `protobuf:"bytes,7,opt,name=owner_run_id,json=ownerRunId,proto3" json:"owner_run_id,omitempty"`
 	// Empty means the workflow's default output stream.
 	StreamName string           `protobuf:"bytes,3,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
 	Messages   []*StreamMessage `protobuf:"bytes,4,rep,name=messages,proto3" json:"messages,omitempty"`
@@ -973,6 +1010,13 @@ func (x *AddWorkflowMessagesInput) GetNamespace() string {
 func (x *AddWorkflowMessagesInput) GetWorkflowId() string {
 	if x != nil {
 		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *AddWorkflowMessagesInput) GetOwnerRunId() string {
+	if x != nil {
+		return x.OwnerRunId
 	}
 	return ""
 }
@@ -2244,11 +2288,14 @@ func (x *RegisterStreamConsumerOutput) GetKnownHead() int64 {
 // Telling one consumer that the frontier moved. Routed to the consumer, which
 // is not where the stream lives.
 type AdvanceConsumerHeadInput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	WorkflowId    string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	StreamId      string                 `protobuf:"bytes,3,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
-	HeadOffset    int64                  `protobuf:"varint,4,opt,name=head_offset,json=headOffset,proto3" json:"head_offset,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	WorkflowId string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	// The run that subscribed. A successor from continue-as-new holds no cursor
+	// for this stream, so pushing the frontier at it would land nowhere.
+	OwnerRunId    string `protobuf:"bytes,5,opt,name=owner_run_id,json=ownerRunId,proto3" json:"owner_run_id,omitempty"`
+	StreamId      string `protobuf:"bytes,3,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	HeadOffset    int64  `protobuf:"varint,4,opt,name=head_offset,json=headOffset,proto3" json:"head_offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2293,6 +2340,13 @@ func (x *AdvanceConsumerHeadInput) GetNamespace() string {
 func (x *AdvanceConsumerHeadInput) GetWorkflowId() string {
 	if x != nil {
 		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *AdvanceConsumerHeadInput) GetOwnerRunId() string {
+	if x != nil {
+		return x.OwnerRunId
 	}
 	return ""
 }
@@ -3225,11 +3279,13 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x1f\n" +
 	"\vproducer_id\x18\x03 \x01(\tR\n" +
 	"producerId\"\x15\n" +
-	"\x13FinishWritingOutput\"\xb8\x01\n" +
+	"\x13FinishWritingOutput\"\xda\x01\n" +
 	"\x16SubscribeWorkflowInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
-	"workflowId\x12\x1f\n" +
+	"workflowId\x12 \n" +
+	"\fowner_run_id\x18\x06 \x01(\tR\n" +
+	"ownerRunId\x12\x1f\n" +
 	"\vstream_name\x18\x03 \x01(\tR\n" +
 	"streamName\x12\x1b\n" +
 	"\tstream_id\x18\x05 \x01(\tR\bstreamId\x12!\n" +
@@ -3255,28 +3311,34 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\fclose_reason\x18\x05 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\vcloseReason\"P\n" +
 	"\x13DescribeStreamInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
-	"\tstream_id\x18\x02 \x01(\tR\bstreamId\"\x83\x02\n" +
+	"\tstream_id\x18\x02 \x01(\tR\bstreamId\"\xa5\x02\n" +
 	"\x19PollWorkflowMessagesInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
-	"workflowId\x12\x1f\n" +
+	"workflowId\x12 \n" +
+	"\fowner_run_id\x18\b \x01(\tR\n" +
+	"ownerRunId\x12\x1f\n" +
 	"\vstream_name\x18\x03 \x01(\tR\n" +
 	"streamName\x12\x1f\n" +
 	"\vfrom_offset\x18\x04 \x01(\x03R\n" +
 	"fromOffset\x12!\n" +
 	"\fmax_messages\x18\x05 \x01(\x05R\vmaxMessages\x12\x16\n" +
 	"\x06topics\x18\x06 \x03(\tR\x06topics\x12*\n" +
-	"\x11wait_new_messages\x18\a \x01(\bR\x0fwaitNewMessages\"}\n" +
+	"\x11wait_new_messages\x18\a \x01(\bR\x0fwaitNewMessages\"\x9f\x01\n" +
 	"\x1bDescribeWorkflowStreamInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
-	"workflowId\x12\x1f\n" +
+	"workflowId\x12 \n" +
+	"\fowner_run_id\x18\x04 \x01(\tR\n" +
+	"ownerRunId\x12\x1f\n" +
 	"\vstream_name\x18\x03 \x01(\tR\n" +
-	"streamName\"\x8d\x02\n" +
+	"streamName\"\xaf\x02\n" +
 	"\x18AddWorkflowMessagesInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
-	"workflowId\x12\x1f\n" +
+	"workflowId\x12 \n" +
+	"\fowner_run_id\x18\a \x01(\tR\n" +
+	"ownerRunId\x12\x1f\n" +
 	"\vstream_name\x18\x03 \x01(\tR\n" +
 	"streamName\x12T\n" +
 	"\bmessages\x18\x04 \x03(\v28.temporal.server.chasm.lib.stream.proto.v1.StreamMessageR\bmessages\x12\x1f\n" +
@@ -3350,11 +3412,13 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\vbucket_size\x18\x03 \x01(\x03R\n" +
 	"bucketSize\x12\x1d\n" +
 	"\n" +
-	"known_head\x18\x04 \x01(\x03R\tknownHead\"\x97\x01\n" +
+	"known_head\x18\x04 \x01(\x03R\tknownHead\"\xb9\x01\n" +
 	"\x18AdvanceConsumerHeadInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
-	"workflowId\x12\x1b\n" +
+	"workflowId\x12 \n" +
+	"\fowner_run_id\x18\x05 \x01(\tR\n" +
+	"ownerRunId\x12\x1b\n" +
 	"\tstream_id\x18\x03 \x01(\tR\bstreamId\x12\x1f\n" +
 	"\vhead_offset\x18\x04 \x01(\x03R\n" +
 	"headOffset\"\x1b\n" +

@@ -117,10 +117,16 @@ func refForRun(namespaceID, streamID, runID string) chasm.ComponentRef {
 // workflowRef builds a reference to the execution that owns an attached
 // stream. An attached stream is a subcomponent, so it has no id of its own and
 // everything about it is reached through its owner.
-func workflowRef(namespaceID, workflowID string) chasm.ComponentRef {
+//
+// An empty runID means the current run. A caller that supplies one is pinning:
+// an owned stream does not carry across continue-as-new, so the successor's
+// stream of the same name is a different, empty one, and a caller that meant
+// the predecessor would otherwise be redirected to it without being told.
+func workflowRef(namespaceID, workflowID, runID string) chasm.ComponentRef {
 	return chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
 		NamespaceID: namespaceID,
 		BusinessID:  workflowID,
+		RunID:       runID,
 	})
 }
 
@@ -250,7 +256,7 @@ func (h *handler) AddWorkflowMessages(
 
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	ref := workflowRef(req.GetNamespaceId(), in.GetWorkflowId())
+	ref := workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId())
 
 	state, err := chasm.ReadComponent(ctx, ref,
 		func(wf *chasmworkflow.Workflow, cctx chasm.Context, streamName string) (*streampb.StreamState, error) {
@@ -337,7 +343,7 @@ func (h *handler) SubscribeWorkflow(
 
 	startOffset, _, err := chasm.UpdateComponent(
 		ctx,
-		workflowRef(req.GetNamespaceId(), in.GetWorkflowId()),
+		workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId()),
 		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, input *streampb.SubscribeWorkflowInput) (int64, error) {
 			return wf.SubscribeToOwnedStream(
 				mctx, ownedStreamName(input.GetStreamName()), input.GetStartOffset())
@@ -391,7 +397,7 @@ func (h *handler) subscribeToExternalStream(
 
 	startOffset, _, err := chasm.UpdateComponent(
 		ctx,
-		workflowRef(namespaceID, in.GetWorkflowId()),
+		workflowRef(namespaceID, in.GetWorkflowId(), in.GetOwnerRunId()),
 		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, offset int64) (int64, error) {
 			return wf.SubscribeToExternalStream(mctx, chasmworkflow.ExternalStreamSubscription{
 				StreamID:     in.GetStreamId(),
@@ -479,7 +485,7 @@ func (h *handler) AdvanceConsumerHead(
 
 	if _, _, err := chasm.UpdateComponent(
 		ctx,
-		workflowRef(req.GetNamespaceId(), in.GetWorkflowId()),
+		workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId()),
 		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, at int64) (struct{}, error) {
 			return struct{}{}, wf.AdvanceKnownHead(mctx, in.GetStreamId(), at)
 		},
@@ -540,7 +546,7 @@ func (h *handler) PollWorkflowMessages(
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	ref := workflowRef(req.GetNamespaceId(), in.GetWorkflowId())
+	ref := workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId())
 	name := ownedStreamName(in.GetStreamName())
 	from := in.GetFromOffset()
 
@@ -780,7 +786,7 @@ func (h *handler) DescribeWorkflowStream(
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
 	state, err := h.ownedStreamState(ctx,
-		workflowRef(req.GetNamespaceId(), in.GetWorkflowId()),
+		workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId()),
 		ownedStreamName(in.GetStreamName()))
 	if err != nil {
 		return nil, err

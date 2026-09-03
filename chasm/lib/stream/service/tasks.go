@@ -162,6 +162,7 @@ func (h *notifyConsumersTaskHandler) Execute(
 			NamespaceId: namespaceID,
 			FrontendRequest: &streampb.AdvanceConsumerHeadInput{
 				WorkflowId: consumer.GetWorkflowId(),
+				OwnerRunId: consumer.GetRunId(),
 				StreamId:   streamID,
 				HeadOffset: head,
 			},

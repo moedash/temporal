@@ -65,6 +65,11 @@ message FinishWritingOutput {}
 message SubscribeWorkflowInput {
   string namespace = 1;
   string workflow_id = 2;
+  // Optional. Pins to one run, so a caller that has continued as new is not
+  // silently redirected to the successor's stream, which starts empty and at
+  // offset zero. Empty means whichever run is current.
+  string owner_run_id = 6;
+
   // Name of the stream within the Workflow, for a stream it owns.
   string stream_name = 3;
   // Id of a standalone stream in another execution. Exactly one of this and
@@ -115,6 +120,11 @@ message DescribeStreamInput {
 message PollWorkflowMessagesInput {
   string namespace = 1;
   string workflow_id = 2;
+  // Optional. Pins to one run, so a caller that has continued as new is not
+  // silently redirected to the successor's stream, which starts empty and at
+  // offset zero. Empty means whichever run is current.
+  string owner_run_id = 8;
+
   // Empty means the workflow's default output stream.
   string stream_name = 3;
   int64 from_offset = 4;
@@ -127,6 +137,11 @@ message PollWorkflowMessagesInput {
 message DescribeWorkflowStreamInput {
   string namespace = 1;
   string workflow_id = 2;
+  // Optional. Pins to one run, so a caller that has continued as new is not
+  // silently redirected to the successor's stream, which starts empty and at
+  // offset zero. Empty means whichever run is current.
+  string owner_run_id = 4;
+
   string stream_name = 3;
 }
 
@@ -135,6 +150,11 @@ message DescribeWorkflowStreamInput {
 message AddWorkflowMessagesInput {
   string namespace = 1;
   string workflow_id = 2;
+  // Optional. Pins to one run, so a caller that has continued as new is not
+  // silently redirected to the successor's stream, which starts empty and at
+  // offset zero. Empty means whichever run is current.
+  string owner_run_id = 7;
+
   // Empty means the workflow's default output stream.
   string stream_name = 3;
   repeated StreamMessage messages = 4;
@@ -261,6 +281,9 @@ message RegisterStreamConsumerOutput {
 message AdvanceConsumerHeadInput {
   string namespace = 1;
   string workflow_id = 2;
+  // The run that subscribed. A successor from continue-as-new holds no cursor
+  // for this stream, so pushing the frontier at it would land nowhere.
+  string owner_run_id = 5;
   string stream_id = 3;
   int64 head_offset = 4;
 }
