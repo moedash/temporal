@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"go.temporal.io/server/common/rpc/interceptor"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
@@ -26,7 +25,7 @@ func TestEveryRoutedRequestExposesNamespace(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s is not registered: %v", md.FullName(), err)
 		}
-		msg := mt.New().Interface().(proto.Message)
+		msg := mt.New().Interface()
 		if _, ok := msg.(interceptor.NamespaceNameGetter); !ok {
 			t.Errorf("%s has a frontend_request but no GetNamespace; add it in namespace.go", md.FullName())
 		}

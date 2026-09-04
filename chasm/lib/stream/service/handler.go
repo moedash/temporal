@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -138,17 +137,6 @@ func ownedStreamName(name string) string {
 		return chasmworkflow.DefaultStreamName
 	}
 	return name
-}
-
-// reclaim deletes buckets that a committed truncation put out of reach. It runs
-// after the commit, so a failure here leaves storage to reclaim later rather
-// than data a reader can still ask for but no longer find.
-// logStore is the slice of a shard this package needs. Declared narrowly so the
-// package does not depend on the history service, which would make the workflow
-// library unable to import it.
-type logStore interface {
-	GetShardID() int32
-	GetExecutionManager() persistence.ExecutionManager
 }
 
 func (h *handler) CreateStream(
@@ -515,8 +503,8 @@ func (h *handler) PollMessages(
 
 	// Blocking is only worth it once the reader is genuinely caught up.
 	if in.GetWaitNewMessages() && from == state.GetHeadOffset() && !state.GetClosed() {
-		state, err = h.waitForMessages(ctx, ref, from, state)
-		if err != nil {
+		// The window is re-read below, so only the blocking matters here.
+		if _, err := h.waitForMessages(ctx, ref, from, state); err != nil {
 			return nil, err
 		}
 	}
@@ -556,8 +544,7 @@ func (h *handler) PollWorkflowMessages(
 	}
 
 	if in.GetWaitNewMessages() && from == state.GetHeadOffset() && !state.GetClosed() {
-		state, err = h.waitForOwnedMessages(ctx, ref, name, from, state)
-		if err != nil {
+		if _, err := h.waitForOwnedMessages(ctx, ref, name, from, state); err != nil {
 			return nil, err
 		}
 	}

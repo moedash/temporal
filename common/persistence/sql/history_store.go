@@ -497,7 +497,7 @@ func (m *sqlExecutionStore) AppendStreamLog(
 		CollectionID: request.CollectionID,
 		Bucket:       request.Bucket,
 		StartOffset:  request.StartOffset,
-		NextOffset:    request.NextOffset,
+		NextOffset:   request.NextOffset,
 		Data:         request.Node.Data,
 		DataEncoding: request.Node.EncodingType.String(),
 	})

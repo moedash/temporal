@@ -790,14 +790,14 @@ func (s *ScavengerTestSuite) TestSkipsBranchesThatAreNotExecutionHistory() {
 		TreeId:   treeID2,
 		BranchId: branchID2,
 	})
-	s.Nil(err)
+	s.Require().NoError(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID2", "workflowID2", s.scavenger.numShards),
 		BranchToken: branchToken2.Data,
 	})).Return(nil)
 
 	hbd, err := s.scavenger.Run(context.Background())
-	s.Nil(err)
+	s.Require().NoError(err)
 	s.Equal(1, hbd.SkipCount, "the stream branch must be skipped, not collected")
 	s.Equal(1, hbd.SuccessCount)
 	s.Equal(0, hbd.ErrorCount)

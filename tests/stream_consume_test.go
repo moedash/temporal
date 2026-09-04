@@ -966,6 +966,8 @@ func TestStreamSubscribeEventKeepsCommandOrder(t *testing.T) {
 		case enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED,
 			enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED:
 			order = append(order, e.GetEventType())
+		default:
+			// Every other event is noise for this assertion.
 		}
 	}
 	require.Equal(t, []enumspb.EventType{

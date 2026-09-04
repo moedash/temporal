@@ -3,26 +3,18 @@ package stream
 import (
 	"context"
 
-	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/common/persistence"
 )
 
-// A stream's payload bytes live in the history-node store, on branches of its
-// own rather than on any workflow's. That store is already an offset-addressed,
-// shard-fenced, forkable, trimmable append-only log, and its own interface
-// describes it as decoupled from workflow concepts.
+// A dedicated store for stream payload bytes, keyed by collection and by the
+// offset a batch starts at. Offsets roll to a new bucket every bucketSize so no
+// single partition grows with the stream, and because the bucket is arithmetic
+// there is no index to keep.
 //
-// It is not one branch per stream. The Cassandra table partitions on tree_id
-// alone, which is safe for workflow history because history is capped and
-// unsafe for a stream because it is not. So offsets roll to a new tree every
-// bucketSize, and because the bucket is arithmetic and the tree ID is derived
-// from it, there is no index to keep.
-
-// streamLogNamespace anchors deterministic bucket tree IDs. Any fixed UUID
-// works; it exists so two streams with the same ID in different namespaces
-// cannot collide.
-var streamLogNamespace = uuid.MustParse("6f2b4b4c-6f0e-4d9d-9f61-2f9d0f6a9c11")
+// The component holds its payload in a chasm.Map now, so nothing on the serving
+// path comes through here. What is left is reached only by the storage-level
+// test suite, and it goes when that does.
 
 // DefaultBucketSize bounds how many messages share one storage partition.
 // Immutable per stream once chosen, because changing it renumbers offsets.

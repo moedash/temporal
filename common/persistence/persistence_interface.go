@@ -553,7 +553,7 @@ type (
 		CollectionID string
 		Bucket       int64
 		StartOffset  int64
-		NextOffset    int64
+		NextOffset   int64
 		Node         *commonpb.DataBlob
 	}
 

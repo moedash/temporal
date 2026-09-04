@@ -8,10 +8,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	apistreampb "go.temporal.io/api/stream/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
-	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 )
 
 func newStreamCursorTestContext() chasm.MutableContext {
@@ -34,17 +34,17 @@ func newAttachedStream(t *testing.T, ctx chasm.MutableContext, count int) *strea
 	t.Helper()
 
 	s := &stream.Stream{
-		State: &streampb.StreamState{
+		State: &streamlib.StreamState{
 			CollectionId: "col-1",
 			BucketSize:   stream.DefaultBucketSize,
-			Producers:    make(map[string]*streampb.ProducerCursor),
-			Consumers:    make(map[string]*streampb.ConsumerCursor),
+			Producers:    make(map[string]*streamlib.ProducerCursor),
+			Consumers:    make(map[string]*streamlib.ConsumerCursor),
 		},
 	}
 
-	messages := make([]*streampb.StreamMessage, count)
+	messages := make([]*streamlib.StreamMessage, count)
 	for i := range messages {
-		messages[i] = &streampb.StreamMessage{Kind: streampb.STREAM_MESSAGE_KIND_DATA}
+		messages[i] = &streamlib.StreamMessage{Kind: streamlib.STREAM_MESSAGE_KIND_DATA}
 	}
 	_, err := s.AddMessages(ctx, stream.AddMessagesRequest{Messages: messages})
 	require.NoError(t, err)
@@ -177,7 +177,7 @@ func TestPublishStagesEachBatchAtItsOwnOffset(t *testing.T) {
 		CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
 		Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
 			AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-				Messages: []*apistreampb.StreamMessage{
+				Messages: []*streampb.StreamMessage{
 					{Body: &commonpb.Payload{Data: []byte("x")}},
 					{Body: &commonpb.Payload{Data: []byte("y")}},
 				},

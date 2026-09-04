@@ -342,11 +342,10 @@ func attachReplaySlices(
 		return err
 	}
 
+	budget := replayBudget{}
 	// How far the recorded ranges reach, per stream, so the coverage check
 	// below can tell a complete re-supply from a short one.
 	reached := make(map[string]int64, len(addresses))
-	totalMessages := 0
-	totalBytes := 0
 
 	for _, event := range events {
 		for _, recorded := range event.GetWorkflowTaskCompletedEventAttributes().GetStreamCursors() {
@@ -357,37 +356,9 @@ func attachReplaySlices(
 				continue
 			}
 
-			var messages []*streampb.StreamMessage
-			if recorded.GetToOffset() > recorded.GetFromOffset() {
-				w, err := readRecordedRange(ctx, consumer, address,
-					recorded.GetStreamId(),
-					recorded.GetFromOffset(), recorded.GetToOffset())
-				if err != nil {
-					return replayReadError(consumer, recorded, err)
-				}
-				collected, _, err := stream.CollectMessages(
-					w.Blobs, w.Starts,
-					recorded.GetFromOffset(), recorded.GetToOffset(),
-					int(recorded.GetToOffset()-recorded.GetFromOffset()), nil)
-				if err != nil {
-					return err
-				}
-				messages = stream.ToAPIMessages(collected)
-
-				totalMessages += len(messages)
-				for _, m := range messages {
-					totalBytes += proto.Size(m)
-				}
-				// Bounded because every prior task's range is re-read into one
-				// response, so a long-lived consumer's cold replay grows with
-				// its whole history. Refused rather than trimmed: a short
-				// re-supply is what replay cannot survive.
-				if totalMessages > maxReplayMessages || totalBytes > maxReplayBytes {
-					return serviceerror.NewFailedPreconditionf(
-						"replaying workflow %q needs more than %d messages or %d bytes of stream history to re-supply; "+
-							"the consumed ranges cannot be re-delivered in one response",
-						consumer.GetWorkflowID(), maxReplayMessages, maxReplayBytes)
-				}
+			messages, err := replayMessagesFor(ctx, consumer, address, recorded, &budget)
+			if err != nil {
+				return err
 			}
 
 			if to := recorded.GetToOffset(); to > reached[recorded.GetStreamId()] {
@@ -406,11 +377,71 @@ func attachReplaySlices(
 		}
 	}
 
-	// The events carried here are one page. A consumer whose recording events
-	// run past it would be re-supplied with only part of what its History says
-	// it consumed, and would then replay against fewer messages than the
-	// original run saw. The cursor knows how far it has committed, so that is
-	// checked rather than assumed.
+	return checkReplayCoverage(consumer, addresses, reached)
+}
+
+// replayBudget accumulates what one response has already committed to
+// re-supplying, across every stream and every recorded range in it.
+type replayBudget struct {
+	messages int
+	bytes    int
+}
+
+// replayMessagesFor re-reads one recorded range, or returns nothing for a range
+// that recorded an empty observation.
+func replayMessagesFor(
+	ctx context.Context,
+	consumer definition.WorkflowKey,
+	address streamOrigin,
+	recorded *streampb.StreamCursor,
+	budget *replayBudget,
+) ([]*streampb.StreamMessage, error) {
+	if recorded.GetToOffset() <= recorded.GetFromOffset() {
+		return nil, nil
+	}
+
+	w, err := readRecordedRange(ctx, consumer, address,
+		recorded.GetStreamId(), recorded.GetFromOffset(), recorded.GetToOffset())
+	if err != nil {
+		return nil, replayReadError(consumer, recorded, err)
+	}
+	collected, _, err := stream.CollectMessages(
+		w.Blobs, w.Starts,
+		recorded.GetFromOffset(), recorded.GetToOffset(),
+		int(recorded.GetToOffset()-recorded.GetFromOffset()), nil)
+	if err != nil {
+		return nil, err
+	}
+	messages := stream.ToAPIMessages(collected)
+
+	budget.messages += len(messages)
+	for _, m := range messages {
+		budget.bytes += proto.Size(m)
+	}
+	// Bounded because every prior task's range is re-read into one response, so
+	// a long-lived consumer's cold replay grows with its whole history. Refused
+	// rather than trimmed: a short re-supply is what replay cannot survive.
+	if budget.messages > maxReplayMessages || budget.bytes > maxReplayBytes {
+		return nil, serviceerror.NewFailedPreconditionf(
+			"replaying workflow %q needs more than %d messages or %d bytes of stream history to re-supply; "+
+				"the consumed ranges cannot be re-delivered in one response",
+			consumer.GetWorkflowID(), maxReplayMessages, maxReplayBytes)
+	}
+	return messages, nil
+}
+
+// checkReplayCoverage refuses a re-supply that stops short of what History says
+// the consumer consumed.
+//
+// The events carried on the response are one page. A consumer whose recording
+// events run past it would be handed only part of what it originally saw, and
+// would then replay against fewer messages than the first run had. The cursor
+// knows how far it has committed, so that is checked rather than assumed.
+func checkReplayCoverage(
+	consumer definition.WorkflowKey,
+	addresses map[string]streamOrigin,
+	reached map[string]int64,
+) error {
 	for streamID, address := range addresses {
 		got, ok := reached[streamID]
 		if !ok {
