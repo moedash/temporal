@@ -667,7 +667,11 @@ func (s *Stream) DeregisterConsumer(_ chasm.MutableContext, consumerID string) {
 }
 
 func marshalBatch(messages []*streampb.StreamMessage) (*commonpb.DataBlob, error) {
-	data, err := proto.Marshal(&streampb.StreamMessageBatch{Messages: messages})
+	// The serialized batch is also the producer's deduplication fingerprint, and
+	// protobuf map iteration order is not stable. A record carrying payload or
+	// message metadata would otherwise hash differently on a retry and be
+	// refused as a conflicting duplicate of itself.
+	data, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&streampb.StreamMessageBatch{Messages: messages})
 	if err != nil {
 		return nil, err
 	}

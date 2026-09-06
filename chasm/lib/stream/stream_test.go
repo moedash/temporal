@@ -87,6 +87,32 @@ func TestDedupReturnsOriginalOffsets(t *testing.T) {
 	require.Equal(t, int64(2), s.State.HeadOffset, "a retry must not advance the head")
 }
 
+func TestDedupIgnoresPayloadMetadataMapOrder(t *testing.T) {
+	s := newTestStream(t, 100)
+	for attempt := range 32 {
+		body := &commonpb.Payload{
+			Data: []byte("encoded"),
+			Metadata: map[string][]byte{
+				"encoding": []byte("test/envelope"),
+				"key-id":   []byte("key-1"),
+				"nonce":    []byte("fixed-for-this-record"),
+			},
+		}
+		result, err := s.AddMessages(nil, AddMessagesRequest{
+			Messages: []*streampb.StreamMessage{{
+				Kind:     streampb.STREAM_MESSAGE_KIND_DATA,
+				Body:     body,
+				Metadata: map[string]*commonpb.Payload{"attempt": body, "checkpoint": body},
+			}},
+			ProducerID: "encoded-producer", Sequence: 1,
+		})
+		require.NoError(t, err, "identical retry %d must ignore protobuf map iteration order", attempt)
+		require.Equal(t, attempt > 0, result.Deduplicated)
+		require.Equal(t, int64(0), result.FirstOffset)
+		require.Equal(t, int64(1), s.State.HeadOffset)
+	}
+}
+
 func TestDedupRejectsDifferentContent(t *testing.T) {
 	s := newTestStream(t, 100)
 	_, err := s.AddMessages(nil, AddMessagesRequest{
