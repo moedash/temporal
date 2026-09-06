@@ -111,11 +111,10 @@ func readDeliverable(
 
 // readWindowFor reads a range from whichever component holds it.
 //
-// An external stream resolves through the local shard controller, so a stream
-// on a shard this host does not own is not reachable. An owned stream is read
-// from the consumer's own already-loaded component, which is both cheaper and
-// the only safe order: re-entering this execution through the engine while its
-// task is being built would contend with the lock already held.
+// Standalone external streams use the routed service client. That RPC only
+// reads the source execution and never calls back into the locked consumer.
+// Owned streams must use the already-loaded component: re-entering this
+// execution through an RPC would contend with the lock already held.
 func readWindowFor(
 	ctx context.Context,
 	chasmCtx chasm.Context,
@@ -134,12 +133,7 @@ func readWindowFor(
 		}
 		return s.ReadWindow(chasmCtx, req)
 	}
-	return chasm.ReadComponent(ctx,
-		chasm.NewComponentRef[*stream.Stream](chasm.ExecutionKey{
-			NamespaceID: namespaceID,
-			BusinessID:  streamID,
-		}),
-		(*stream.Stream).ReadWindow, req)
+	return readExternalWindow(ctx, namespaceID, streamID, from, to)
 }
 
 // DeliverStreamSlices hands the next range to a task built outside this
@@ -272,9 +266,8 @@ type ownedRange struct {
 // readRecordedRange re-supplies a range a completed task recorded.
 //
 // It runs after the execution lock is released, so the consumer's own component
-// is read back through the engine like any other. Both kinds resolve through
-// the local shard controller, so a stream on a shard this host does not own is
-// not reachable.
+// is read back through the engine. Standalone sources use the routed service
+// client, since their shards can belong to a different history host.
 func readRecordedRange(
 	ctx context.Context,
 	consumer definition.WorkflowKey,
@@ -284,17 +277,13 @@ func readRecordedRange(
 ) (stream.Window, error) {
 	req := stream.WindowRequest{From: from, MaxMessages: int32(to - from)}
 	if origin.external {
-		return chasm.ReadComponent(ctx,
-			chasm.NewComponentRef[*stream.Stream](chasm.ExecutionKey{
-				NamespaceID: consumer.NamespaceID,
-				BusinessID:  streamID,
-			}),
-			(*stream.Stream).ReadWindow, req)
+		return readExternalWindow(ctx, consumer.NamespaceID, streamID, from, to)
 	}
 	return chasm.ReadComponent(ctx,
 		chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
 			NamespaceID: consumer.NamespaceID,
 			BusinessID:  consumer.WorkflowID,
+			RunID:       consumer.RunID,
 		}),
 		func(wf *chasmworkflow.Workflow, cctx chasm.Context, r ownedRange) (stream.Window, error) {
 			s := wf.OwnedStream(cctx, r.name)
