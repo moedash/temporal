@@ -59,13 +59,22 @@ message ProducerCursor {
 message ConsumerCursor {
   string workflow_id = 1;
   string run_id = 2;
+  // How far this consumer has read. Used to decide whether it needs waking,
+  // not to decide what the stream may drop.
   int64 offset = 3;
-  // While true, truncation cannot advance past offset.
   bool active = 4;
   // Set when the consumer is a workflow in another execution, which is the
   // only case that has to be told the frontier moved. A workflow consuming a
   // stream it owns sees that while closing its own transaction.
   bool external = 5;
+  // The oldest offset this consumer's History still depends on.
+  //
+  // It is where the subscription started, not where it has read to. A range
+  // this consumer already consumed is recorded in its History and has to be
+  // re-readable for the workflow to replay, so bytes below the read position
+  // are exactly the ones a replay needs most. It stays put while the consumer
+  // is active and is released when it deregisters.
+  int64 replay_floor = 6;
 }
 
 // A consuming Workflow's position in a stream. This lives in the consuming

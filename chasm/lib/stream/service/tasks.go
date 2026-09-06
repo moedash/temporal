@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
@@ -153,7 +154,7 @@ func (h *notifyConsumersTaskHandler) Execute(
 	// A retry does not fix that. It makes it visible, which a warning did not.
 	var notifyErrs []error
 
-	for _, consumer := range state.GetConsumers() {
+	for consumerID, consumer := range state.GetConsumers() {
 		if !consumer.GetExternal() || !consumer.GetActive() || consumer.GetOffset() >= head {
 			continue
 		}
@@ -167,12 +168,32 @@ func (h *notifyConsumersTaskHandler) Execute(
 				HeadOffset: head,
 			},
 		})
-		if err != nil {
+		var gone *serviceerror.NotFound
+		switch {
+		case errors.As(err, &gone):
+			// The consumer's execution is gone, so its replay floor is holding
+			// storage for a recovery that can no longer be asked for. This is
+			// the one place that finds out: the probe happens exactly when the
+			// frontier has moved past the consumer, which is exactly when the
+			// floor starts to matter.
+			if _, _, releaseErr := chasm.UpdateComponent(
+				ctx, ref,
+				func(s *stream.Stream, mctx chasm.MutableContext, id string) (struct{}, error) {
+					s.DeregisterConsumer(mctx, id)
+					return struct{}{}, nil
+				},
+				consumerID,
+			); releaseErr != nil {
+				notifyErrs = append(notifyErrs, releaseErr)
+			}
+		case err != nil:
 			h.logger.Error("failed to tell a stream consumer that the frontier moved",
 				tag.NewStringTag("stream-id", streamID),
 				tag.NewStringTag("consumer-workflow-id", consumer.GetWorkflowId()),
 				tag.Error(err))
 			notifyErrs = append(notifyErrs, err)
+		default:
+			// Told, and still there. Nothing to clean up.
 		}
 	}
 	return errors.Join(notifyErrs...)

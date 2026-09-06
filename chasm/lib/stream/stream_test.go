@@ -196,22 +196,22 @@ func TestReclaimDropsOnlyBatchesFullyBelowTheFloor(t *testing.T) {
 	require.True(t, ok, "the batch holding readable offsets must survive")
 }
 
-func TestTruncateDoesNotStopAtAConsumer(t *testing.T) {
+func TestTruncateStopsAtAnActiveConsumersReplayFloor(t *testing.T) {
 	s := newTestStream(t, 100)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 
-	s.State.Consumers["wf-1"] = &streampb.ConsumerCursor{
-		WorkflowId: "wf-1", Offset: 2, Active: true,
-	}
+	require.NoError(t, s.RegisterConsumer(nil, "wf-1", "wf-1", "run-1", 0, false))
+	s.AdvanceConsumer(nil, "wf-1", 2)
 
-	// The floor used to stop here. It protected nothing, because nothing
-	// released a consumer when it finished, so a capped stream with any
-	// consumer ever registered grew without bound. A consumer that falls below
-	// the floor is told where the stream now starts instead.
+	// Reading to 2 is exactly what makes offsets 0 and 1 matter: they are in
+	// this consumer's History and a replay is asked to reproduce them.
 	err = s.Truncate(nil, 3)
-	require.NoError(t, err, "an active consumer must not hold the floor")
-	require.Equal(t, int64(3), s.State.BaseOffset)
+	require.ErrorContains(t, err, "still depends on offset 0")
+	require.Equal(t, int64(0), s.State.BaseOffset)
+
+	// Whatever is above the floor is still spare capacity.
+	require.NoError(t, s.Truncate(nil, 0))
 }
 
 func TestTruncateBounds(t *testing.T) {
@@ -261,19 +261,21 @@ func TestCapTruncatesInline(t *testing.T) {
 	require.Equal(t, int64(4), s.State.BaseOffset)
 }
 
-func TestCapAppliesEvenWithAConsumer(t *testing.T) {
+func TestCapRefusesAnAppendItCouldOnlyAbsorbByDroppingReadRecords(t *testing.T) {
 	s := newTestStream(t, 100)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
-	s.State.Consumers["wf-1"] = &streampb.ConsumerCursor{
-		WorkflowId: "wf-1", Offset: 1, Active: true,
-	}
+	require.NoError(t, s.RegisterConsumer(nil, "wf-1", "wf-1", "run-1", 0, false))
 
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "still depends on offset 0")
+	require.Equal(t, int64(0), s.State.HeadOffset, "a refused append writes nothing")
 
-	// The cap applies. It used to yield to the consumer's cursor at 1, which is
-	// how a cap became a no-op for the whole life of a stream.
-	require.Equal(t, int64(2), s.State.BaseOffset, "the cap must apply")
+	// Nothing is stuck. The consumer going away is what makes room, and it is
+	// something someone does rather than something that happens quietly.
+	s.DeregisterConsumer(nil, "wf-1")
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), s.State.BaseOffset, "the cap applies once nobody needs the bytes")
 }
 
 func TestCloseSchedulesRetentionOnlyWhenConfigured(t *testing.T) {
@@ -294,19 +296,18 @@ func TestCloseSchedulesRetentionOnlyWhenConfigured(t *testing.T) {
 	require.True(t, withRetention.Close(now, nil).IsZero())
 }
 
-// The pin test above sets State.Consumers by hand, which is why nothing caught
-// that no caller ever populated it. These go through the registration API.
-func TestRegisterConsumerDoesNotPinTruncation(t *testing.T) {
+func TestRegisterConsumerPinsFromWhereItSubscribed(t *testing.T) {
 	s := newTestStream(t, 100)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 
+	// Subscribing at 2 says nothing about offsets 0 and 1, so those stay
+	// droppable and everything from 2 up does not.
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 2, false))
 
-	// Registering says who to wake, not what to keep.
-	err = s.Truncate(nil, 3)
-	require.NoError(t, err)
-	require.Equal(t, int64(3), s.State.BaseOffset)
+	require.NoError(t, s.Truncate(nil, 2))
+	require.Equal(t, int64(2), s.State.BaseOffset)
+	require.ErrorContains(t, s.Truncate(nil, 3), "still depends on offset 2")
 }
 
 func TestAdvanceConsumerTracksWhereAConsumerHasReached(t *testing.T) {
@@ -376,26 +377,66 @@ func TestDeregisterConsumerReleasesThePin(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// The cap is a storage bound, not a licence to drop a range a consumer has
-// recorded a cursor for, so it stops at the pin and storage grows instead.
-func TestMessageCapAppliesWithARegisteredConsumer(t *testing.T) {
+func TestMessageCapStillAppliesWithNoConsumerToProtect(t *testing.T) {
+	s := newTestStream(t, 100)
+	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
+
+	for range 3 {
+		_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
+		require.NoError(t, err)
+	}
+
+	// The refusal is about a consumer's recovery, so a stream with none behaves
+	// exactly as a capped log should.
+	require.Equal(t, int64(6), s.State.HeadOffset)
+	require.Equal(t, int64(4), s.State.BaseOffset)
+}
+
+// A consumer that arrives after the messages were written cannot make the cap
+// retroactively wrong, so the clamp keeps its bytes and the stream sits over
+// its cap until it goes away.
+func TestCapClampsToAConsumerThatRegisteredLate(t *testing.T) {
 	s := newTestStream(t, 100)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
 
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
 	require.NoError(t, err)
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
+	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 1}
+	s.applyCap()
 
-	// A consumer sitting at 0 used to hold the floor there for good. The cap is
-	// what the stream was asked for, so the cap is what it gets, and a consumer
-	// left behind finds out when it reads.
-	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("c", "d")})
-	require.NoError(t, err)
-	require.Equal(t, int64(2), s.State.BaseOffset, "the cap applies")
+	require.Equal(t, int64(0), s.State.BaseOffset, "the clamp keeps what the consumer needs")
+}
 
-	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("e")})
+// The reason the pin was taken out in the first place. It must not come back:
+// a consumer that finished has to stop holding storage.
+func TestAConsumerThatDeregisteredHoldsNothing(t *testing.T) {
+	s := newTestStream(t, 100)
+	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
+	s.DeregisterConsumer(nil, "workflow:output")
+
+	for range 3 {
+		_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
+		require.NoError(t, err)
+	}
+	require.Equal(t, int64(4), s.State.BaseOffset)
+}
+
+// Coming back to a stream that moved past what its History refers to is the
+// case the old code discovered during a replay instead.
+func TestReregisteringBelowTheFloorIsRefused(t *testing.T) {
+	s := newTestStream(t, 100)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
-	require.Equal(t, int64(3), s.State.BaseOffset)
+	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
+	s.DeregisterConsumer(nil, "workflow:output")
+	require.NoError(t, s.Truncate(nil, 2))
+
+	// Resubscribing further along does not repair the gap. What this consumer
+	// already recorded starts at 0, and offsets 0 and 1 are gone.
+	err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 3, false)
+	require.ErrorContains(t, err, "the stream now starts at 2")
 }
 
 // A caller sending a fresh producer id per request would otherwise grow the

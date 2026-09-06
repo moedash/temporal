@@ -52,10 +52,11 @@ func newAttachedStream(t *testing.T, ctx chasm.MutableContext, count int) *strea
 	return s
 }
 
-// Subscribing registers the consumer on the stream, which is what decides
-// whether an append is worth waking it for. It no longer holds the stream's
-// floor: a floor held by a consumer was never released when that consumer
-// finished, so it turned any cap into a no-op.
+// Subscribing registers the consumer on the stream, which decides both whether
+// an append is worth waking it for and what retention may not take. A range
+// this workflow consumes goes into its History, and a replay is asked to
+// reproduce it, so the stream holds those messages while the subscription is
+// active and releases them when it is not.
 func TestSubscribeRegistersTheConsumer(t *testing.T) {
 	ctx := newStreamCursorTestContext()
 	w := &Workflow{}
@@ -73,9 +74,10 @@ func TestSubscribeRegistersTheConsumer(t *testing.T) {
 	require.Equal(t, int64(0), consumer.GetOffset())
 	require.True(t, consumer.GetActive())
 
-	// And it does not hold the floor.
-	err = owned.Truncate(ctx, 1)
-	require.NoError(t, err)
+	require.Equal(t, int64(0), consumer.GetReplayFloor())
+
+	// And it holds the floor for as long as it is subscribed.
+	require.ErrorContains(t, owned.Truncate(ctx, 1), "still depends on offset 0")
 }
 
 func TestSubscribeFromTheTailResolvesToHead(t *testing.T) {
@@ -206,11 +208,10 @@ func (allowAnySize) IsValidPayloadSize(int) bool { return true }
 // A consumer that falls behind a truncating stream must be told, not handed
 // what is left with a hole in it.
 //
-// Nothing holds the floor for a consumer any more. The floor that used to wait
-// for the slowest reader was never released when that reader finished, so a
-// capped stream kept everything for as long as a consumer had ever existed.
-// The trade is that a consumer can now be outrun, and the whole point of the
-// trade is that being outrun is loud.
+// Being outrun is possible again once the subscription is released, which is
+// deliberate: a floor that nothing ever gave up would keep every message for
+// as long as a consumer had ever existed. The trade is that being outrun has
+// to be loud.
 func TestConsumerOutrunByTruncationIsToldSo(t *testing.T) {
 	ctx := newStreamCursorTestContext()
 	w := &Workflow{}
@@ -222,9 +223,11 @@ func TestConsumerOutrunByTruncationIsToldSo(t *testing.T) {
 	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0)
 	require.NoError(t, err)
 
-	// The stream moves past where this consumer is sitting.
+	// Someone decides these messages are no longer needed, and only then can
+	// the stream move past where this consumer is sitting.
+	owned.DeregisterConsumer(ctx, streamConsumerID(DefaultStreamName))
 	err = owned.Truncate(ctx, 3)
-	require.NoError(t, err, "a consumer must not hold the floor")
+	require.NoError(t, err, "a released floor must not keep holding")
 
 	cursor := w.StreamCursors[DefaultStreamName].Get(ctx)
 	require.Less(t, cursor.Offset(), owned.State.GetBaseOffset())

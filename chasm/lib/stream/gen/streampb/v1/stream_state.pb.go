@@ -253,13 +253,22 @@ type ConsumerCursor struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	WorkflowId string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	RunId      string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Offset     int64                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
-	// While true, truncation cannot advance past offset.
-	Active bool `protobuf:"varint,4,opt,name=active,proto3" json:"active,omitempty"`
+	// How far this consumer has read. Used to decide whether it needs waking,
+	// not to decide what the stream may drop.
+	Offset int64 `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	Active bool  `protobuf:"varint,4,opt,name=active,proto3" json:"active,omitempty"`
 	// Set when the consumer is a workflow in another execution, which is the
 	// only case that has to be told the frontier moved. A workflow consuming a
 	// stream it owns sees that while closing its own transaction.
-	External      bool `protobuf:"varint,5,opt,name=external,proto3" json:"external,omitempty"`
+	External bool `protobuf:"varint,5,opt,name=external,proto3" json:"external,omitempty"`
+	// The oldest offset this consumer's History still depends on.
+	//
+	// It is where the subscription started, not where it has read to. A range
+	// this consumer already consumed is recorded in its History and has to be
+	// re-readable for the workflow to replay, so bytes below the read position
+	// are exactly the ones a replay needs most. It stays put while the consumer
+	// is active and is released when it deregisters.
+	ReplayFloor   int64 `protobuf:"varint,6,opt,name=replay_floor,json=replayFloor,proto3" json:"replay_floor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -327,6 +336,13 @@ func (x *ConsumerCursor) GetExternal() bool {
 		return x.External
 	}
 	return false
+}
+
+func (x *ConsumerCursor) GetReplayFloor() int64 {
+	if x != nil {
+		return x.ReplayFloor
+	}
+	return 0
 }
 
 // A consuming Workflow's position in a stream. This lives in the consuming
@@ -554,14 +570,15 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\ffirst_offset\x18\x02 \x01(\x03R\vfirstOffset\x12\x14\n" +
 	"\x05count\x18\x03 \x01(\x03R\x05count\x12!\n" +
 	"\fcontent_hash\x18\x04 \x01(\fR\vcontentHash\x12\x16\n" +
-	"\x06fenced\x18\x05 \x01(\bR\x06fenced\"\x94\x01\n" +
+	"\x06fenced\x18\x05 \x01(\bR\x06fenced\"\xb7\x01\n" +
 	"\x0eConsumerCursor\x12\x1f\n" +
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x16\n" +
 	"\x06offset\x18\x03 \x01(\x03R\x06offset\x12\x16\n" +
 	"\x06active\x18\x04 \x01(\bR\x06active\x12\x1a\n" +
-	"\bexternal\x18\x05 \x01(\bR\bexternal\"\xd2\x02\n" +
+	"\bexternal\x18\x05 \x01(\bR\bexternal\x12!\n" +
+	"\freplay_floor\x18\x06 \x01(\x03R\vreplayFloor\"\xd2\x02\n" +
 	"\x14WorkflowStreamCursor\x12\x1b\n" +
 	"\tstream_id\x18\x01 \x01(\tR\bstreamId\x12#\n" +
 	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12\x1f\n" +

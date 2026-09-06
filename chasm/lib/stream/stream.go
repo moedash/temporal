@@ -176,6 +176,15 @@ func (s *Stream) AddMessages(
 		return AddMessagesResult{}, err
 	}
 
+	// Before anything is written, because the alternative is to write and then
+	// discover the cap can only be met by deleting bytes a consumer's committed
+	// History still refers to. Refusing the write is the honest half of that
+	// choice: capacity may constrain what is admitted, and may not quietly take
+	// back a workflow's ability to replay a decision it already made.
+	if err := s.checkCapRoom(int64(len(req.Messages))); err != nil {
+		return AddMessagesResult{}, err
+	}
+
 	if req.ExpectedOffset != nil && *req.ExpectedOffset != s.State.HeadOffset {
 		return AddMessagesResult{}, serviceerror.NewAlreadyExistsf(
 			"expected offset %d but stream head is %d", *req.ExpectedOffset, s.State.HeadOffset)
@@ -346,16 +355,19 @@ func (s *Stream) CloseAndSchedule(mctx chasm.MutableContext, reason *commonpb.Pa
 
 // Truncate advances the readable floor.
 //
-// It does not stop at a consumer. A pin that held the floor for anyone still
-// reading sounded protective and was not: nothing released it when a consumer
-// finished, so any stream with a cap kept everything for as long as a consumer
-// had ever existed, which is the cap not working rather than a consumer being
-// safe.
+// It stops at an active consumer's replay floor. A workflow that consumed a
+// range recorded that range in its History and can be asked to replay from it,
+// so those bytes are part of its recovery rather than spare capacity. Dropping
+// them succeeds here and fails much later, during a replay nobody is watching,
+// which is the worst place to find out.
 //
-// A consumer that falls behind the floor is told so. Reading from below the
-// base is an error naming where the stream now starts, the same answer a log
-// with a retention window gives anywhere else, and a great deal better than a
-// silent gap or a cap that never applies.
+// The floor is released by deregistering the consumer, which is an act someone
+// takes deliberately. An operator who means to drop the bytes anyway does that
+// first, and then this call goes through.
+//
+// A consumer that is behind but not active is not protected. Reading from
+// below the base is an error naming where the stream now starts, the same
+// answer a log with a retention window gives anywhere else.
 func (s *Stream) Truncate(_ chasm.MutableContext, newBase int64) error {
 	if newBase < s.State.BaseOffset {
 		return serviceerror.NewInvalidArgumentf(
@@ -365,9 +377,35 @@ func (s *Stream) Truncate(_ chasm.MutableContext, newBase int64) error {
 		return serviceerror.NewInvalidArgumentf(
 			"cannot truncate past head offset %d", s.State.HeadOffset)
 	}
+	if floor, holder, pinned := s.replayFloor(); pinned && newBase > floor {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot truncate to %d: consumer %q still depends on offset %d and above "+
+				"to replay; deregister it first if those messages are no longer needed",
+			newBase, holder, floor)
+	}
 	s.State.BaseOffset = newBase
 	s.reclaim(newBase)
 	return nil
+}
+
+// replayFloor is the oldest offset any active consumer's History still depends
+// on, and who is holding it. Named, because a refusal that does not say which
+// consumer to look at leaves the operator with nothing to act on.
+func (s *Stream) replayFloor() (int64, string, bool) {
+	var floor int64
+	var holder string
+	found := false
+	for id, c := range s.State.Consumers {
+		if !c.GetActive() {
+			continue
+		}
+		if !found || c.GetReplayFloor() < floor {
+			floor = c.GetReplayFloor()
+			holder = id
+			found = true
+		}
+	}
+	return floor, holder, found
 }
 
 // reclaim drops batches lying entirely below the readable floor. A batch
@@ -494,11 +532,14 @@ func (s *Stream) applyCap() {
 	if readable <= maxItems {
 		return
 	}
-	// The cap applies. It used to yield to the slowest consumer, which meant a
-	// capped stream with any consumer at all grew without bound, because
-	// nothing released a consumer when it finished. A consumer that cannot keep
-	// up is told where the stream now starts.
 	newBase := s.State.HeadOffset - maxItems
+	// Clamped rather than refused, because refusing belongs to admission and
+	// has already happened: checkCapRoom turned away the append that would have
+	// needed this. Reaching the clamp means a consumer registered after the
+	// messages were written, and keeping its bytes is still the right answer.
+	if floor, _, pinned := s.replayFloor(); pinned && newBase > floor {
+		newBase = floor
+	}
 	if newBase <= s.State.BaseOffset {
 		return
 	}
@@ -506,12 +547,41 @@ func (s *Stream) applyCap() {
 	s.reclaim(newBase)
 }
 
-// RegisterConsumer records an in-workflow consumer so appends know who to wake.
+// checkCapRoom refuses an append the cap could only absorb by dropping bytes an
+// active consumer still needs.
 //
-// It says who to notify, not what to keep. Neither Truncate nor applyCap
-// consults it: a consumer that never deregistered would otherwise hold the
-// floor forever, and a capped stream has to stay bounded whatever its consumers
-// are doing. A consumer left below the floor learns that when it next reads.
+// A capped stream with no consumer behaves as before: the oldest messages go.
+// The refusal only arrives when honouring the cap and honouring a recorded
+// consumption are the same messages, and it names the consumer so the operator
+// knows what to do about it.
+func (s *Stream) checkCapRoom(count int64) error {
+	maxItems := s.State.GetLifecycle().GetMaxItems()
+	if maxItems <= 0 {
+		return nil
+	}
+	wantBase := s.State.HeadOffset + count - maxItems
+	if wantBase <= s.State.BaseOffset {
+		return nil
+	}
+	floor, holder, pinned := s.replayFloor()
+	if !pinned || wantBase <= floor {
+		return nil
+	}
+	return serviceerror.NewResourceExhaustedf(
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED,
+		"stream is at its cap of %d messages and consumer %q still depends on "+
+			"offset %d and above to replay; the append would have to delete those "+
+			"messages to make room",
+		maxItems, holder, floor)
+}
+
+// RegisterConsumer records an in-workflow consumer, so appends know who to wake
+// and retention knows what it may not delete.
+//
+// The floor it records is where the subscription started, not where it has read
+// to. The ranges this consumer already took are written into its History, and a
+// replay is asked to reproduce them, so the bytes behind the read position are
+// the ones a recovery needs. Deregistering releases the floor.
 func (s *Stream) RegisterConsumer(
 	_ chasm.MutableContext,
 	consumerID string,
@@ -536,15 +606,24 @@ func (s *Stream) RegisterConsumer(
 		s.State.Consumers = make(map[string]*streampb.ConsumerCursor)
 	}
 	if existing, ok := s.State.Consumers[consumerID]; ok {
+		// A consumer coming back after its floor was released can find the
+		// stream has moved past what its History refers to. Saying so here is
+		// the only chance to say it before the workflow depends on it again.
+		if existing.GetReplayFloor() < s.State.BaseOffset {
+			return serviceerror.NewFailedPreconditionf(
+				"consumer %q recorded offset %d, and the stream now starts at %d",
+				consumerID, existing.GetReplayFloor(), s.State.BaseOffset)
+		}
 		existing.Active = true
 		return nil
 	}
 	s.State.Consumers[consumerID] = &streampb.ConsumerCursor{
-		WorkflowId: workflowID,
-		RunId:      runID,
-		Offset:     offset,
-		Active:     true,
-		External:   external,
+		WorkflowId:  workflowID,
+		RunId:       runID,
+		Offset:      offset,
+		Active:      true,
+		External:    external,
+		ReplayFloor: offset,
 	}
 	return nil
 }
@@ -579,7 +658,8 @@ func (s *Stream) consumerPin() (int64, bool) {
 	return pin, found
 }
 
-// DeregisterConsumer releases the floor a consumer was holding.
+// DeregisterConsumer releases the floor a consumer was holding, so retention
+// and the message cap can reach its messages again.
 func (s *Stream) DeregisterConsumer(_ chasm.MutableContext, consumerID string) {
 	if consumer, ok := s.State.Consumers[consumerID]; ok {
 		consumer.Active = false
