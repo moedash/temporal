@@ -53,6 +53,7 @@ type (
 		NexusEndpoints
 
 		HistoryNode
+		StreamLog
 		HistoryTree
 
 		HistoryShard

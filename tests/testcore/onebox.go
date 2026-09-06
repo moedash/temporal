@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math/rand"
 	"net"
 	"os"
@@ -42,7 +43,7 @@ import (
 type (
 	temporalImpl struct {
 		clients
-		server temporal.Server
+		servers []temporal.Server
 
 		logger       log.Logger
 		serverConfig *config.Config
@@ -218,7 +219,7 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 	return impl
 }
 
-func (c *temporalImpl) Start() error {
+func (c *temporalImpl) Start() (retErr error) {
 	// Worker is optional in functional tests; the other services are always
 	// needed for a usable in-process cluster.
 	services := []primitives.ServiceName{
@@ -231,7 +232,7 @@ func (c *temporalImpl) Start() error {
 	}
 	for _, serviceName := range services {
 		numHosts := len(c.hostsByProtocolByService[grpcProtocol][serviceName].All)
-		if numHosts != 1 {
+		if numHosts != 1 && serviceName != primitives.HistoryService {
 			return fmt.Errorf("onebox requires exactly one %s service node, got %d", serviceName, numHosts)
 		}
 	}
@@ -291,23 +292,56 @@ func (c *temporalImpl) Start() error {
 	)
 	defer cleanupHooks()
 
-	server, err := temporal.NewServer(options...)
-	if err != nil {
-		return fmt.Errorf("unable to construct temporal server: %w", err)
+	defer func() {
+		if retErr != nil {
+			for _, server := range c.servers {
+				retErr = multierr.Append(retErr, server.Stop())
+			}
+			c.servers = nil
+		}
+	}()
+	for index, address := range hostsByService[primitives.HistoryService].All {
+		serverOptions := options
+		if index > 0 {
+			// Additional History graphs share membership and persistence while
+			// binding their own RPC address. Never expose an arbitrary graph's
+			// CHASM engine through ChasmContext in this multi-host configuration.
+			extraConfig := cfg
+			extraConfig.Persistence = copyPersistenceConfig(cfg.Persistence)
+			extraConfig.Services = maps.Clone(cfg.Services)
+			bindIP, port := mustSplitHostPort(address)
+			extraConfig.Services[string(primitives.HistoryService)] = config.Service{
+				RPC: config.RPC{BindOnIP: bindIP, GRPCPort: int(port)},
+			}
+			extraHosts := maps.Clone(hostsByService)
+			historyHosts := extraHosts[primitives.HistoryService]
+			historyHosts.Self = address
+			extraHosts[primitives.HistoryService] = historyHosts
+			serverOptions = []temporal.ServerOption{
+				temporal.WithConfig(&extraConfig),
+				temporal.ForServices([]string{string(primitives.HistoryService)}),
+				temporal.WithStaticHosts(extraHosts),
+			}
+			serverOptions = append(serverOptions, c.baseServerOptions...)
+		}
+		server, err := temporal.NewServer(serverOptions...)
+		if err != nil {
+			return fmt.Errorf("unable to construct temporal server: %w", err)
+		}
+		c.servers = append(c.servers, server)
+		if err := server.Start(); err != nil {
+			return fmt.Errorf("unable to start temporal server: %w", err)
+		}
 	}
-
-	if err := server.Start(); err != nil {
-		return fmt.Errorf("unable to start temporal server: %w", err)
-	}
-	c.server = server
 	return nil
 }
 
 func (c *temporalImpl) Stop() error {
 	var errs []error
-	if c.server != nil {
-		errs = append(errs, c.server.Stop())
+	for index := len(c.servers) - 1; index >= 0; index-- {
+		errs = append(errs, c.servers[index].Stop())
 	}
+	c.servers = nil
 	errs = append(errs, c.close()...)
 	return multierr.Combine(errs...)
 }

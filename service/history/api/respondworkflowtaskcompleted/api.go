@@ -452,6 +452,28 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			return nil, err
 		}
 
+		// Subscriptions to streams in other executions, resolved here for the
+		// same reason: the command handler has nowhere to look the addressing
+		// up from, and by delivery time the cursor has to already exist.
+		//
+		// Skipped once the task has failed. Registering a consumer is a durable
+		// write on the stream's own execution, and this workflow's side of it
+		// is about to be rolled back, which would leave a pin on someone else's
+		// stream with no cursor behind it and nothing to release it. A failed
+		// command does not return an error, so this has to be checked here
+		// rather than inferred from err.
+		if workflowTaskHandler.workflowTaskFailedCause == nil && !workflowTaskHandler.stopProcessing {
+			if err = resolveStagedStreamSubscriptions(
+				ctx,
+				ms,
+				ms.GetWorkflowKey().NamespaceID,
+				completedEvent.GetEventId(),
+				workflowTaskHandler.stagedStreamSubscriptions,
+			); err != nil {
+				return nil, err
+			}
+		}
+
 		// Worker must respond with Update Accepted or Update Rejected message on every Update Requested
 		// message that were delivered on specific WT, when completing this WT.
 		// If worker ignored the update request (old SDK or SDK bug), then server rejects this update.
@@ -805,6 +827,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
 		resp.StartedResponse.StickyExecutionEnabled = true
 
+		// The poll path delivers from its own handler, so this one has to ask
+		// as well or a subscribed workflow gets an inline task with no data.
+		resp.StartedResponse.StreamSlices, err = recordworkflowtaskstarted.DeliverStreamSlices(
+			ctx, handler.shardContext, ms)
+		if err != nil {
+			return nil, err
+		}
+
 		resp.NewWorkflowTask, err = handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.StartedResponse)
 		if err != nil {
 			return nil, err
@@ -977,6 +1007,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		StartedTime:                matchingResp.StartedTime,
 		Queries:                    matchingResp.Queries,
 		Messages:                   matchingResp.Messages,
+		StreamSlices:               matchingResp.StreamSlices,
 	}
 
 	return resp, nil

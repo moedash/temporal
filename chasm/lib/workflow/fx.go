@@ -22,6 +22,9 @@ var Module = fx.Module(
 		); err != nil {
 			return err
 		}
+		if err := library.registry.Register(&streamLibrary{}); err != nil {
+			return err
+		}
 		return chasmRegistry.Register(library)
 	}),
 )

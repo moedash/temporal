@@ -98,6 +98,12 @@ const (
 	PersistenceAppendHistoryNodesScope = "AppendHistoryNodes"
 	// PersistenceAppendRawHistoryNodesScope tracks AppendRawHistoryNodes calls made by service to persistence layer
 	PersistenceAppendRawHistoryNodesScope = "AppendRawHistoryNodes"
+	// PersistenceAppendStreamLogScope tracks AppendStreamLog calls made by service to persistence layer
+	PersistenceAppendStreamLogScope = "AppendStreamLog"
+	// PersistenceReadStreamLogScope tracks ReadStreamLog calls made by service to persistence layer
+	PersistenceReadStreamLogScope = "ReadStreamLog"
+	// PersistenceDeleteStreamLogBucketScope tracks DeleteStreamLogBucket calls made by service to persistence layer
+	PersistenceDeleteStreamLogBucketScope = "DeleteStreamLogBucket"
 	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer
 	PersistenceReadHistoryBranchScope = "ReadHistoryBranch"
 	// PersistenceReadHistoryBranchReverseScope tracks ReadHistoryBranchReverse calls made by service to persistence layer

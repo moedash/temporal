@@ -1260,3 +1260,40 @@ func (p *nexusEndpointRetryablePersistenceClient) DeleteNexusEndpoint(
 	}
 	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
 }
+
+// AppendStreamLog writes one batch of a stream log
+func (p *executionRetryablePersistenceClient) AppendStreamLog(
+	ctx context.Context,
+	request *InternalAppendStreamLogRequest,
+) error {
+	op := func(ctx context.Context) error {
+		return p.persistence.AppendStreamLog(ctx, request)
+	}
+	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+}
+
+// ReadStreamLog returns the batches covering a range
+func (p *executionRetryablePersistenceClient) ReadStreamLog(
+	ctx context.Context,
+	request *InternalReadStreamLogRequest,
+) (*InternalReadStreamLogResponse, error) {
+	var response *InternalReadStreamLogResponse
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.ReadStreamLog(ctx, request)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
+// DeleteStreamLogBucket drops a whole bucket
+func (p *executionRetryablePersistenceClient) DeleteStreamLogBucket(
+	ctx context.Context,
+	request *InternalDeleteStreamLogBucketRequest,
+) error {
+	op := func(ctx context.Context) error {
+		return p.persistence.DeleteStreamLogBucket(ctx, request)
+	}
+	return backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+}

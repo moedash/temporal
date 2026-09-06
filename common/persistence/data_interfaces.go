@@ -1162,6 +1162,13 @@ type (
 		AppendHistoryNodes(ctx context.Context, request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// AppendRawHistoryNodes add a node of raw histories to history node table
 		AppendRawHistoryNodes(ctx context.Context, request *AppendRawHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
+
+		// Stream logs. Not history: an offset-addressed sequence a stream
+		// component owns, where a write is idempotent by the offset its batch
+		// starts at.
+		AppendStreamLog(ctx context.Context, request *InternalAppendStreamLogRequest) error
+		ReadStreamLog(ctx context.Context, request *InternalReadStreamLogRequest) (*InternalReadStreamLogResponse, error)
+		DeleteStreamLogBucket(ctx context.Context, request *InternalDeleteStreamLogBucketRequest) error
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch
@@ -1431,6 +1438,23 @@ func UnixMilliseconds(t time.Time) int64 {
 // BuildHistoryGarbageCleanupInfo combine the workflow identity information into a string
 func BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, runID string) string {
 	return fmt.Sprintf("%v:%v:%v", namespaceID, workflowID, runID)
+}
+
+// NonExecutionGarbageCleanupInfoPrefix marks a history branch whose rows are
+// not a workflow execution's history.
+//
+// The scavenger finds the execution named by a branch's cleanup info and
+// deletes the branch when there is none, which is right for a workflow whose
+// execution is gone and wrong for a branch that never had one. Anything
+// storing rows in this table for its own purposes has to say so, or the
+// scavenger reclaims live data.
+const NonExecutionGarbageCleanupInfoPrefix = "non-execution:"
+
+// IsNonExecutionGarbageCleanupInfo reports whether a branch belongs to
+// something other than a workflow execution, and so is not the scavenger's to
+// collect. Whatever wrote it owns deleting it.
+func IsNonExecutionGarbageCleanupInfo(info string) bool {
+	return strings.HasPrefix(info, NonExecutionGarbageCleanupInfoPrefix)
 }
 
 // SplitHistoryGarbageCleanupInfo returns workflow identity information

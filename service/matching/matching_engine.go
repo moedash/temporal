@@ -3367,6 +3367,7 @@ func (e *matchingEngineImpl) convertPollWorkflowTaskQueueResponse(
 		StartedTime:                resp.StartedTime,
 		Queries:                    resp.Queries,
 		Messages:                   resp.Messages,
+		StreamSlices:               resp.StreamSlices,
 		History:                    history,
 		NextPageToken:              resp.NextPageToken,
 		PollerScalingDecision:      resp.PollerScalingDecision,

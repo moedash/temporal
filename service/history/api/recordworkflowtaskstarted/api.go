@@ -51,6 +51,7 @@ func Invoke(
 
 	var workflowKey definition.WorkflowKey
 	var resp *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory
+	var streamAddresses map[string]streamOrigin
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -99,6 +100,12 @@ func Invoke(
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
 					resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
+					if err != nil {
+						return nil, err
+					}
+					// Redelivers whatever range is already staged, so a
+					// duplicate of the same request hands back the same slice.
+					resp.StreamSlices, streamAddresses, err = deliverStreamSlices(ctx, shardContext, mutableState)
 					if err != nil {
 						return nil, err
 					}
@@ -238,6 +245,11 @@ func Invoke(
 				return nil, err
 			}
 
+			resp.StreamSlices, streamAddresses, err = deliverStreamSlices(ctx, shardContext, mutableState)
+			if err != nil {
+				return nil, err
+			}
+
 			return updateAction, nil
 		},
 		nil,
@@ -262,6 +274,12 @@ func Invoke(
 		resp,
 	)
 	if err != nil {
+		return nil, err
+	}
+
+	// After the history is attached, because the ranges to re-supply are read
+	// out of the events being sent.
+	if err := attachReplaySlices(ctx, workflowKey, workflowKey.GetNamespaceID(), streamAddresses, resp); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -400,6 +418,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 		Queries:                    rawResp.Queries,
 		Clock:                      rawResp.Clock,
 		Messages:                   rawResp.Messages,
+		StreamSlices:               rawResp.StreamSlices,
 		Version:                    rawResp.Version,
 		NextPageToken:              rawResp.NextPageToken,
 	}, nil
