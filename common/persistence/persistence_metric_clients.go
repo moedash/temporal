@@ -1462,3 +1462,45 @@ func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation str
 		}
 	}
 }
+
+// AppendStreamLog writes one batch of a stream log
+func (p *executionPersistenceClient) AppendStreamLog(
+	ctx context.Context,
+	request *InternalAppendStreamLogRequest,
+) (retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceAppendStreamLogScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.AppendStreamLog(ctx, request)
+}
+
+// ReadStreamLog returns the batches covering a range
+func (p *executionPersistenceClient) ReadStreamLog(
+	ctx context.Context,
+	request *InternalReadStreamLogRequest,
+) (_ *InternalReadStreamLogResponse, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceReadStreamLogScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.ReadStreamLog(ctx, request)
+}
+
+// DeleteStreamLogBucket drops a whole bucket
+func (p *executionPersistenceClient) DeleteStreamLogBucket(
+	ctx context.Context,
+	request *InternalDeleteStreamLogBucketRequest,
+) (retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		p.healthSignals.Record(CallerSegmentMissing, time.Since(startTime), retErr)
+		p.recordRequestMetrics(metrics.PersistenceDeleteStreamLogBucketScope, caller, time.Since(startTime), retErr)
+	}()
+	return p.persistence.DeleteStreamLogBucket(ctx, request)
+}

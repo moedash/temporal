@@ -429,3 +429,102 @@ func convertTimeoutError(err error) error {
 	}
 	return err
 }
+
+const (
+	// Upsert by nature in Cassandra, which is exactly the semantics wanted: the
+	// key is the offset a batch starts at, so a retry replaces rather than
+	// competes. There is no transaction-id chain to order writers against.
+	templateUpsertStreamLog = `INSERT INTO stream_log (` +
+		`shard_id, namespace_id, collection_id, bucket, start_offset, next_offset, data, data_encoding) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?) `
+
+	// Two reads rather than a subquery, which Cassandra has no notion of. The
+	// first is a reverse slice of one row to find the batch containing the
+	// requested offset; the second reads forward from there.
+	templateSelectStreamLogFloor = `SELECT start_offset FROM stream_log ` +
+		`WHERE shard_id = ? AND namespace_id = ? AND collection_id = ? AND bucket = ? ` +
+		`AND start_offset <= ? ORDER BY start_offset DESC LIMIT 1 `
+
+	templateSelectStreamLog = `SELECT start_offset, data, data_encoding FROM stream_log ` +
+		`WHERE shard_id = ? AND namespace_id = ? AND collection_id = ? AND bucket = ? ` +
+		`AND start_offset >= ? AND start_offset < ? `
+
+	templateDeleteStreamLogBucket = `DELETE FROM stream_log ` +
+		`WHERE shard_id = ? AND namespace_id = ? AND collection_id = ? AND bucket = ? `
+)
+
+// AppendStreamLog writes one batch of a stream log.
+func (h *HistoryStore) AppendStreamLog(
+	ctx context.Context,
+	request *p.InternalAppendStreamLogRequest,
+) error {
+	query := h.Session.Query(templateUpsertStreamLog,
+		request.ShardID,
+		request.NamespaceID,
+		request.CollectionID,
+		request.Bucket,
+		request.StartOffset,
+		request.NextOffset,
+		request.Node.Data,
+		request.Node.EncodingType.String(),
+	).WithContext(ctx)
+	if err := query.Exec(); err != nil {
+		return gocql.ConvertError("AppendStreamLog", err)
+	}
+	return nil
+}
+
+// ReadStreamLog returns the batches covering the requested range, beginning
+// with the batch that contains MinOffset.
+func (h *HistoryStore) ReadStreamLog(
+	ctx context.Context,
+	request *p.InternalReadStreamLogRequest,
+) (*p.InternalReadStreamLogResponse, error) {
+	from := request.MinOffset
+	var floor int64
+	err := h.Session.Query(templateSelectStreamLogFloor,
+		request.ShardID, request.NamespaceID, request.CollectionID, request.Bucket, request.MinOffset,
+	).WithContext(ctx).Scan(&floor)
+	switch {
+	case err == nil:
+		from = floor
+	case gocql.IsNotFoundError(err):
+		// Nothing at or below, so the range starts wherever it starts.
+	default:
+		return nil, gocql.ConvertError("ReadStreamLog", err)
+	}
+
+	iter := h.Session.Query(templateSelectStreamLog,
+		request.ShardID, request.NamespaceID, request.CollectionID, request.Bucket,
+		from, request.MaxOffset,
+	).WithContext(ctx).PageSize(request.PageSize).Iter()
+
+	resp := &p.InternalReadStreamLogResponse{}
+	var startOffset int64
+	var data []byte
+	var encoding string
+	for iter.Scan(&startOffset, &data, &encoding) {
+		resp.Batches = append(resp.Batches, p.NewDataBlob(data, encoding))
+		resp.StartOffsets = append(resp.StartOffsets, startOffset)
+		data = nil
+	}
+	if err := iter.Close(); err != nil {
+		return nil, gocql.ConvertError("ReadStreamLog", err)
+	}
+	return resp, nil
+}
+
+// DeleteStreamLogBucket drops a whole bucket, which on Cassandra is one
+// partition and so one tombstone rather than a row-by-row delete.
+func (h *HistoryStore) DeleteStreamLogBucket(
+	ctx context.Context,
+	request *p.InternalDeleteStreamLogBucketRequest,
+) error {
+	query := h.Session.Query(templateDeleteStreamLogBucket,
+		request.ShardID, request.NamespaceID, request.CollectionID, request.Bucket,
+	).WithContext(ctx)
+	if err := query.Exec(); err != nil {
+		return gocql.ConvertError("DeleteStreamLogBucket", err)
+	}
+	return nil
+}

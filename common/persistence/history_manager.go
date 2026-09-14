@@ -1138,3 +1138,29 @@ func (m *executionManagerImpl) serializeToken(
 
 	return m.pagingTokenSerializer.Serialize(pagingToken)
 }
+
+// AppendStreamLog writes one batch of a stream log. A pass-through: there is no
+// branch token to build, no chain to maintain and nothing to serialize, because
+// the offset is the key and the blob is already encoded.
+func (m *executionManagerImpl) AppendStreamLog(
+	ctx context.Context,
+	request *InternalAppendStreamLogRequest,
+) error {
+	return m.persistence.AppendStreamLog(ctx, request)
+}
+
+// ReadStreamLog returns the batches covering a range.
+func (m *executionManagerImpl) ReadStreamLog(
+	ctx context.Context,
+	request *InternalReadStreamLogRequest,
+) (*InternalReadStreamLogResponse, error) {
+	return m.persistence.ReadStreamLog(ctx, request)
+}
+
+// DeleteStreamLogBucket drops a whole bucket.
+func (m *executionManagerImpl) DeleteStreamLogBucket(
+	ctx context.Context,
+	request *InternalDeleteStreamLogBucketRequest,
+) error {
+	return m.persistence.DeleteStreamLogBucket(ctx, request)
+}
