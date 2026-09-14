@@ -619,3 +619,27 @@ func (r *HistoryTaskRecorder) GetAllHistoryTreeBranches(
 ) (*persistence.GetAllHistoryTreeBranchesResponse, error) {
 	return r.delegate.GetAllHistoryTreeBranches(ctx, request)
 }
+
+// Stream log pass-throughs. This recorder only watches task generation, and a
+// stream log write generates none.
+
+func (r *HistoryTaskRecorder) AppendStreamLog(
+	ctx context.Context,
+	request *persistence.InternalAppendStreamLogRequest,
+) error {
+	return r.delegate.AppendStreamLog(ctx, request)
+}
+
+func (r *HistoryTaskRecorder) ReadStreamLog(
+	ctx context.Context,
+	request *persistence.InternalReadStreamLogRequest,
+) (*persistence.InternalReadStreamLogResponse, error) {
+	return r.delegate.ReadStreamLog(ctx, request)
+}
+
+func (r *HistoryTaskRecorder) DeleteStreamLogBucket(
+	ctx context.Context,
+	request *persistence.InternalDeleteStreamLogBucketRequest,
+) error {
+	return r.delegate.DeleteStreamLogBucket(ctx, request)
+}
