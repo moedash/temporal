@@ -1277,6 +1277,7 @@ func (s *sutTestingAdapter) AddWorkflowTaskCompletedEvent(_ ...eventConfig) *his
 		"",
 		nil,
 		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		nil,
 	)
 }
 

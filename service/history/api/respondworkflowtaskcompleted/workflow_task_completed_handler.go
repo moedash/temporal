@@ -61,6 +61,9 @@ type (
 		workflowTaskDeployment  *deploymentpb.Deployment
 
 		// internal state
+		// Log writes staged by stream commands, flushed before this workflow
+		// task commits.
+		stagedStreamSubscriptions           []chasmworkflow.PendingStreamSubscription
 		hasBufferedEventsOrMessages         bool
 		workflowTaskFailedCause             *workflowTaskFailedCause
 		activityNotStartedCancelled         bool
@@ -354,6 +357,12 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 					return nil, chasmErr
 				}
 				err = chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
+				// A subscribe to a stream in another execution stages itself,
+				// since a command handler holds the state lock and has no
+				// context for the lookup it needs. Collect them for the
+				// resolution that has to precede this task's commit.
+				handler.stagedStreamSubscriptions = append(
+					handler.stagedStreamSubscriptions, chasmWorkflow.DrainStreamSubscriptions()...)
 				// Fall back to the HSM handler either when the command type is not supported by CHASM (disabled
 				// feature flag) or when the targeted entity is not owned by the CHASM tree (e.g. an operation
 				// scheduled in HSM before the flag was flipped on).
