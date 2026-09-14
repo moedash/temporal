@@ -12,6 +12,7 @@ import "temporal/api/history/v1/message.proto";
 import "temporal/api/nexus/v1/message.proto";
 import "temporal/api/protocol/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
+import "temporal/api/stream/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/worker/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
@@ -62,6 +63,10 @@ message PollWorkflowTaskQueueResponse {
   // Raw history bytes sent from matching service when history.sendRawHistoryBetweenInternalServices is enabled.
   // Matching client will deserialize this to History when it receives the response.
   temporal.api.history.v1.History raw_history = 22;
+  // Slices of the streams this Workflow is consuming, each covering the offset
+  // range the task may deliver. Payloads ride here and never enter History;
+  // only the consumed range is recorded, on WorkflowTaskCompleted.
+  repeated temporal.api.stream.v1.StreamSlice stream_slices = 23;
 }
 
 // PollWorkflowTaskQueueResponseWithRawHistory is wire-compatible with PollWorkflowTaskQueueResponse.
@@ -112,6 +117,10 @@ message PollWorkflowTaskQueueResponseWithRawHistory {
   // When matching client deserializes this to PollWorkflowTaskQueueResponse, this field
   // will be automatically deserialized to the raw_history field as History.
   repeated bytes raw_history = 22;
+  // Slices of the streams this Workflow is consuming, each covering the offset
+  // range the task may deliver. Payloads ride here and never enter History;
+  // only the consumed range is recorded, on WorkflowTaskCompleted.
+  repeated temporal.api.stream.v1.StreamSlice stream_slices = 23;
 }
 
 message PollActivityTaskQueueRequest {
