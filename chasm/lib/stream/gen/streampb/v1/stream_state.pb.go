@@ -32,7 +32,7 @@ type StreamState struct {
 	// Visibility frontier. Readers never observe an offset at or past this.
 	HeadOffset int64 `protobuf:"varint,1,opt,name=head_offset,json=headOffset,proto3" json:"head_offset,omitempty"`
 	// Truncation floor. Offsets below this are gone.
-	BaseOffset  int64       `protobuf:"varint,2,opt,name=base_offset,json=baseOffset,proto3" json:"base_offset,omitempty"` // Chains log nodes so a stale node from an abandoned append is rejected on
+	BaseOffset  int64       `protobuf:"varint,2,opt,name=base_offset,json=baseOffset,proto3" json:"base_offset,omitempty"`
 	Closed      bool        `protobuf:"varint,4,opt,name=closed,proto3" json:"closed,omitempty"`
 	CloseReason *v1.Payload `protobuf:"bytes,5,opt,name=close_reason,json=closeReason,proto3" json:"close_reason,omitempty"`
 	// Bumped on ownership change so a stale producer's write fails.
