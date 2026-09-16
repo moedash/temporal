@@ -383,3 +383,25 @@ func (s *HistoryEventsSuite) TestStreamLogReadFindsTheBatchHoldingAnOffset() {
 		s.streamRead(collectionID, bucketSize, 10, 11),
 	)
 }
+
+// TestStreamLogReadStopsAtTheRequestedEnd checks that the exclusive end of a
+// read is honoured inside a bucket.
+//
+// A bucket is one partition, so the bucket walk alone already bounds a read to
+// the buckets the range touches. Nothing above the store trims what comes back,
+// which makes the end offset the store's own responsibility and worth pinning
+// separately from the floor lookup.
+func (s *HistoryEventsSuite) TestStreamLogReadStopsAtTheRequestedEnd() {
+	collectionID := uuid.NewString()
+	const bucketSize = 100
+
+	s.streamAppend(collectionID, bucketSize, 0, 10, "first")
+	s.streamAppend(collectionID, bucketSize, 10, 10, "second")
+	s.streamAppend(collectionID, bucketSize, 20, 10, "third")
+
+	s.Equal(
+		[]string{"first", "second"},
+		s.streamRead(collectionID, bucketSize, 0, 15),
+		"a read must stop at its end offset even when the bucket holds more",
+	)
+}

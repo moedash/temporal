@@ -23,8 +23,8 @@ const (
 		`FROM stream_log ` +
 		`WHERE shard_id = ? AND namespace_id = ? AND collection_id = ? AND bucket = ? ` +
 		`AND start_offset >= COALESCE((SELECT MAX(start_offset) FROM stream_log ` +
-		`WHERE shard_id = ? AND namespace_id = ? AND collection_id = ? AND bucket = ? AND start_offset <= ?), ?0) ` +
-		`AND start_offset < ?1 ORDER BY start_offset LIMIT ?2`
+		`WHERE shard_id = ? AND namespace_id = ? AND collection_id = ? AND bucket = ? AND start_offset <= ?), ?) ` +
+		`AND start_offset < ? ORDER BY start_offset LIMIT ?`
 
 	deleteStreamLogQuery = `DELETE FROM stream_log ` +
 		`WHERE shard_id = ? AND namespace_id = ? AND collection_id = ? AND bucket = ?`
