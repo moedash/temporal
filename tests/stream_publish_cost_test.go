@@ -2,6 +2,7 @@ package tests
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +64,11 @@ const (
 func TestStreamPublishHistoryCost(t *testing.T) {
 	if testing.Short() {
 		t.Skip("measurement, not a correctness check")
+	}
+	// Each arm holds a cluster of its own until the whole test returns, so ten
+	// arms outlast the dedicated pool. Opt in like the other measurements.
+	if os.Getenv("TEMPORAL_STREAM_BENCH") != "1" {
+		t.Skip("set TEMPORAL_STREAM_BENCH=1 to run")
 	}
 
 	arms := []publishCostArm{
