@@ -15,7 +15,6 @@ message StreamState {
   int64 head_offset = 1;
   // Truncation floor. Offsets below this are gone.
   int64 base_offset = 2;
-  // Chains log nodes so a stale node from an abandoned append is rejected on
 
   bool closed = 4;
   temporal.api.common.v1.Payload close_reason = 5;

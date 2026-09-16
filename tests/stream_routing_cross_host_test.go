@@ -93,7 +93,7 @@ func TestStreamRoutedCrossHostDeliveryAndReplay(t *testing.T) {
 	t.Logf("Confirmed history topology: %v; consumer shard %d on %s, local source shard %d on %s, remote source shard %d on %s",
 		hosts, consumerShard, consumerHost, localSourceShard, consumerHost, remoteSourceShard, remoteHost)
 	findID := func(prefix string, target int32) string {
-		for i := 0; i < 10000; i++ {
+		for i := range 10000 {
 			id := fmt.Sprintf("%s-%d", prefix, i)
 			if common.WorkflowIDToHistoryShard(nsID, id, config.HistoryConfig.NumHistoryShards) == target {
 				return id
