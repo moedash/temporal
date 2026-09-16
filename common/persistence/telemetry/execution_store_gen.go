@@ -110,6 +110,41 @@ func (d telemetryExecutionStore) AppendHistoryNodes(ctx context.Context, request
 	return
 }
 
+// AppendStreamLog wraps ExecutionStore.AppendStreamLog.
+func (d telemetryExecutionStore) AppendStreamLog(ctx context.Context, request *_sourcePersistence.InternalAppendStreamLogRequest) (err error) {
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/AppendStreamLog",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("AppendStreamLog"),
+		))
+	defer span.End()
+
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
+
+	err = d.ExecutionStore.AppendStreamLog(ctx, request)
+	if err != nil {
+		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalAppendStreamLogRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+	}
+
+	return
+}
+
 // CompleteHistoryTask wraps ExecutionStore.CompleteHistoryTask.
 func (d telemetryExecutionStore) CompleteHistoryTask(ctx context.Context, request *_sourcePersistence.CompleteHistoryTaskRequest) (err error) {
 	ctx, span := d.tracer.Start(
@@ -353,6 +388,41 @@ func (d telemetryExecutionStore) DeleteReplicationTaskFromDLQ(ctx context.Contex
 		requestPayload, err := json.MarshalIndent(request, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.DeleteReplicationTaskFromDLQRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+	}
+
+	return
+}
+
+// DeleteStreamLogBucket wraps ExecutionStore.DeleteStreamLogBucket.
+func (d telemetryExecutionStore) DeleteStreamLogBucket(ctx context.Context, request *_sourcePersistence.InternalDeleteStreamLogBucketRequest) (err error) {
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/DeleteStreamLogBucket",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("DeleteStreamLogBucket"),
+		))
+	defer span.End()
+
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
+
+	err = d.ExecutionStore.DeleteStreamLogBucket(ctx, request)
+	if err != nil {
+		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalDeleteStreamLogBucketRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
 		}
@@ -906,6 +976,48 @@ func (d telemetryExecutionStore) ReadHistoryBranch(ctx context.Context, request 
 		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalReadHistoryBranchResponse for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+		}
+
+	}
+
+	return
+}
+
+// ReadStreamLog wraps ExecutionStore.ReadStreamLog.
+func (d telemetryExecutionStore) ReadStreamLog(ctx context.Context, request *_sourcePersistence.InternalReadStreamLogRequest) (ip1 *_sourcePersistence.InternalReadStreamLogResponse, err error) {
+	ctx, span := d.tracer.Start(
+		ctx,
+		"persistence.ExecutionStore/ReadStreamLog",
+		trace.WithAttributes(
+			attribute.Key("persistence.store").String("ExecutionStore"),
+			attribute.Key("persistence.method").String("ReadStreamLog"),
+		))
+	defer span.End()
+
+	if deadline, ok := ctx.Deadline(); ok {
+		span.SetAttributes(attribute.String("deadline", deadline.Format(time.RFC3339Nano)))
+		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
+	}
+
+	ip1, err = d.ExecutionStore.ReadStreamLog(ctx, request)
+	if err != nil {
+		span.RecordError(err)
+	}
+
+	if d.debugMode {
+
+		requestPayload, err := json.MarshalIndent(request, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalReadStreamLogRequest for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalReadStreamLogResponse for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
