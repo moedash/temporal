@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "0.12",
+  "MinCompatibleVersion": "0.1",
+  "Description": "Adds stream_log table for server-side streams",
+  "SchemaUpdateCqlFiles": [
+    "add_stream_log.sql"
+  ]
+}

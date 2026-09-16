@@ -254,7 +254,7 @@ CREATE TABLE stream_log (
   collection_id     text,
   bucket            bigint,  -- one bucket is one partition, bounded by offsets and by bytes
   start_offset      bigint,  -- first offset in this batch, and the key a retry addresses
-  next_offset        bigint,  -- exclusive, so a reader knows the span without decoding
+  next_offset       bigint,  -- exclusive, so a reader knows the span without decoding
   data              blob,
   data_encoding     text,
   PRIMARY KEY ((shard_id, namespace_id, collection_id, bucket), start_offset)
