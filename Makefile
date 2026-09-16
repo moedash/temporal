@@ -529,7 +529,8 @@ clean-test-output:
 
 build-tests:
 	@printf $(COLOR) "Build tests..."
-	@CGO_ENABLED=$(CGO_ENABLED) go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
+	@CGO_ENABLED=$(CGO_ENABLED) go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(filter-out $(MIXED_BRAIN_TEST_ROOT)%,$(TEST_DIRS))
+	@cd $(MIXED_BRAIN_TEST_ROOT) && CGO_ENABLED=1 go test $(TEST_TAG_FLAG) -exec="true" -count=0 ./...
 
 unit-test: clean-test-output
 	@printf $(COLOR) "Run unit tests..."
