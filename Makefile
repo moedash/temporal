@@ -522,9 +522,12 @@ workflowcheck: $(WORKFLOWCHECK)
 check: lint shell-check
 
 ##### Tests #####
+# verify-test-log reads the whole file, so a log left behind by an earlier run
+# would be judged as if it belonged to this one.
 clean-test-output:
 	@printf $(COLOR) "Delete test output..."
 	@rm -rf $(TEST_OUTPUT_ROOT)
+	@rm -f test.log
 	@go clean -testcache
 
 build-tests:
