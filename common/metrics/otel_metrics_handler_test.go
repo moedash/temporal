@@ -195,6 +195,10 @@ func TestMeter(t *testing.T) {
 		cmpopts.IgnoreFields(metricdata.DataPoint[int64]{}, "StartTime", "Time"),
 		cmpopts.IgnoreFields(metricdata.DataPoint[float64]{}, "StartTime", "Time"),
 		cmpopts.IgnoreFields(metricdata.HistogramDataPoint[int64]{}, "StartTime", "Time", "Bounds"),
+		// The SDK hands back either a nil or an allocated-but-empty exemplar
+		// slice depending on whether its reservoir was ever touched, so the
+		// two have to compare equal here.
+		cmpopts.EquateEmpty(),
 	); diff != "" {
 		t.Errorf("mismatch (-want, +got):\n%s", diff)
 	}
@@ -263,6 +267,7 @@ func TestMeter_TimerInSeconds(t *testing.T) {
 			return a1.Equals(&a2)
 		}),
 		cmpopts.IgnoreFields(metricdata.HistogramDataPoint[float64]{}, "StartTime", "Time", "Bounds"),
+		cmpopts.EquateEmpty(),
 	); diff != "" {
 		t.Errorf("mismatch (-want, +got):\n%s", diff)
 	}
