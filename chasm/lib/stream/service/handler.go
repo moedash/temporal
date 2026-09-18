@@ -401,10 +401,11 @@ func (h *handler) subscribeToExternalStream(
 
 // RegisterStreamConsumer takes the pin, on the shard that owns the stream.
 //
-// Internal. Called by SubscribeWorkflow, which is routed to the consumer and so
-// cannot reach the stream itself. It resolves a negative start offset here,
-// where the frontier is, and hands back the resolved offset and the frontier,
-// so the consumer records facts rather than readings.
+// Internal. Called by SubscribeWorkflow and by the workflow task completion
+// path, both of which run on the consumer's shard and so cannot reach the
+// stream themselves. The start offset is resolved inside the transition that
+// records it, against the same frontier it hands back, so the consumer records
+// facts rather than readings.
 func (h *handler) RegisterStreamConsumer(
 	ctx context.Context,
 	req *streampb.RegisterStreamConsumerRequest,
@@ -412,42 +413,29 @@ func (h *handler) RegisterStreamConsumer(
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	streamID := in.GetStreamId()
-	ref := refFor(req.GetNamespaceId(), streamID)
-
-	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
+	consumerID := "workflow:" + in.GetConsumerWorkflowId()
+	pin, _, err := chasm.UpdateComponent(
+		ctx,
+		refFor(req.GetNamespaceId(), in.GetStreamId()),
+		func(
+			s *stream.Stream, mctx chasm.MutableContext, offset int64,
+		) (*streampb.RegisterStreamConsumerOutput, error) {
+			startOffset, err := s.RegisterConsumer(
+				mctx, consumerID, in.GetConsumerWorkflowId(), "", offset, true)
+			if err != nil {
+				return nil, err
+			}
+			return &streampb.RegisterStreamConsumerOutput{
+				StartOffset: startOffset,
+				KnownHead:   s.State.GetHeadOffset(),
+			}, nil
+		},
+		in.GetStartOffset(),
+	)
 	if err != nil {
 		return nil, err
 	}
-
-	startOffset := in.GetStartOffset()
-	if startOffset < 0 {
-		startOffset = state.GetHeadOffset()
-	}
-	if startOffset < state.GetBaseOffset() {
-		return nil, serviceerror.NewFailedPreconditionf(
-			"offset %d is below the stream's floor of %d", startOffset, state.GetBaseOffset())
-	}
-
-	consumerID := "workflow:" + in.GetConsumerWorkflowId()
-	if _, _, err := chasm.UpdateComponent(
-		ctx,
-		ref,
-		func(s *stream.Stream, mctx chasm.MutableContext, offset int64) (struct{}, error) {
-			return struct{}{}, s.RegisterConsumer(
-				mctx, consumerID, in.GetConsumerWorkflowId(), "", offset, true)
-		},
-		startOffset,
-	); err != nil {
-		return nil, err
-	}
-
-	return &streampb.RegisterStreamConsumerResponse{
-		FrontendResponse: &streampb.RegisterStreamConsumerOutput{
-			StartOffset: startOffset,
-			KnownHead:   state.GetHeadOffset(),
-		},
-	}, nil
+	return &streampb.RegisterStreamConsumerResponse{FrontendResponse: pin}, nil
 }
 
 // AdvanceConsumerHead tells one consumer that the frontier moved, on the shard

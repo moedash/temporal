@@ -14,7 +14,8 @@ import (
 
 type streamClientContextKey struct{}
 
-// WithStreamClient supplies shard routing for standalone stream payload reads.
+// WithStreamClient supplies shard routing for calls that reach a stream in
+// another execution from inside a workflow task's transaction.
 func WithStreamClient(ctx context.Context, client streamlib.StreamServiceClient) context.Context {
 	if client == nil {
 		return ctx
@@ -22,12 +23,27 @@ func WithStreamClient(ctx context.Context, client streamlib.StreamServiceClient)
 	return context.WithValue(ctx, streamClientContextKey{}, client)
 }
 
-func readExternalWindow(ctx context.Context, namespaceID, streamID string, from, to int64) (stream.Window, error) {
+// StreamClientFromContext returns the routed client installed by the engine.
+func StreamClientFromContext(ctx context.Context) (streamlib.StreamServiceClient, bool) {
+	client, ok := ctx.Value(streamClientContextKey{}).(streamlib.StreamServiceClient)
+	return client, ok
+}
+
+// WithRoutedDeadline bounds a routed call made while the workflow lock is held.
+func WithRoutedDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, stream.RoutedCallTimeout)
+}
+
+func readExternalWindow(
+	ctx context.Context,
+	namespaceID, streamID string,
+	from, to int64,
+) (stream.Window, error) {
 	if to <= from {
 		return stream.Window{To: from}, nil
 	}
 	limit := int32(min(to-from, int64(stream.DefaultMaxMessagesPerPoll)))
-	client, ok := ctx.Value(streamClientContextKey{}).(streamlib.StreamServiceClient)
+	client, ok := StreamClientFromContext(ctx)
 	if !ok {
 		// Hand-built engines in component tests have no service client.
 		return chasm.ReadComponent(ctx,
@@ -39,7 +55,9 @@ func readExternalWindow(ctx context.Context, namespaceID, streamID string, from,
 			stream.WindowRequest{From: from, MaxMessages: limit})
 	}
 
-	response, err := client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+	callCtx, cancel := WithRoutedDeadline(ctx)
+	defer cancel()
+	response, err := client.PollMessages(callCtx, &streamlib.PollMessagesRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &streamlib.PollMessagesInput{
 			StreamId: streamID, FromOffset: from, MaxMessages: limit,
@@ -52,18 +70,23 @@ func readExternalWindow(ctx context.Context, namespaceID, streamID string, from,
 	if out == nil || out.GetNextOffset() < from || out.GetNextOffset() > to ||
 		out.GetNextOffset() > out.GetHeadOffset() ||
 		int64(len(out.GetMessages())) != out.GetNextOffset()-from {
-		return stream.Window{}, serviceerror.NewDataLoss("stream read returned an invalid contiguous range")
+		return stream.Window{}, serviceerror.NewDataLoss(
+			"stream read returned an invalid contiguous range")
 	}
 	for index, message := range out.GetMessages() {
 		if message == nil || message.GetOffset() != from+int64(index) {
-			return stream.Window{}, serviceerror.NewDataLoss("stream read returned a missing or reordered offset")
+			return stream.Window{}, serviceerror.NewDataLoss(
+				"stream read returned a missing or reordered offset")
 		}
 	}
 	w := stream.Window{
 		State: &streamlib.StreamState{
-			HeadOffset: out.GetHeadOffset(), Closed: out.GetClosed(), CloseReason: out.GetCloseReason(),
+			HeadOffset:  out.GetHeadOffset(),
+			Closed:      out.GetClosed(),
+			CloseReason: out.GetCloseReason(),
 		},
-		To: out.GetNextOffset(), Limit: int(limit),
+		To:    out.GetNextOffset(),
+		Limit: int(limit),
 	}
 	if len(out.GetMessages()) == 0 {
 		return w, nil

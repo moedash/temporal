@@ -561,7 +561,13 @@ func (s *Stream) checkCapRoom(count int64) error {
 }
 
 // RegisterConsumer records an in-workflow consumer, so appends know who to wake
-// and retention knows what it may not delete.
+// and retention knows what it may not delete. It returns the offset the
+// consumer reads from: the resolved start for a new consumer, and the current
+// read position for one that is already registered.
+//
+// A negative offset means the head as of this transition. Resolving it here,
+// against the frontier the same transaction sees, is what makes the recorded
+// start a fact rather than a reading taken a moment earlier.
 //
 // The floor it records is where the subscription started, not where it has read
 // to. The ranges this consumer already took are written into its History, and a
@@ -574,17 +580,20 @@ func (s *Stream) RegisterConsumer(
 	runID string,
 	offset int64,
 	external bool,
-) error {
+) (int64, error) {
 	if consumerID == "" {
-		return serviceerror.NewInvalidArgument("consumer id is required")
+		return 0, serviceerror.NewInvalidArgument("consumer id is required")
+	}
+	if offset < 0 {
+		offset = s.State.HeadOffset
 	}
 	if offset < s.State.BaseOffset {
-		return serviceerror.NewFailedPreconditionf(
+		return 0, serviceerror.NewFailedPreconditionf(
 			"offset %d is below the stream's floor of %d", offset, s.State.BaseOffset)
 	}
 	if _, known := s.State.Consumers[consumerID]; !known &&
 		len(s.State.Consumers) >= MaxConsumersPerStream {
-		return serviceerror.NewInvalidArgumentf(
+		return 0, serviceerror.NewInvalidArgumentf(
 			"stream already has %d consumers, which is the limit", MaxConsumersPerStream)
 	}
 	if s.State.Consumers == nil {
@@ -595,12 +604,12 @@ func (s *Stream) RegisterConsumer(
 		// stream has moved past what its History refers to. Saying so here is
 		// the only chance to say it before the workflow depends on it again.
 		if existing.GetReplayFloor() < s.State.BaseOffset {
-			return serviceerror.NewFailedPreconditionf(
+			return 0, serviceerror.NewFailedPreconditionf(
 				"consumer %q recorded offset %d, and the stream now starts at %d",
 				consumerID, existing.GetReplayFloor(), s.State.BaseOffset)
 		}
 		existing.Active = true
-		return nil
+		return existing.GetOffset(), nil
 	}
 	s.State.Consumers[consumerID] = &streampb.ConsumerCursor{
 		WorkflowId:  workflowID,
@@ -610,7 +619,7 @@ func (s *Stream) RegisterConsumer(
 		External:    external,
 		ReplayFloor: offset,
 	}
-	return nil
+	return offset, nil
 }
 
 // AdvanceConsumer moves a consumer's pin forward as it reads. It never moves

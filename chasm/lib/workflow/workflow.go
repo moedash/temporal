@@ -110,18 +110,6 @@ func (w *Workflow) SubscribeToOwnedStream(
 		return 0, serviceerror.NewNotFoundf("workflow does not own a stream named %q", name)
 	}
 	owned := field.Get(mctx)
-	state, err := owned.Snapshot(mctx, struct{}{})
-	if err != nil {
-		return 0, err
-	}
-
-	if startOffset < 0 {
-		startOffset = state.GetHeadOffset()
-	}
-	if startOffset < state.GetBaseOffset() {
-		return 0, serviceerror.NewFailedPreconditionf(
-			"offset %d is below the stream's floor of %d", startOffset, state.GetBaseOffset())
-	}
 
 	if w.StreamCursors == nil {
 		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
@@ -132,6 +120,16 @@ func (w *Workflow) SubscribeToOwnedStream(
 		return existing.Get(mctx).Offset(), nil
 	}
 
+	// Pin the stream's floor in the same transaction as the cursor. Registered
+	// separately it could be lost while the cursor survived, and truncation
+	// would then be free to take a range the cursor still points at.
+	key := mctx.ExecutionKey()
+	startOffset, err := owned.RegisterConsumer(
+		mctx, streamConsumerID(name), key.BusinessID, key.RunID, startOffset, false)
+	if err != nil {
+		return 0, err
+	}
+
 	cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
 		StreamID:    name,
 		StartOffset: startOffset,
@@ -139,15 +137,6 @@ func (w *Workflow) SubscribeToOwnedStream(
 	if err != nil {
 		return 0, err
 	}
-
-	// Pin the stream's floor in the same transaction. Registered separately it
-	// could be lost while the cursor survived, and truncation would then be
-	// free to take a range the cursor still points at.
-	key := mctx.ExecutionKey()
-	if err := owned.RegisterConsumer(mctx, streamConsumerID(name), key.BusinessID, key.RunID, startOffset, false); err != nil {
-		return 0, err
-	}
-
 	w.StreamCursors[name] = chasm.NewComponentField(mctx, cursor)
 	return startOffset, nil
 }

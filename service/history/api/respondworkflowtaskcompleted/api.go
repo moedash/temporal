@@ -467,7 +467,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				ctx,
 				ms,
 				ms.GetWorkflowKey().NamespaceID,
-				completedEvent.GetEventId(),
 				workflowTaskHandler.stagedStreamSubscriptions,
 			); err != nil {
 				return nil, err

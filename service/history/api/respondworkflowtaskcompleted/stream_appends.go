@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/stream"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
@@ -23,11 +23,15 @@ import (
 // holding storage nothing reads, which costs space. The other order would leave
 // a cursor no truncation floor protects, and truncation would be free to take a
 // range it still points at.
+//
+// The pin is taken through the routed service client. The engine on this
+// request context resolves shards through the local controller, which refuses
+// any shard this host does not own, so a stream living elsewhere in the
+// cluster can only be reached by going back out through the service.
 func resolveStagedStreamSubscriptions(
 	ctx context.Context,
 	ms historyi.MutableState,
 	namespaceID string,
-	completedEventID int64,
 	staged []chasmworkflow.PendingStreamSubscription,
 ) error {
 	if len(staged) == 0 {
@@ -66,41 +70,15 @@ func resolveStagedStreamSubscriptions(
 			continue
 		}
 
-		ref := chasm.NewComponentRef[*stream.Stream](chasm.ExecutionKey{
-			NamespaceID: namespaceID,
-			BusinessID:  pending.StreamID,
-		})
-
-		// The engine rides the request context, installed by the interceptor.
-		state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
+		pin, err := registerExternalConsumer(ctx, ms, namespaceID, pending)
 		if err != nil {
-			return err
-		}
-
-		startOffset := pending.StartOffset
-		if startOffset < 0 {
-			// Resolved once, here, and recorded. Left to delivery it would be a
-			// reading rather than a fact, and replay would resolve it again
-			// against a stream that has since moved.
-			startOffset = state.GetHeadOffset()
-		}
-
-		consumerID := "workflow:" + ms.GetExecutionInfo().GetWorkflowId()
-		if _, _, err := chasm.UpdateComponent(
-			ctx, ref,
-			func(s *stream.Stream, mctx chasm.MutableContext, offset int64) (struct{}, error) {
-				return struct{}{}, s.RegisterConsumer(
-					mctx, consumerID, ms.GetExecutionInfo().GetWorkflowId(), "", offset, true)
-			},
-			startOffset,
-		); err != nil {
 			return err
 		}
 
 		if _, err := wf.SubscribeToExternalStream(chasmCtx, chasmworkflow.ExternalStreamSubscription{
 			StreamID:    pending.StreamID,
-			StartOffset: startOffset,
-			KnownHead:   state.GetHeadOffset(),
+			StartOffset: pin.GetStartOffset(),
+			KnownHead:   pin.GetKnownHead(),
 		}); err != nil {
 			return err
 		}
@@ -109,7 +87,39 @@ func resolveStagedStreamSubscriptions(
 		// command was, but nothing outside this transaction sees either until
 		// the commit below, so a crash in between leaves no event claiming a
 		// subscription that was never made.
-		chasmworkflow.RecordStreamSubscribedOffset(pending.Event, startOffset)
+		chasmworkflow.RecordStreamSubscribedOffset(pending.Event, pin.GetStartOffset())
 	}
 	return nil
+}
+
+// registerExternalConsumer takes the pin on the stream's own shard and returns
+// the resolved start offset and the frontier as of registration.
+func registerExternalConsumer(
+	ctx context.Context,
+	ms historyi.MutableState,
+	namespaceID string,
+	pending chasmworkflow.PendingStreamSubscription,
+) (*streamlib.RegisterStreamConsumerOutput, error) {
+	client, ok := recordworkflowtaskstarted.StreamClientFromContext(ctx)
+	if !ok {
+		return nil, serviceerror.NewInternal(
+			"stream service client is not available on the workflow task completion path")
+	}
+
+	key := ms.GetWorkflowKey()
+	callCtx, cancel := recordworkflowtaskstarted.WithRoutedDeadline(ctx)
+	defer cancel()
+	registered, err := client.RegisterStreamConsumer(callCtx, &streamlib.RegisterStreamConsumerRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &streamlib.RegisterStreamConsumerInput{
+			Namespace:          ms.GetNamespaceEntry().Name().String(),
+			StreamId:           pending.StreamID,
+			ConsumerWorkflowId: key.WorkflowID,
+			StartOffset:        pending.StartOffset,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return registered.GetFrontendResponse(), nil
 }

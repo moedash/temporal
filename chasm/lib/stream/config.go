@@ -21,6 +21,11 @@ const LongPollTimeout = 20 * time.Second
 // own deadline fires.
 const LongPollBuffer = 3 * time.Second
 
+// RoutedCallTimeout bounds a call to another shard made while a workflow's lock
+// is held. The request's own deadline can be far longer, and a slow stream
+// shard would otherwise stretch the lock hold to match it.
+const RoutedCallTimeout = 5 * time.Second
+
 // MaxConsumeItemsPerTask bounds one Workflow Task's slice. A byte cap alone is
 // not enough: a burst of tiny messages stays under it while still making one
 // task's drain arbitrarily long. Whichever bound binds first, the rest is
