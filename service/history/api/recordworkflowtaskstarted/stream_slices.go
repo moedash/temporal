@@ -19,17 +19,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// deliverStreamSlices hands the next range of every stream this workflow
-// consumes to the task being started, and stages that range on the cursor so
-// the event closing the task can record what was delivered.
-//
-// The log read runs with the workflow lock held. That is the price of deciding
-// a range and staging it in one transaction: staged first and read after, a
-// failed read would leave a range that the worker never received but that the
-// completion would still record as consumed.
 // streamOrigin says where a subscribed stream lives, which decides how its
-// payload is read. The payload is component state now, so an external stream is
-// read from its own execution and an owned one from the consumer's.
+// payload is read: an external stream from its own execution, an owned one
+// from the consumer's.
 type streamOrigin struct {
 	external bool
 	// The name the consumer knows the stream by, which is how an owned one is
@@ -152,6 +144,14 @@ func DeliverStreamSlices(
 	return live, err
 }
 
+// deliverStreamSlices hands the next range of every stream this workflow
+// consumes to the task being started, and stages that range on the cursor so
+// the event closing the task can record what was delivered.
+//
+// The payload read runs with the workflow lock held. That is the price of
+// deciding a range and staging it in one transaction: staged first and read
+// after, a failed read would leave a range that the worker never received but
+// that the completion would still record as consumed.
 func deliverStreamSlices(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -202,9 +202,8 @@ func deliverStreamSlices(
 		from, to, restaged := cursor.Pending()
 		if !restaged {
 			from = cursor.Offset()
-			// Clip to the frontier. Bytes reach the log before the transaction
-			// that makes them visible commits, so reading past head risks
-			// delivering an offset whose content a retry could still replace.
+			// Clip to the frontier, which is the committed head for an owned
+			// stream and the last pushed head for an external one.
 			to = min(from+int64(maxItems), head)
 		}
 
@@ -301,7 +300,7 @@ func readRecordedRange(
 // History holds offsets and never payloads, which is the property the whole
 // design rests on. The cost lands here: a worker replaying from History has to
 // be handed the same bytes those tasks were given, and the only place they
-// exist is the stream's log. The response field alone cannot carry this,
+// exist is the stream itself. The response field alone cannot carry this,
 // because it is built once per delivery while a cache miss replays every prior
 // task, so each range travels with the id of the event that recorded it.
 func attachReplaySlices(

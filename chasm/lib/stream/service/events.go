@@ -43,7 +43,7 @@ func (streamSubscribedEventDefinition) CherryPick(
 //
 // Like the subscription event it applies nothing: the stream's frontier is
 // CHASM state committed with the workflow task, and the bodies are in the
-// stream's own log. What the event carries is the offset range, which is what
+// stream component. What the event carries is the offset range, which is what
 // lets anyone reading History find the batch without History having held it.
 type streamMessagesAddedEventDefinition struct{}
 

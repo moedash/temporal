@@ -98,11 +98,9 @@ func resolveStagedStreamSubscriptions(
 		}
 
 		if _, err := wf.SubscribeToExternalStream(chasmCtx, chasmworkflow.ExternalStreamSubscription{
-			StreamID:     pending.StreamID,
-			CollectionID: state.GetCollectionId(),
-			BucketSize:   state.GetBucketSize(),
-			StartOffset:  startOffset,
-			KnownHead:    state.GetHeadOffset(),
+			StreamID:    pending.StreamID,
+			StartOffset: startOffset,
+			KnownHead:   state.GetHeadOffset(),
 		}); err != nil {
 			return err
 		}

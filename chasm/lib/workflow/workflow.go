@@ -133,10 +133,8 @@ func (w *Workflow) SubscribeToOwnedStream(
 	}
 
 	cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
-		StreamID:     name,
-		CollectionID: state.GetCollectionId(),
-		BucketSize:   state.GetBucketSize(),
-		StartOffset:  startOffset,
+		StreamID:    name,
+		StartOffset: startOffset,
 	})
 	if err != nil {
 		return 0, err
@@ -154,15 +152,13 @@ func (w *Workflow) SubscribeToOwnedStream(
 	return startOffset, nil
 }
 
-// ExternalStreamSubscription describes a stream in another execution. The
-// addressing is copied in at subscribe time so delivery never has to reach
-// across executions to find the log.
+// ExternalStreamSubscription describes a stream in another execution, with the
+// start offset already resolved and the frontier as it was when the consumer
+// was registered there.
 type ExternalStreamSubscription struct {
-	StreamID     string
-	CollectionID string
-	BucketSize   int64
-	StartOffset  int64
-	KnownHead    int64
+	StreamID    string
+	StartOffset int64
+	KnownHead   int64
 }
 
 // SubscribeToExternalStream registers this workflow as a consumer of a stream
@@ -181,11 +177,9 @@ func (w *Workflow) SubscribeToExternalStream(
 	}
 
 	cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
-		StreamID:     req.StreamID,
-		External:     true,
-		CollectionID: req.CollectionID,
-		BucketSize:   req.BucketSize,
-		StartOffset:  req.StartOffset,
+		StreamID:    req.StreamID,
+		External:    true,
+		StartOffset: req.StartOffset,
 	})
 	if err != nil {
 		return 0, err
@@ -199,9 +193,9 @@ func (w *Workflow) SubscribeToExternalStream(
 // inherit.
 //
 // Only subscriptions to streams in other executions are exported. A stream this
-// workflow owns lives in this execution and does not itself survive the run
-// transition yet (§8a), so carrying a cursor for one would leave the successor
-// pointing at a stream it cannot reach.
+// workflow owns lives in this execution and does not survive the run
+// transition, so carrying a cursor for one would leave the successor pointing
+// at a stream it cannot reach.
 func (w *Workflow) ExportStreamSubscriptions(ctx chasm.Context) []ExternalStreamSubscription {
 	var out []ExternalStreamSubscription
 	for _, field := range w.StreamCursors {
@@ -210,11 +204,9 @@ func (w *Workflow) ExportStreamSubscriptions(ctx chasm.Context) []ExternalStream
 			continue
 		}
 		out = append(out, ExternalStreamSubscription{
-			StreamID:     cursor.StreamID(),
-			CollectionID: cursor.CollectionID(),
-			BucketSize:   cursor.BucketSize(),
-			StartOffset:  cursor.Offset(),
-			KnownHead:    cursor.KnownHead(),
+			StreamID:    cursor.StreamID(),
+			StartOffset: cursor.Offset(),
+			KnownHead:   cursor.KnownHead(),
 		})
 	}
 	// Stable order, so a successor's state does not depend on map iteration.
@@ -649,11 +641,6 @@ func (w *Workflow) OwnedStream(
 
 // EnsureOwnedStream creates a stream this workflow owns if the first writer to
 // it is not the workflow itself, and returns its state either way.
-//
-// An outside writer needs the stream's collection id and bucket size to write
-// its log node, and both are decided when the stream is created. So the first
-// append from outside costs one transition to create the stream and learn
-// them, and none after that.
 func (w *Workflow) EnsureOwnedStream(
 	mctx chasm.MutableContext,
 	name string,

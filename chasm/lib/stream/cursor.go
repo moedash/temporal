@@ -24,9 +24,7 @@ type NewCursorRequest struct {
 	StreamID string
 	// External marks a stream in another execution, whose frontier this
 	// workflow is told about rather than reads.
-	External     bool
-	CollectionID string
-	BucketSize   int64
+	External bool
 
 	// Where to start reading. Resolving "from the tail" against the stream's
 	// head happens before this is called, so the value recorded here is already
@@ -38,25 +36,17 @@ func NewCursor(_ chasm.MutableContext, req NewCursorRequest) (*Cursor, error) {
 	if req.StreamID == "" {
 		return nil, serviceerror.NewInvalidArgument("stream id is required")
 	}
-	if req.CollectionID == "" {
-		return nil, serviceerror.NewInvalidArgument("collection id is required")
-	}
-	if req.BucketSize <= 0 {
-		return nil, serviceerror.NewInvalidArgument("bucket size must be positive")
-	}
 	if req.StartOffset < 0 {
 		return nil, serviceerror.NewInvalidArgument("start offset cannot be negative")
 	}
 
 	return &Cursor{
 		State: &streampb.WorkflowStreamCursor{
-			StreamId:     req.StreamID,
-			CollectionId: req.CollectionID,
-			BucketSize:   req.BucketSize,
-			Offset:       req.StartOffset,
-			StartOffset:  req.StartOffset,
-			External:     req.External,
-			KnownHead:    req.StartOffset,
+			StreamId:    req.StreamID,
+			Offset:      req.StartOffset,
+			StartOffset: req.StartOffset,
+			External:    req.External,
+			KnownHead:   req.StartOffset,
 		},
 	}, nil
 }
@@ -75,14 +65,6 @@ func (c *Cursor) Offset() int64 {
 
 func (c *Cursor) StreamID() string {
 	return c.State.StreamId
-}
-
-func (c *Cursor) CollectionID() string {
-	return c.State.CollectionId
-}
-
-func (c *Cursor) BucketSize() int64 {
-	return c.State.BucketSize
 }
 
 // StagePending records the range attached to the workflow task now in flight.
@@ -130,14 +112,6 @@ func (c *Cursor) Commit(_ chasm.MutableContext) (from int64, to int64, ok bool) 
 	c.State.PendingTo = 0
 	c.State.HasPending = false
 	return from, to, true
-}
-
-// Abandon drops a staged range without advancing, for a task that will never
-// complete. The next delivery re-reads from the unchanged cursor.
-func (c *Cursor) Abandon(_ chasm.MutableContext) {
-	c.State.PendingFrom = 0
-	c.State.PendingTo = 0
-	c.State.HasPending = false
 }
 
 // IsExternal reports whether the stream lives in another execution.

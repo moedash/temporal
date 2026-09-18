@@ -35,10 +35,8 @@ func newAttachedStream(t *testing.T, ctx chasm.MutableContext, count int) *strea
 
 	s := &stream.Stream{
 		State: &streamlib.StreamState{
-			CollectionId: "col-1",
-			BucketSize:   stream.DefaultBucketSize,
-			Producers:    make(map[string]*streamlib.ProducerCursor),
-			Consumers:    make(map[string]*streamlib.ConsumerCursor),
+			Producers: make(map[string]*streamlib.ProducerCursor),
+			Consumers: make(map[string]*streamlib.ConsumerCursor),
 		},
 	}
 
@@ -151,13 +149,9 @@ func TestCommitStreamCursorsWithAnEmptyRangeHoldsTheConsumer(t *testing.T) {
 		"consuming nothing must not move the consumer")
 }
 
-// Two publishes in one workflow task each stage their own batch, at the offsets
-// they landed at.
-//
-// The offset a batch starts at is the key its row is written under, so two
-// publishes must not collide and a retry of either must address the same row
-// it wrote before. There is no transaction id involved any more: the store
-// resolves a rewrite by replacing, and the frontier decides what a reader sees.
+// Two publishes in one workflow task each write their own batch, keyed by the
+// offset it starts at, so neither collides with the other and a retry of
+// either addresses the same key it wrote before.
 func TestPublishStagesEachBatchAtItsOwnOffset(t *testing.T) {
 	ctx := newStreamCursorTestContext()
 

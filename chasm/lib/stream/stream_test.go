@@ -16,14 +16,12 @@ import (
 // transitions, and NewStream also wires a visibility field that needs a live
 // context. Construction through the real path is covered end to end in
 // tests/stream_test.go.
-func newTestStream(t *testing.T, bucketSize int64) *Stream {
+func newTestStream(t *testing.T) *Stream {
 	t.Helper()
 	return &Stream{
 		State: &streampb.StreamState{
-			CollectionId: "col-1",
-			BucketSize:   bucketSize,
-			Producers:    make(map[string]*streampb.ProducerCursor),
-			Consumers:    make(map[string]*streampb.ConsumerCursor),
+			Producers: make(map[string]*streampb.ProducerCursor),
+			Consumers: make(map[string]*streampb.ConsumerCursor),
 		},
 	}
 }
@@ -40,7 +38,7 @@ func msgs(bodies ...string) []*streampb.StreamMessage {
 }
 
 func TestAddMessagesAssignsContiguousOffsets(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 
 	first, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c")})
 	require.NoError(t, err)
@@ -56,7 +54,7 @@ func TestAddMessagesAssignsContiguousOffsets(t *testing.T) {
 }
 
 func TestAddMessagesWritesTheBatchIntoTheComponent(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 
 	res, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
 	require.NoError(t, err)
@@ -71,7 +69,7 @@ func TestAddMessagesWritesTheBatchIntoTheComponent(t *testing.T) {
 }
 
 func TestDedupReturnsOriginalOffsets(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	req := AddMessagesRequest{Messages: msgs("a", "b"), ProducerID: "p1", Sequence: 1}
 
 	first, err := s.AddMessages(nil, req)
@@ -88,7 +86,7 @@ func TestDedupReturnsOriginalOffsets(t *testing.T) {
 }
 
 func TestDedupIgnoresPayloadMetadataMapOrder(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	for attempt := range 32 {
 		body := &commonpb.Payload{
 			Data: []byte("encoded"),
@@ -114,7 +112,7 @@ func TestDedupIgnoresPayloadMetadataMapOrder(t *testing.T) {
 }
 
 func TestDedupRejectsDifferentContent(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{
 		Messages: msgs("a"), ProducerID: "p1", Sequence: 1,
 	})
@@ -130,7 +128,7 @@ func TestDedupRejectsDifferentContent(t *testing.T) {
 }
 
 func TestExpectedOffsetMismatchReportsHead(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a")})
 	require.NoError(t, err)
 
@@ -142,19 +140,8 @@ func TestExpectedOffsetMismatchReportsHead(t *testing.T) {
 	require.Contains(t, err.Error(), "stream head is 1")
 }
 
-func TestOwnerEpochFencesStaleProducer(t *testing.T) {
-	s := newTestStream(t, 100)
-	s.State.OwnerEpoch = 5
-
-	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), OwnerEpoch: 4})
-	require.Error(t, err)
-
-	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a"), OwnerEpoch: 5})
-	require.NoError(t, err)
-}
-
 func TestFinishWritingFencesOneProducerOnly(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	require.NoError(t, s.FinishWriting(nil, "p1"))
 
 	_, err := s.AddMessages(nil, AddMessagesRequest{
@@ -171,7 +158,7 @@ func TestFinishWritingFencesOneProducerOnly(t *testing.T) {
 }
 
 func TestCloseRejectsFurtherAppends(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	s.Close(time.Now(), nil)
 
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a")})
@@ -181,7 +168,7 @@ func TestCloseRejectsFurtherAppends(t *testing.T) {
 }
 
 func TestReadSpansBatchesAndStartsAtTheBatchHoldingTheOffset(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c")})
 	require.NoError(t, err)
 	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("d", "e")})
@@ -204,7 +191,7 @@ func TestReadSpansBatchesAndStartsAtTheBatchHoldingTheOffset(t *testing.T) {
 }
 
 func TestReclaimDropsOnlyBatchesFullyBelowTheFloor(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c")})
 	require.NoError(t, err)
 	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("d", "e")})
@@ -223,7 +210,7 @@ func TestReclaimDropsOnlyBatchesFullyBelowTheFloor(t *testing.T) {
 }
 
 func TestTruncateStopsAtAnActiveConsumersReplayFloor(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 
@@ -241,7 +228,7 @@ func TestTruncateStopsAtAnActiveConsumersReplayFloor(t *testing.T) {
 }
 
 func TestTruncateBounds(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
 	require.NoError(t, err)
 
@@ -253,27 +240,8 @@ func TestTruncateBounds(t *testing.T) {
 	require.Error(t, err, "truncation must not pass the head")
 }
 
-func TestBucketArithmetic(t *testing.T) {
-	require.Equal(t, int64(0), BucketOf(0, 10))
-	require.Equal(t, int64(0), BucketOf(9, 10))
-	require.Equal(t, int64(1), BucketOf(10, 10))
-
-	// Node ids are bucket-relative and start at 1, because the store rejects 0.
-	require.Equal(t, int64(20), BucketStart(2, 10))
-}
-
-func TestReclaimableBuckets(t *testing.T) {
-	// Only buckets lying entirely below the floor are reclaimable, so nothing a
-	// reader can still ask for is ever dropped.
-	require.Empty(t, ReclaimableBuckets(0, 3, 4))
-	require.Equal(t, []int64{0}, ReclaimableBuckets(0, 4, 4))
-	require.Equal(t, []int64{0, 1}, ReclaimableBuckets(0, 8, 4))
-	require.Equal(t, []int64{1}, ReclaimableBuckets(4, 8, 4))
-	require.Empty(t, ReclaimableBuckets(4, 5, 4))
-}
-
 func TestCapTruncatesInline(t *testing.T) {
-	s := newTestStream(t, 4)
+	s := newTestStream(t)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 4}
 
 	for range 4 {
@@ -281,14 +249,14 @@ func TestCapTruncatesInline(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Eight appended, four retained, so the floor sits at 4 and bucket 0 is
-	// entirely below it.
+	// Eight appended, four retained, so the floor sits at 4 and the first two
+	// batches are entirely below it.
 	require.Equal(t, int64(8), s.State.HeadOffset)
 	require.Equal(t, int64(4), s.State.BaseOffset)
 }
 
 func TestCapRefusesAnAppendItCouldOnlyAbsorbByDroppingReadRecords(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
 	require.NoError(t, s.RegisterConsumer(nil, "wf-1", "wf-1", "run-1", 0, false))
 
@@ -307,10 +275,10 @@ func TestCapRefusesAnAppendItCouldOnlyAbsorbByDroppingReadRecords(t *testing.T) 
 func TestCloseSchedulesRetentionOnlyWhenConfigured(t *testing.T) {
 	now := time.Now()
 
-	plain := newTestStream(t, 100)
+	plain := newTestStream(t)
 	require.True(t, plain.Close(now, nil).IsZero(), "no retention configured, nothing to schedule")
 
-	withRetention := newTestStream(t, 100)
+	withRetention := newTestStream(t)
 	withRetention.State.Lifecycle = &streampb.StreamLifecycle{
 		Retention: durationpb.New(time.Hour),
 	}
@@ -323,7 +291,7 @@ func TestCloseSchedulesRetentionOnlyWhenConfigured(t *testing.T) {
 }
 
 func TestRegisterConsumerPinsFromWhereItSubscribed(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 
@@ -337,13 +305,13 @@ func TestRegisterConsumerPinsFromWhereItSubscribed(t *testing.T) {
 }
 
 func TestAdvanceConsumerTracksWhereAConsumerHasReached(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 
-	// The cursor is what decides whether this consumer is worth waking, and
-	// nothing else now depends on it.
+	// The read position decides whether this consumer is worth waking. The
+	// replay floor, not this, is what retention respects.
 	s.AdvanceConsumer(nil, "workflow:output", 3)
 	require.Equal(t, int64(3), s.State.Consumers["workflow:output"].Offset)
 }
@@ -351,7 +319,7 @@ func TestAdvanceConsumerTracksWhereAConsumerHasReached(t *testing.T) {
 // Lowering the pin would hand back a guarantee already written to History: a
 // recorded range has to stay re-readable.
 func TestAdvanceConsumerNeverRewinds(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
@@ -359,13 +327,11 @@ func TestAdvanceConsumerNeverRewinds(t *testing.T) {
 	s.AdvanceConsumer(nil, "workflow:output", 3)
 	s.AdvanceConsumer(nil, "workflow:output", 1)
 
-	pin, ok := s.consumerPin()
-	require.True(t, ok)
-	require.Equal(t, int64(3), pin)
+	require.Equal(t, int64(3), s.State.Consumers["workflow:output"].GetOffset())
 }
 
 func TestRegisterConsumerRejectsAnOffsetBelowTheFloor(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	err = s.Truncate(nil, 2)
@@ -378,7 +344,7 @@ func TestRegisterConsumerRejectsAnOffsetBelowTheFloor(t *testing.T) {
 // Resubscribing reactivates the existing pin rather than resetting it, so a
 // consumer cannot rewind its own floor by subscribing again.
 func TestRegisterConsumerTwiceKeepsThePin(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
@@ -386,13 +352,11 @@ func TestRegisterConsumerTwiceKeepsThePin(t *testing.T) {
 
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 
-	pin, ok := s.consumerPin()
-	require.True(t, ok)
-	require.Equal(t, int64(3), pin)
+	require.Equal(t, int64(3), s.State.Consumers["workflow:output"].GetOffset())
 }
 
 func TestDeregisterConsumerReleasesThePin(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1, false))
@@ -404,7 +368,7 @@ func TestDeregisterConsumerReleasesThePin(t *testing.T) {
 }
 
 func TestMessageCapStillAppliesWithNoConsumerToProtect(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
 
 	for range 3 {
@@ -422,7 +386,7 @@ func TestMessageCapStillAppliesWithNoConsumerToProtect(t *testing.T) {
 // retroactively wrong, so the clamp keeps its bytes and the stream sits over
 // its cap until it goes away.
 func TestCapClampsToAConsumerThatRegisteredLate(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
 
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
@@ -437,7 +401,7 @@ func TestCapClampsToAConsumerThatRegisteredLate(t *testing.T) {
 // The reason the pin was taken out in the first place. It must not come back:
 // a consumer that finished has to stop holding storage.
 func TestAConsumerThatDeregisteredHoldsNothing(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
 	s.DeregisterConsumer(nil, "workflow:output")
@@ -449,10 +413,11 @@ func TestAConsumerThatDeregisteredHoldsNothing(t *testing.T) {
 	require.Equal(t, int64(4), s.State.BaseOffset)
 }
 
-// Coming back to a stream that moved past what its History refers to is the
-// case the old code discovered during a replay instead.
+// Coming back to a stream that moved past what its History refers to has to be
+// refused at registration, which is the last moment before the workflow
+// depends on those offsets again.
 func TestReregisteringBelowTheFloorIsRefused(t *testing.T) {
-	s := newTestStream(t, 100)
+	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	require.NoError(t, s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false))
@@ -469,7 +434,7 @@ func TestReregisteringBelowTheFloorIsRefused(t *testing.T) {
 // component state until no append fits, which leaves the stream unwritable for
 // good rather than failing the call that caused it.
 func TestStreamProducerTableIsBounded(t *testing.T) {
-	s := newTestStream(t, 100000)
+	s := newTestStream(t)
 
 	for i := range MaxProducersPerStream {
 		_, err := s.AddMessages(nil, AddMessagesRequest{
@@ -507,7 +472,7 @@ func TestStreamProducerTableIsBounded(t *testing.T) {
 // Each consumer holds a truncation floor, so an unbounded table pins storage as
 // well as growing state.
 func TestStreamConsumerTableIsBounded(t *testing.T) {
-	s := newTestStream(t, 100000)
+	s := newTestStream(t)
 
 	for i := range MaxConsumersPerStream {
 		require.NoError(t, s.RegisterConsumer(

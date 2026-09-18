@@ -9,8 +9,13 @@ import "temporal/api/common/v1/message.proto";
 option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
 
 // Size is O(producers + consumers), never O(messages). Payload bytes live in
-// the log, not here, which is what keeps this off the CHASM partial-read path.
+// the component's data nodes, not here, which keeps this off the CHASM
+// partial-read path.
 message StreamState {
+  // Field numbers of removed fields, kept out of reuse so an old blob never
+  // decodes into a field with a different meaning.
+  reserved 3, 6, 7, 8;
+
   // Visibility frontier. Readers never observe an offset at or past this.
   int64 head_offset = 1;
   // Truncation floor. Offsets below this are gone.
@@ -18,17 +23,6 @@ message StreamState {
 
   bool closed = 4;
   temporal.api.common.v1.Payload close_reason = 5;
-
-  // Bumped on ownership change so a stale producer's write fails.
-  int64 owner_epoch = 6;
-
-  // Immutable once set. Offsets roll to a new log tree every bucket_size so no
-  // single storage partition grows with the stream.
-  int64 bucket_size = 7;
-
-  // Identity of the log this stream writes to. Bucket trees are derived from
-  // it, so there is no per-bucket index to store.
-  string collection_id = 8;
 
   map<string, ProducerCursor> producers = 9;
   map<string, ConsumerCursor> consumers = 10;
@@ -82,10 +76,9 @@ message ConsumerCursor {
 // range. Keeping it on the stream would make the advance a cross-execution
 // write, and a crash between the two would either redeliver or skip.
 message WorkflowStreamCursor {
+  reserved 2, 3;
+
   string stream_id = 1;
-  // Enough to address the log without reading the stream component first.
-  string collection_id = 2;
-  int64 bucket_size = 3;
 
   // Next offset to deliver.
   int64 offset = 4;
@@ -116,7 +109,7 @@ message WorkflowStreamCursor {
 message StreamLifecycle {
   // How long a closed stream stays readable before it is deleted.
   google.protobuf.Duration retention = 1;
-  // Cap on readable messages. Older whole buckets are reclaimed once the floor
+  // Cap on readable messages. Whole batches are reclaimed once the floor
   // passes them, so a capped stream has bounded storage.
   int64 max_items = 2;
 }

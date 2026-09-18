@@ -61,8 +61,8 @@ type (
 		workflowTaskDeployment  *deploymentpb.Deployment
 
 		// internal state
-		// Log writes staged by stream commands, flushed before this workflow
-		// task commits.
+		// Subscribe commands for streams in other executions, resolved before
+		// this workflow task commits.
 		stagedStreamSubscriptions           []chasmworkflow.PendingStreamSubscription
 		hasBufferedEventsOrMessages         bool
 		workflowTaskFailedCause             *workflowTaskFailedCause

@@ -558,7 +558,7 @@ func TestStreamPollReadsOnlyWhatItReturns(t *testing.T) {
 		"a filtered page advanced past its own bound, so the read ran to the head")
 }
 
-// A stream id can be reused. The cached bytes belong to the log, not to the
+// A stream id can be reused. The bytes belong to the execution, not to the
 // name, so a reader of the new stream must never be served the old one's.
 func TestStreamPollAfterIdIsReusedServesTheNewStream(t *testing.T) {
 	s := newStreamTestEnv(t)

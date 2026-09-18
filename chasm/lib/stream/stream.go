@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"maps"
 	"slices"
@@ -16,9 +17,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Stream is a durable, offset-addressed append-only sequence. It holds only the
-// frontier: the payload bytes live in the log (see log.go), so this state is
-// O(producers + consumers) no matter how long the stream gets.
+// Stream is a durable, offset-addressed append-only sequence. State holds the
+// frontier and the producer and consumer tables, so it is O(producers +
+// consumers) no matter how long the stream gets; the payload lives in Batches.
 //
 // Appending never schedules a workflow task. A stream item is data produced by
 // an execution, not a decision input to it, so nothing in a workflow's state
@@ -32,8 +33,8 @@ type Stream struct {
 	// data nodes, so they replicate with the component and are reclaimed with
 	// it, and a retry addresses the same key rather than racing it.
 	//
-	// They also live in mutable state, which caps a stream at the execution
-	// size limit. That is the trade for not owning a store.
+	// They also live in mutable state, so the payload counts against the
+	// execution size limit of whatever execution holds the stream.
 	Batches chasm.Map[int64, *commonpb.DataBlob]
 
 	// Present so streams are listable. Operators need to find them the same way
@@ -43,9 +44,7 @@ type Stream struct {
 }
 
 type NewStreamRequest struct {
-	CollectionID string
-	BucketSize   int64
-	Lifecycle    *streampb.StreamLifecycle
+	Lifecycle *streampb.StreamLifecycle
 
 	// Attached means the stream is a subcomponent of another execution rather
 	// than a root. CHASM requires a visibility component to be an immediate
@@ -62,9 +61,6 @@ type AddMessagesRequest struct {
 	ProducerID     string
 	Sequence       int64
 	ExpectedOffset *int64
-
-	// Optional fencing. Rejected if below the stream's current epoch.
-	OwnerEpoch int64
 }
 
 type AddMessagesResult struct {
@@ -82,10 +78,6 @@ type AddMessagesResult struct {
 }
 
 func NewStream(ctx chasm.MutableContext, req NewStreamRequest) (*Stream, error) {
-	bucketSize := req.BucketSize
-	if bucketSize <= 0 {
-		bucketSize = DefaultBucketSize
-	}
 	visibility := chasm.NewEmptyField[*chasm.Visibility]()
 	if !req.Attached {
 		visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
@@ -94,11 +86,9 @@ func NewStream(ctx chasm.MutableContext, req NewStreamRequest) (*Stream, error) 
 		Visibility: visibility,
 		Batches:    make(chasm.Map[int64, *commonpb.DataBlob]),
 		State: &streampb.StreamState{
-			CollectionId: req.CollectionID,
-			BucketSize:   bucketSize,
-			Lifecycle:    req.Lifecycle,
-			Producers:    make(map[string]*streampb.ProducerCursor),
-			Consumers:    make(map[string]*streampb.ConsumerCursor),
+			Lifecycle: req.Lifecycle,
+			Producers: make(map[string]*streampb.ProducerCursor),
+			Consumers: make(map[string]*streampb.ConsumerCursor),
 		},
 	}, nil
 }
@@ -167,10 +157,6 @@ func (s *Stream) AddMessages(
 		return *replay, nil
 	}
 
-	if req.OwnerEpoch != 0 && req.OwnerEpoch < s.State.OwnerEpoch {
-		return AddMessagesResult{}, serviceerror.NewFailedPrecondition("producer has been fenced")
-	}
-
 	// After the retry check, so a known producer is never rejected for room.
 	if err := s.checkProducerRoom(req.ProducerID); err != nil {
 		return AddMessagesResult{}, err
@@ -228,9 +214,8 @@ func (s *Stream) AddMessages(
 // sees the new frontier while closing its own transaction, so waking it through
 // a task would only duplicate a decision already made locally.
 func (s *Stream) notifyConsumers(mctx chasm.MutableContext) {
-	// The append path previews itself against a detached copy to work out which
-	// log node to write, and that preview has no transition to attach a task
-	// to. Only the real transition, which carries a context, schedules one.
+	// Without a context there is no transition to attach the task to. The
+	// component's own unit tests drive the transitions that way.
 	if mctx == nil {
 		return
 	}
@@ -293,7 +278,7 @@ func (s *Stream) checkProducer(req AddMessagesRequest, hash []byte) (*AddMessage
 	// Same sequence. Identical content is a retry; different content is a
 	// client bug, and returning the recorded offsets would report success while
 	// silently dropping the caller's data.
-	if !equalHash(cursor.ContentHash, hash) {
+	if !bytes.Equal(cursor.ContentHash, hash) {
 		return nil, serviceerror.NewInvalidArgumentf(
 			"producer sequence %d already used with different content", req.Sequence)
 	}
@@ -639,25 +624,6 @@ func (s *Stream) AdvanceConsumer(_ chasm.MutableContext, consumerID string, offs
 	consumer.Offset = offset
 }
 
-// consumerPin is the lowest offset any active consumer has reached. Nothing in
-// the write path consults it, by the decision above; it is how the consumer
-// table is read back, and what asserts that a re-registration cannot rewind a
-// consumer's recorded position.
-func (s *Stream) consumerPin() (int64, bool) {
-	var pin int64
-	found := false
-	for _, c := range s.State.Consumers {
-		if !c.Active {
-			continue
-		}
-		if !found || c.Offset < pin {
-			pin = c.Offset
-			found = true
-		}
-	}
-	return pin, found
-}
-
 // DeregisterConsumer releases the floor a consumer was holding, so retention
 // and the message cap can reach its messages again.
 func (s *Stream) DeregisterConsumer(_ chasm.MutableContext, consumerID string) {
@@ -684,16 +650,4 @@ func marshalBatch(messages []*streampb.StreamMessage) (*commonpb.DataBlob, error
 func contentHash(data []byte) []byte {
 	sum := sha256.Sum256(data)
 	return sum[:]
-}
-
-func equalHash(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

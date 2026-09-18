@@ -487,10 +487,9 @@ func sliceForEvent(slices []*streampb.StreamSlice, eventID int64) *streampb.Stre
 // its own transaction, so the stream pushes it. The push dirties the consumer,
 // whose transaction close then sees it is behind and schedules a workflow task.
 //
-// The log is read from the stream's own shard rather than the consumer's.
-// History nodes are stored per shard, so reading an external stream from the
-// consumer's shard finds nothing, and the workflow task then fails to start
-// and is dropped rather than reporting anything useful.
+// The payload is read from the stream's own execution, which can live on
+// another shard, so delivery has to route the read rather than resolve the
+// stream locally.
 func TestWorkflowConsumesAStreamItDoesNotOwn(t *testing.T) {
 	env := testcore.NewEnv(t)
 	s := newStreamTestEnvFrom(t, env)
@@ -703,10 +702,10 @@ func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
 
 // A workflow subscribing itself, rather than being subscribed out of band.
 //
-// The command carries only the stream id and a start offset. Everything else
-// the cursor needs is looked up by the server: a workflow cannot read another
-// execution's collection id or bucket size without doing I/O, and a value it
-// carried would be a reading rather than a fact, so it could differ on replay.
+// The command carries only the stream id and a start offset. The server
+// resolves the offset against the stream's frontier: a workflow cannot read
+// another execution's frontier without doing I/O, and a value it carried would
+// be a reading rather than a fact, so it could differ on replay.
 func TestWorkflowSubscribesToAStreamItself(t *testing.T) {
 	env := testcore.NewEnv(t)
 	s := newStreamTestEnvFrom(t, env)

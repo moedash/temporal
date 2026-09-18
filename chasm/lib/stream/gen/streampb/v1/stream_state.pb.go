@@ -26,26 +26,19 @@ const (
 )
 
 // Size is O(producers + consumers), never O(messages). Payload bytes live in
-// the log, not here, which is what keeps this off the CHASM partial-read path.
+// the component's data nodes, not here, which keeps this off the CHASM
+// partial-read path.
 type StreamState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Visibility frontier. Readers never observe an offset at or past this.
 	HeadOffset int64 `protobuf:"varint,1,opt,name=head_offset,json=headOffset,proto3" json:"head_offset,omitempty"`
 	// Truncation floor. Offsets below this are gone.
-	BaseOffset  int64       `protobuf:"varint,2,opt,name=base_offset,json=baseOffset,proto3" json:"base_offset,omitempty"`
-	Closed      bool        `protobuf:"varint,4,opt,name=closed,proto3" json:"closed,omitempty"`
-	CloseReason *v1.Payload `protobuf:"bytes,5,opt,name=close_reason,json=closeReason,proto3" json:"close_reason,omitempty"`
-	// Bumped on ownership change so a stale producer's write fails.
-	OwnerEpoch int64 `protobuf:"varint,6,opt,name=owner_epoch,json=ownerEpoch,proto3" json:"owner_epoch,omitempty"`
-	// Immutable once set. Offsets roll to a new log tree every bucket_size so no
-	// single storage partition grows with the stream.
-	BucketSize int64 `protobuf:"varint,7,opt,name=bucket_size,json=bucketSize,proto3" json:"bucket_size,omitempty"`
-	// Identity of the log this stream writes to. Bucket trees are derived from
-	// it, so there is no per-bucket index to store.
-	CollectionId string                     `protobuf:"bytes,8,opt,name=collection_id,json=collectionId,proto3" json:"collection_id,omitempty"`
-	Producers    map[string]*ProducerCursor `protobuf:"bytes,9,rep,name=producers,proto3" json:"producers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Consumers    map[string]*ConsumerCursor `protobuf:"bytes,10,rep,name=consumers,proto3" json:"consumers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Lifecycle    *StreamLifecycle           `protobuf:"bytes,11,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
+	BaseOffset  int64                      `protobuf:"varint,2,opt,name=base_offset,json=baseOffset,proto3" json:"base_offset,omitempty"`
+	Closed      bool                       `protobuf:"varint,4,opt,name=closed,proto3" json:"closed,omitempty"`
+	CloseReason *v1.Payload                `protobuf:"bytes,5,opt,name=close_reason,json=closeReason,proto3" json:"close_reason,omitempty"`
+	Producers   map[string]*ProducerCursor `protobuf:"bytes,9,rep,name=producers,proto3" json:"producers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Consumers   map[string]*ConsumerCursor `protobuf:"bytes,10,rep,name=consumers,proto3" json:"consumers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Lifecycle   *StreamLifecycle           `protobuf:"bytes,11,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
 	// Set when a successor run takes ownership, so an in-flight poll can follow
 	// the chain instead of stalling on a superseded run.
 	RedirectRunId string `protobuf:"bytes,12,opt,name=redirect_run_id,json=redirectRunId,proto3" json:"redirect_run_id,omitempty"`
@@ -111,27 +104,6 @@ func (x *StreamState) GetCloseReason() *v1.Payload {
 		return x.CloseReason
 	}
 	return nil
-}
-
-func (x *StreamState) GetOwnerEpoch() int64 {
-	if x != nil {
-		return x.OwnerEpoch
-	}
-	return 0
-}
-
-func (x *StreamState) GetBucketSize() int64 {
-	if x != nil {
-		return x.BucketSize
-	}
-	return 0
-}
-
-func (x *StreamState) GetCollectionId() string {
-	if x != nil {
-		return x.CollectionId
-	}
-	return ""
 }
 
 func (x *StreamState) GetProducers() map[string]*ProducerCursor {
@@ -353,9 +325,6 @@ func (x *ConsumerCursor) GetReplayFloor() int64 {
 type WorkflowStreamCursor struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	StreamId string                 `protobuf:"bytes,1,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
-	// Enough to address the log without reading the stream component first.
-	CollectionId string `protobuf:"bytes,2,opt,name=collection_id,json=collectionId,proto3" json:"collection_id,omitempty"`
-	BucketSize   int64  `protobuf:"varint,3,opt,name=bucket_size,json=bucketSize,proto3" json:"bucket_size,omitempty"`
 	// Next offset to deliver.
 	Offset int64 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
 	// The stream's frontier as of the last delivery. A workflow consuming a
@@ -415,20 +384,6 @@ func (x *WorkflowStreamCursor) GetStreamId() string {
 		return x.StreamId
 	}
 	return ""
-}
-
-func (x *WorkflowStreamCursor) GetCollectionId() string {
-	if x != nil {
-		return x.CollectionId
-	}
-	return ""
-}
-
-func (x *WorkflowStreamCursor) GetBucketSize() int64 {
-	if x != nil {
-		return x.BucketSize
-	}
-	return 0
 }
 
 func (x *WorkflowStreamCursor) GetOffset() int64 {
@@ -539,19 +494,14 @@ var File_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto protorefle
 
 const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc = "" +
 	"\n" +
-	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\x8b\a\n" +
+	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xbc\x06\n" +
 	"\vStreamState\x12\x1f\n" +
 	"\vhead_offset\x18\x01 \x01(\x03R\n" +
 	"headOffset\x12\x1f\n" +
 	"\vbase_offset\x18\x02 \x01(\x03R\n" +
 	"baseOffset\x12\x16\n" +
 	"\x06closed\x18\x04 \x01(\bR\x06closed\x12B\n" +
-	"\fclose_reason\x18\x05 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\vcloseReason\x12\x1f\n" +
-	"\vowner_epoch\x18\x06 \x01(\x03R\n" +
-	"ownerEpoch\x12\x1f\n" +
-	"\vbucket_size\x18\a \x01(\x03R\n" +
-	"bucketSize\x12#\n" +
-	"\rcollection_id\x18\b \x01(\tR\fcollectionId\x12c\n" +
+	"\fclose_reason\x18\x05 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\vcloseReason\x12c\n" +
 	"\tproducers\x18\t \x03(\v2E.temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntryR\tproducers\x12c\n" +
 	"\tconsumers\x18\n" +
 	" \x03(\v2E.temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntryR\tconsumers\x12X\n" +
@@ -564,7 +514,7 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.stream.proto.v1.ProducerCursorR\x05value:\x028\x01\x1aw\n" +
 	"\x0eConsumersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12O\n" +
-	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.stream.proto.v1.ConsumerCursorR\x05value:\x028\x01\"\x96\x01\n" +
+	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.stream.proto.v1.ConsumerCursorR\x05value:\x028\x01J\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\t\"\x96\x01\n" +
 	"\x0eProducerCursor\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x03R\x03seq\x12!\n" +
 	"\ffirst_offset\x18\x02 \x01(\x03R\vfirstOffset\x12\x14\n" +
@@ -578,12 +528,9 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\x06offset\x18\x03 \x01(\x03R\x06offset\x12\x16\n" +
 	"\x06active\x18\x04 \x01(\bR\x06active\x12\x1a\n" +
 	"\bexternal\x18\x05 \x01(\bR\bexternal\x12!\n" +
-	"\freplay_floor\x18\x06 \x01(\x03R\vreplayFloor\"\xd2\x02\n" +
+	"\freplay_floor\x18\x06 \x01(\x03R\vreplayFloor\"\x98\x02\n" +
 	"\x14WorkflowStreamCursor\x12\x1b\n" +
-	"\tstream_id\x18\x01 \x01(\tR\bstreamId\x12#\n" +
-	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12\x1f\n" +
-	"\vbucket_size\x18\x03 \x01(\x03R\n" +
-	"bucketSize\x12\x16\n" +
+	"\tstream_id\x18\x01 \x01(\tR\bstreamId\x12\x16\n" +
 	"\x06offset\x18\x04 \x01(\x03R\x06offset\x12\x1d\n" +
 	"\n" +
 	"known_head\x18\b \x01(\x03R\tknownHead\x12\x1a\n" +
@@ -594,7 +541,7 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\vhas_pending\x18\a \x01(\bR\n" +
 	"hasPending\x12!\n" +
 	"\fstart_offset\x18\n" +
-	" \x01(\x03R\vstartOffset\"g\n" +
+	" \x01(\x03R\vstartOffsetJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"g\n" +
 	"\x0fStreamLifecycle\x127\n" +
 	"\tretention\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\tretention\x12\x1b\n" +
 	"\tmax_items\x18\x02 \x01(\x03R\bmaxItemsB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"

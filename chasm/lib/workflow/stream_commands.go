@@ -16,14 +16,12 @@ const DefaultStreamName = "output"
 
 // handleAddStreamMessagesCommand appends to a stream the workflow owns.
 //
-// The stream is a co-located subcomponent, so its frontier advances as part of
-// the workflow task's own commit: no extra transition and no cross-execution
-// write. The log bytes cannot be written here, because a command handler runs
-// under the state lock with no context to do I/O from, so they are staged and
-// flushed before the commit that makes them visible.
+// The stream is a co-located subcomponent, so the batch and the frontier land
+// in the workflow task's own commit: no extra transition, no cross-execution
+// write, and a task that fails takes the publish with it.
 //
 // The offsets are known here, unlike a subscription's, so the event is written
-// here too rather than being staged for the flush.
+// here too rather than reserved and filled in later.
 func handleAddStreamMessagesCommand(
 	chasmCtx chasm.MutableContext,
 	wf *Workflow,
@@ -39,7 +37,7 @@ func handleAddStreamMessagesCommand(
 		return serviceerror.NewInvalidArgument("AddStreamMessages command carries no messages")
 	}
 
-	// The batch becomes one log node, so the whole batch is what has to fit.
+	// The batch becomes one data node, so the whole batch is what has to fit.
 	// Left unchecked it fails later in the flush, which surfaces as a
 	// persistence error out of a task the worker will replay and re-issue
 	// forever, with nothing naming the batch as the cause.
@@ -82,11 +80,10 @@ func handleAddStreamMessagesCommand(
 
 // handleSubscribeStreamCommand registers this workflow as a consumer.
 //
-// A stream the workflow owns is subscribed here and now, because everything the
-// cursor needs is already in this execution. One in another execution cannot
-// be: its collection id is the stream's run id and its bucket size is its own,
-// and finding either means a lookup a command handler cannot do. Those are
-// staged and resolved in the flush before commit, the same way log writes are.
+// Nothing is registered here. A stream in another execution has to be pinned
+// on its own shard, which a command handler cannot reach while holding the
+// state lock, so the subscription is staged and resolved after the commands and
+// before the commit.
 func handleSubscribeStreamCommand(
 	chasmCtx chasm.MutableContext,
 	wf *Workflow,
@@ -188,8 +185,8 @@ func RecordStreamSubscribedOffset(event *historypb.HistoryEvent, startOffset int
 //
 // One per batch, holding the offset range and nothing else. That is what makes
 // it a fixed cost: a batch of one 20-byte message and a batch of a thousand
-// 2KB messages write the same event, because the bodies went to the stream's
-// log. It exists for the same reason the subscription event does, that a
+// 2KB messages write the same event, because the bodies stay in the stream
+// component. It exists for the same reason the subscription event does, that a
 // command producing no event desynchronises the command-to-event matching
 // every SDK's replay depends on, and it doubles as the only record in History
 // that the workflow published at all.
@@ -262,12 +259,7 @@ func (w *Workflow) streamNamed(ctx chasm.MutableContext, name string) (*stream.S
 			"workflow already owns %d streams, the limit", stream.MaxOwnedStreamsPerWorkflow)
 	}
 
-	// Keyed on the execution so the identity is stable for the workflow, and
-	// distinct from any other workflow reusing the same name.
-	created, err := stream.NewStream(ctx, stream.NewStreamRequest{
-		CollectionID: ctx.ExecutionKey().RunID + "/" + name,
-		Attached:     true,
-	})
+	created, err := stream.NewStream(ctx, stream.NewStreamRequest{Attached: true})
 	if err != nil {
 		return nil, err
 	}

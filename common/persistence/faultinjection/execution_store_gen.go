@@ -49,15 +49,6 @@ func (d faultInjectionExecutionStore) AppendHistoryNodes(ctx context.Context, re
 	return
 }
 
-// AppendStreamLog wraps ExecutionStore.AppendStreamLog.
-func (d faultInjectionExecutionStore) AppendStreamLog(ctx context.Context, request *_sourcePersistence.InternalAppendStreamLogRequest) (err error) {
-	err = d.generator.generate("AppendStreamLog", request).inject(func() error {
-		err = d.ExecutionStore.AppendStreamLog(ctx, request)
-		return err
-	})
-	return
-}
-
 // CompleteHistoryTask wraps ExecutionStore.CompleteHistoryTask.
 func (d faultInjectionExecutionStore) CompleteHistoryTask(ctx context.Context, request *_sourcePersistence.CompleteHistoryTaskRequest) (err error) {
 	err = d.generator.generate("CompleteHistoryTask", request).inject(func() error {
@@ -116,15 +107,6 @@ func (d faultInjectionExecutionStore) DeleteHistoryNodes(ctx context.Context, re
 func (d faultInjectionExecutionStore) DeleteReplicationTaskFromDLQ(ctx context.Context, request *_sourcePersistence.DeleteReplicationTaskFromDLQRequest) (err error) {
 	err = d.generator.generate("DeleteReplicationTaskFromDLQ", request).inject(func() error {
 		err = d.ExecutionStore.DeleteReplicationTaskFromDLQ(ctx, request)
-		return err
-	})
-	return
-}
-
-// DeleteStreamLogBucket wraps ExecutionStore.DeleteStreamLogBucket.
-func (d faultInjectionExecutionStore) DeleteStreamLogBucket(ctx context.Context, request *_sourcePersistence.InternalDeleteStreamLogBucketRequest) (err error) {
-	err = d.generator.generate("DeleteStreamLogBucket", request).inject(func() error {
-		err = d.ExecutionStore.DeleteStreamLogBucket(ctx, request)
 		return err
 	})
 	return
@@ -251,15 +233,6 @@ func (d faultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(ctx cont
 func (d faultInjectionExecutionStore) ReadHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalReadHistoryBranchRequest) (ip1 *_sourcePersistence.InternalReadHistoryBranchResponse, err error) {
 	err = d.generator.generate("ReadHistoryBranch", request).inject(func() error {
 		ip1, err = d.ExecutionStore.ReadHistoryBranch(ctx, request)
-		return err
-	})
-	return
-}
-
-// ReadStreamLog wraps ExecutionStore.ReadStreamLog.
-func (d faultInjectionExecutionStore) ReadStreamLog(ctx context.Context, request *_sourcePersistence.InternalReadStreamLogRequest) (ip1 *_sourcePersistence.InternalReadStreamLogResponse, err error) {
-	err = d.generator.generate("ReadStreamLog", request).inject(func() error {
-		ip1, err = d.ExecutionStore.ReadStreamLog(ctx, request)
 		return err
 	})
 	return

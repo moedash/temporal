@@ -143,7 +143,6 @@ type AddMessagesInput struct {
 	// by this repo's helper generator.
 	ExpectedOffset    int64 `protobuf:"varint,6,opt,name=expected_offset,json=expectedOffset,proto3" json:"expected_offset,omitempty"`
 	UseExpectedOffset bool  `protobuf:"varint,8,opt,name=use_expected_offset,json=useExpectedOffset,proto3" json:"use_expected_offset,omitempty"`
-	OwnerEpoch        int64 `protobuf:"varint,7,opt,name=owner_epoch,json=ownerEpoch,proto3" json:"owner_epoch,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -232,13 +231,6 @@ func (x *AddMessagesInput) GetUseExpectedOffset() bool {
 		return x.UseExpectedOffset
 	}
 	return false
-}
-
-func (x *AddMessagesInput) GetOwnerEpoch() int64 {
-	if x != nil {
-		return x.OwnerEpoch
-	}
-	return 0
 }
 
 type AddMessagesOutput struct {
@@ -2219,10 +2211,9 @@ func (x *RegisterStreamConsumerInput) GetStartOffset() int64 {
 type RegisterStreamConsumerOutput struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	StartOffset int64                  `protobuf:"varint,1,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
-	// What the consumer needs to address the log, all decided by the stream.
-	CollectionId  string `protobuf:"bytes,2,opt,name=collection_id,json=collectionId,proto3" json:"collection_id,omitempty"`
-	BucketSize    int64  `protobuf:"varint,3,opt,name=bucket_size,json=bucketSize,proto3" json:"bucket_size,omitempty"`
-	KnownHead     int64  `protobuf:"varint,4,opt,name=known_head,json=knownHead,proto3" json:"known_head,omitempty"`
+	// The frontier at registration, so the cursor starts with a known head
+	// instead of waiting for the first push.
+	KnownHead     int64 `protobuf:"varint,4,opt,name=known_head,json=knownHead,proto3" json:"known_head,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2260,20 +2251,6 @@ func (*RegisterStreamConsumerOutput) Descriptor() ([]byte, []int) {
 func (x *RegisterStreamConsumerOutput) GetStartOffset() int64 {
 	if x != nil {
 		return x.StartOffset
-	}
-	return 0
-}
-
-func (x *RegisterStreamConsumerOutput) GetCollectionId() string {
-	if x != nil {
-		return x.CollectionId
-	}
-	return ""
-}
-
-func (x *RegisterStreamConsumerOutput) GetBucketSize() int64 {
-	if x != nil {
-		return x.BucketSize
 	}
 	return 0
 }
@@ -3255,7 +3232,7 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12X\n" +
 	"\tlifecycle\x18\x03 \x01(\v2:.temporal.server.chasm.lib.stream.proto.v1.StreamLifecycleR\tlifecycle\"+\n" +
 	"\x12CreateStreamOutput\x12\x15\n" +
-	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\xf1\x02\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\xd6\x02\n" +
 	"\x10AddMessagesInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x15\n" +
@@ -3265,9 +3242,7 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"producerId\x12\x1a\n" +
 	"\bsequence\x18\x05 \x01(\x03R\bsequence\x12'\n" +
 	"\x0fexpected_offset\x18\x06 \x01(\x03R\x0eexpectedOffset\x12.\n" +
-	"\x13use_expected_offset\x18\b \x01(\bR\x11useExpectedOffset\x12\x1f\n" +
-	"\vowner_epoch\x18\a \x01(\x03R\n" +
-	"ownerEpoch\"\x91\x01\n" +
+	"\x13use_expected_offset\x18\b \x01(\bR\x11useExpectedOffsetJ\x04\b\a\x10\b\"\x91\x01\n" +
 	"\x11AddMessagesOutput\x12!\n" +
 	"\ffirst_offset\x18\x01 \x01(\x03R\vfirstOffset\x12\x1f\n" +
 	"\vnext_offset\x18\x02 \x01(\x03R\n" +
@@ -3405,14 +3380,11 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x120\n" +
 	"\x14consumer_workflow_id\x18\x03 \x01(\tR\x12consumerWorkflowId\x12!\n" +
-	"\fstart_offset\x18\x04 \x01(\x03R\vstartOffset\"\xa6\x01\n" +
+	"\fstart_offset\x18\x04 \x01(\x03R\vstartOffset\"l\n" +
 	"\x1cRegisterStreamConsumerOutput\x12!\n" +
-	"\fstart_offset\x18\x01 \x01(\x03R\vstartOffset\x12#\n" +
-	"\rcollection_id\x18\x02 \x01(\tR\fcollectionId\x12\x1f\n" +
-	"\vbucket_size\x18\x03 \x01(\x03R\n" +
-	"bucketSize\x12\x1d\n" +
+	"\fstart_offset\x18\x01 \x01(\x03R\vstartOffset\x12\x1d\n" +
 	"\n" +
-	"known_head\x18\x04 \x01(\x03R\tknownHead\"\xb9\x01\n" +
+	"known_head\x18\x04 \x01(\x03R\tknownHeadJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"\xb9\x01\n" +
 	"\x18AdvanceConsumerHeadInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +

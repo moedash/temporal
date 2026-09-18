@@ -152,10 +152,7 @@ func (h *handler) CreateStream(
 		ctx,
 		chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: in.GetStreamId()},
 		func(mctx chasm.MutableContext, input *streampb.CreateStreamInput) (*stream.Stream, error) {
-			return stream.NewStream(mctx, stream.NewStreamRequest{
-				CollectionID: mctx.ExecutionKey().RunID,
-				Lifecycle:    input.GetLifecycle(),
-			})
+			return stream.NewStream(mctx, stream.NewStreamRequest{Lifecycle: input.GetLifecycle()})
 		},
 		in,
 	)
@@ -191,7 +188,6 @@ func (h *handler) AddMessages(
 		Messages:   in.GetMessages(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
-		OwnerEpoch: in.GetOwnerEpoch(),
 	}
 	if in.GetUseExpectedOffset() {
 		expected := in.GetExpectedOffset()
@@ -238,7 +234,7 @@ func (h *handler) AddWorkflowMessages(
 
 	name := ownedStreamName(in.GetStreamName())
 
-	// Keyed on the owner and the name, which is what identifies the log here.
+	// Keyed on the owner and the name, which is what identifies the stream here.
 	unlock := h.lockStream(req.GetNamespaceId(), in.GetWorkflowId()+"/"+name)
 	defer unlock()
 
@@ -254,8 +250,7 @@ func (h *handler) AddWorkflowMessages(
 		return nil, err
 	}
 	if state == nil {
-		// Nothing has published yet, so the collection id and bucket size this
-		// write needs do not exist. Creating the stream is a transition, and
+		// Nothing has published yet. Creating the stream is a transition, and
 		// only the first writer ever pays it.
 		state, _, err = chasm.UpdateComponent(ctx, ref,
 			(*chasmworkflow.Workflow).EnsureOwnedStream, name)
@@ -388,11 +383,9 @@ func (h *handler) subscribeToExternalStream(
 		workflowRef(namespaceID, in.GetWorkflowId(), in.GetOwnerRunId()),
 		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, offset int64) (int64, error) {
 			return wf.SubscribeToExternalStream(mctx, chasmworkflow.ExternalStreamSubscription{
-				StreamID:     in.GetStreamId(),
-				CollectionID: pin.GetCollectionId(),
-				BucketSize:   pin.GetBucketSize(),
-				StartOffset:  offset,
-				KnownHead:    pin.GetKnownHead(),
+				StreamID:    in.GetStreamId(),
+				StartOffset: offset,
+				KnownHead:   pin.GetKnownHead(),
 			})
 		},
 		pin.GetStartOffset(),
@@ -410,8 +403,8 @@ func (h *handler) subscribeToExternalStream(
 //
 // Internal. Called by SubscribeWorkflow, which is routed to the consumer and so
 // cannot reach the stream itself. It resolves a negative start offset here,
-// where the frontier is, and hands back everything the cursor needs to address
-// the log, so the consumer records facts rather than readings.
+// where the frontier is, and hands back the resolved offset and the frontier,
+// so the consumer records facts rather than readings.
 func (h *handler) RegisterStreamConsumer(
 	ctx context.Context,
 	req *streampb.RegisterStreamConsumerRequest,
@@ -451,10 +444,8 @@ func (h *handler) RegisterStreamConsumer(
 
 	return &streampb.RegisterStreamConsumerResponse{
 		FrontendResponse: &streampb.RegisterStreamConsumerOutput{
-			StartOffset:  startOffset,
-			CollectionId: state.GetCollectionId(),
-			BucketSize:   state.GetBucketSize(),
-			KnownHead:    state.GetHeadOffset(),
+			StartOffset: startOffset,
+			KnownHead:   state.GetHeadOffset(),
 		},
 	}, nil
 }
@@ -523,10 +514,9 @@ func (h *handler) PollMessages(
 
 // PollWorkflowMessages reads a stream a workflow owns.
 //
-// Everything that addresses the stream comes from its owner: the shard, the
-// frontier, and the collection the log nodes were written under. That is also
-// why the log read below needs no special case. An attached stream's nodes are
-// written under the owner's shard, which is the shard this call routed to.
+// An attached stream is reached through its owner, so this call routes on the
+// workflow id and both the frontier and the batches come out of the owner's
+// component.
 func (h *handler) PollWorkflowMessages(
 	ctx context.Context,
 	req *streampb.PollWorkflowMessagesRequest,

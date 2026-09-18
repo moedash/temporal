@@ -10,20 +10,16 @@ import (
 func newTestCursor(offset int64) *Cursor {
 	return &Cursor{
 		State: &streampb.WorkflowStreamCursor{
-			StreamId:     "s-1",
-			CollectionId: "col-1",
-			BucketSize:   DefaultBucketSize,
-			Offset:       offset,
+			StreamId: "s-1",
+			Offset:   offset,
 		},
 	}
 }
 
 func TestNewCursorRejectsIncompleteRequests(t *testing.T) {
 	cases := map[string]NewCursorRequest{
-		"no stream id":     {CollectionID: "col-1", BucketSize: 10},
-		"no collection id": {StreamID: "s-1", BucketSize: 10},
-		"zero bucket size": {StreamID: "s-1", CollectionID: "col-1"},
-		"negative start":   {StreamID: "s-1", CollectionID: "col-1", BucketSize: 10, StartOffset: -1},
+		"no stream id":   {},
+		"negative start": {StreamID: "s-1", StartOffset: -1},
 	}
 
 	for name, req := range cases {
@@ -57,9 +53,8 @@ func TestCursorCommitAdvancesAndClears(t *testing.T) {
 	require.False(t, ok, "committing again must not re-record the range")
 }
 
-// The distinction this pins is the one §8.2 of the design turns on: a task that
-// observed nothing still has to be recorded, so an empty range is a pending
-// range, not the absence of one.
+// A task that observed nothing still has to be recorded, so an empty range is a
+// pending range, not the absence of one. Replay depends on the difference.
 func TestCursorTreatsAnEmptyRangeAsAFact(t *testing.T) {
 	c := newTestCursor(9)
 
@@ -102,17 +97,4 @@ func TestCursorRedeliveryReplacesTheStagedRange(t *testing.T) {
 	require.Equal(t, int64(2), from)
 	require.Equal(t, int64(9), to)
 	require.Equal(t, int64(2), c.Offset(), "staging alone must never advance the cursor")
-}
-
-func TestCursorAbandonLeavesTheOffsetAlone(t *testing.T) {
-	c := newTestCursor(3)
-
-	require.NoError(t, c.StagePending(nil, 3, 8))
-	c.Abandon(nil)
-
-	_, _, ok := c.Pending()
-	require.False(t, ok)
-	require.Equal(t, int64(3), c.Offset())
-
-	require.NoError(t, c.StagePending(nil, 3, 6), "the next delivery re-reads from the unchanged cursor")
 }
