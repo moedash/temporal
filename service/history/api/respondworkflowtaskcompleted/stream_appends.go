@@ -5,6 +5,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm/lib/stream"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
@@ -39,6 +40,7 @@ func resolveStagedStreamSubscriptions(
 	ctx context.Context,
 	ms historyi.MutableState,
 	namespaceID string,
+	limits stream.Limits,
 	staged []chasmworkflow.PendingStreamSubscription,
 ) error {
 	if len(staged) == 0 {
@@ -69,7 +71,7 @@ func resolveStagedStreamSubscriptions(
 		// it is in this execution, and its cursor commits with everything else.
 		if _, owned := wf.Streams[pending.StreamID]; owned {
 			startOffset, err := wf.SubscribeToOwnedStream(
-				chasmCtx, pending.StreamID, pending.StartOffset)
+				chasmCtx, pending.StreamID, pending.StartOffset, limits)
 			if err != nil {
 				return chasmworkflow.StreamAdmissionFailure(
 					enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)

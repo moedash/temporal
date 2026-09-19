@@ -63,7 +63,7 @@ func TestSubscribeRegistersTheConsumer(t *testing.T) {
 		DefaultStreamName: chasm.NewComponentField(ctx, owned),
 	}
 
-	start, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0)
+	start, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0, stream.DefaultLimits())
 	require.NoError(t, err)
 	require.Equal(t, int64(0), start)
 
@@ -86,7 +86,7 @@ func TestSubscribeFromTheTailResolvesToHead(t *testing.T) {
 		DefaultStreamName: chasm.NewComponentField(ctx, owned),
 	}
 
-	start, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, -1)
+	start, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, -1, stream.DefaultLimits())
 	require.NoError(t, err)
 	require.Equal(t, int64(4), start, "a negative offset means from wherever the stream is now")
 }
@@ -95,7 +95,7 @@ func TestSubscribeRejectsAStreamTheWorkflowDoesNotOwn(t *testing.T) {
 	ctx := newStreamCursorTestContext()
 	w := &Workflow{}
 
-	_, err := w.SubscribeToOwnedStream(ctx, "absent", 0)
+	_, err := w.SubscribeToOwnedStream(ctx, "absent", 0, stream.DefaultLimits())
 	require.ErrorContains(t, err, "does not own a stream")
 }
 
@@ -109,7 +109,7 @@ func TestCommitStreamCursorsAdvancesTheConsumer(t *testing.T) {
 		DefaultStreamName: chasm.NewComponentField(ctx, owned),
 	}
 
-	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0)
+	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0, stream.DefaultLimits())
 	require.NoError(t, err)
 
 	cursor := w.StreamCursors[DefaultStreamName].Get(ctx)
@@ -134,7 +134,7 @@ func TestCommitStreamCursorsWithAnEmptyRangeHoldsTheConsumer(t *testing.T) {
 		DefaultStreamName: chasm.NewComponentField(ctx, owned),
 	}
 
-	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0)
+	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0, stream.DefaultLimits())
 	require.NoError(t, err)
 
 	cursor := w.StreamCursors[DefaultStreamName].Get(ctx)
@@ -181,8 +181,9 @@ func TestPublishStagesEachBatchAtItsOwnOffset(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts))
-	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts))
+	limits := stream.DefaultLimits()
+	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts, limits))
+	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts, limits))
 
 	// Both publishes committed with the workflow task, so the batches are on
 	// the component keyed by the offsets they start at.
@@ -214,7 +215,7 @@ func TestConsumerOutrunByTruncationIsToldSo(t *testing.T) {
 		DefaultStreamName: chasm.NewComponentField(ctx, owned),
 	}
 
-	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0)
+	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0, stream.DefaultLimits())
 	require.NoError(t, err)
 
 	// Someone decides these messages are no longer needed, and only then can

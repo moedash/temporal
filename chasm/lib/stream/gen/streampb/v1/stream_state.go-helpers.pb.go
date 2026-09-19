@@ -42,6 +42,43 @@ func (this *StreamState) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type StreamBudget to the protobuf v3 wire format
+func (val *StreamBudget) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StreamBudget from the protobuf v3 wire format
+func (val *StreamBudget) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StreamBudget) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StreamBudget values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StreamBudget) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StreamBudget
+	switch t := that.(type) {
+	case *StreamBudget:
+		that1 = t
+	case StreamBudget:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type ProducerCursor to the protobuf v3 wire format
 func (val *ProducerCursor) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

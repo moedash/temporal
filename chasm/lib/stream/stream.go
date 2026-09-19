@@ -46,6 +46,10 @@ type Stream struct {
 type NewStreamRequest struct {
 	Lifecycle *streampb.StreamLifecycle
 
+	// Budget bounds what the stream may hold. Set for a stream a workflow
+	// owns, whose batches are the owning execution's mutable state.
+	Budget *streampb.StreamBudget
+
 	// Attached means the stream is a subcomponent of another execution rather
 	// than a root. CHASM requires a visibility component to be an immediate
 	// child of the root, so an attached stream carries none and is found
@@ -61,6 +65,10 @@ type AddMessagesRequest struct {
 	ProducerID     string
 	Sequence       int64
 	ExpectedOffset *int64
+
+	// The namespace's limits, resolved by the caller. A zero value means the
+	// defaults.
+	Limits Limits
 }
 
 type AddMessagesResult struct {
@@ -87,6 +95,7 @@ func NewStream(ctx chasm.MutableContext, req NewStreamRequest) (*Stream, error) 
 		Batches:    make(chasm.Map[int64, *commonpb.DataBlob]),
 		State: &streampb.StreamState{
 			Lifecycle: req.Lifecycle,
+			Budget:    req.Budget,
 			Producers: make(map[string]*streampb.ProducerCursor),
 			Consumers: make(map[string]*streampb.ConsumerCursor),
 		},
@@ -140,7 +149,8 @@ func (s *Stream) AddMessages(
 		return AddMessagesResult{}, serviceerror.NewInvalidArgumentf(
 			"batch of %d exceeds the limit of %d messages", len(req.Messages), MaxMessagesPerBatch)
 	}
-	if err := checkBatchBytes(req.Messages); err != nil {
+	limits := req.Limits.withDefaults()
+	if err := checkBatchBytes(req.Messages, limits); err != nil {
 		return AddMessagesResult{}, err
 	}
 	// A message with no kind is data. Delivery to a workflow drops anything
@@ -167,7 +177,10 @@ func (s *Stream) AddMessages(
 	}
 
 	// After the retry check, so a known producer is never rejected for room.
-	if err := s.checkProducerRoom(req.ProducerID); err != nil {
+	if err := s.checkProducerRoom(req.ProducerID, limits.MaxProducersPerStream); err != nil {
+		return AddMessagesResult{}, err
+	}
+	if err := s.checkBudget(int64(len(req.Messages)), int64(len(blob.Data))); err != nil {
 		return AddMessagesResult{}, err
 	}
 
@@ -194,6 +207,7 @@ func (s *Stream) AddMessages(
 	s.Batches[first] = chasm.NewDataField(mctx, blob)
 
 	s.State.HeadOffset = first + count
+	s.State.AppendedBytes += int64(len(blob.Data))
 	if req.ProducerID != "" {
 		if s.State.Producers == nil {
 			s.State.Producers = make(map[string]*streampb.ProducerCursor)
@@ -241,14 +255,14 @@ func (s *Stream) notifyConsumers(mctx chasm.MutableContext) {
 // Entries whose whole batch sits below the floor go first: a retry of a batch
 // that truncation already removed cannot be served its recorded offsets
 // anyway, so the entry has no use left.
-func (s *Stream) checkProducerRoom(producerID string) error {
+func (s *Stream) checkProducerRoom(producerID string, maxProducers int) error {
 	if producerID == "" {
 		return nil
 	}
 	if _, known := s.State.Producers[producerID]; known {
 		return nil
 	}
-	if len(s.State.Producers) < MaxProducersPerStream {
+	if len(s.State.Producers) < maxProducers {
 		return nil
 	}
 	for id, cursor := range s.State.Producers {
@@ -256,9 +270,35 @@ func (s *Stream) checkProducerRoom(producerID string) error {
 			delete(s.State.Producers, id)
 		}
 	}
-	if len(s.State.Producers) >= MaxProducersPerStream {
+	if len(s.State.Producers) >= maxProducers {
 		return serviceerror.NewInvalidArgumentf(
-			"stream already tracks %d producers, which is the limit", MaxProducersPerStream)
+			"stream already tracks %d producers, which is the limit", maxProducers)
+	}
+	return nil
+}
+
+// checkBudget refuses an append a budgeted stream cannot hold.
+//
+// Refused rather than reclaimed: the budget exists because the batches are
+// mutable state of the execution that owns the stream, and the alternative to
+// refusing here is the execution size limit terminating that workflow later,
+// with nothing naming the stream as the cause.
+func (s *Stream) checkBudget(count int64, size int64) error {
+	budget := s.State.GetBudget()
+	if budget == nil {
+		return nil
+	}
+	if max := budget.GetMaxItems(); max > 0 && s.State.HeadOffset+count > max {
+		return serviceerror.NewResourceExhaustedf(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT,
+			"stream holds %d of its budget of %d messages; the append of %d does not fit",
+			s.State.HeadOffset, max, count)
+	}
+	if max := budget.GetMaxBytes(); max > 0 && s.State.AppendedBytes+size > max {
+		return serviceerror.NewResourceExhaustedf(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT,
+			"stream holds %d of its budget of %d bytes; the append of %d does not fit",
+			s.State.AppendedBytes, max, size)
 	}
 	return nil
 }
@@ -577,6 +617,18 @@ func (s *Stream) checkCapRoom(count int64) error {
 		maxItems, holder, floor)
 }
 
+// ConsumerRegistration describes a consumer being registered on a stream.
+type ConsumerRegistration struct {
+	ConsumerID string
+	WorkflowID string
+	RunID      string
+	// Negative means the head as of the registering transition.
+	Offset   int64
+	External bool
+	// Zero means the default.
+	MaxConsumers int
+}
+
 // RegisterConsumer records an in-workflow consumer, so appends know who to wake
 // and retention knows what it may not delete. It returns the offset the
 // consumer reads from: the resolved start for a new consumer, and the current
@@ -590,17 +642,15 @@ func (s *Stream) checkCapRoom(count int64) error {
 // to. The ranges this consumer already took are written into its History, and a
 // replay is asked to reproduce them, so the bytes behind the read position are
 // the ones a recovery needs. Deregistering releases the floor.
-func (s *Stream) RegisterConsumer(
-	_ chasm.MutableContext,
-	consumerID string,
-	workflowID string,
-	runID string,
-	offset int64,
-	external bool,
-) (int64, error) {
-	if consumerID == "" {
+func (s *Stream) RegisterConsumer(_ chasm.MutableContext, reg ConsumerRegistration) (int64, error) {
+	if reg.ConsumerID == "" {
 		return 0, serviceerror.NewInvalidArgument("consumer id is required")
 	}
+	maxConsumers := reg.MaxConsumers
+	if maxConsumers <= 0 {
+		maxConsumers = MaxConsumersPerStream
+	}
+	offset := reg.Offset
 	if offset < 0 {
 		offset = s.State.HeadOffset
 	}
@@ -608,32 +658,32 @@ func (s *Stream) RegisterConsumer(
 		return 0, serviceerror.NewFailedPreconditionf(
 			"offset %d is below the stream's floor of %d", offset, s.State.BaseOffset)
 	}
-	if _, known := s.State.Consumers[consumerID]; !known &&
-		len(s.State.Consumers) >= MaxConsumersPerStream {
+	if _, known := s.State.Consumers[reg.ConsumerID]; !known &&
+		len(s.State.Consumers) >= maxConsumers {
 		return 0, serviceerror.NewInvalidArgumentf(
-			"stream already has %d consumers, which is the limit", MaxConsumersPerStream)
+			"stream already has %d consumers, which is the limit", maxConsumers)
 	}
 	if s.State.Consumers == nil {
 		s.State.Consumers = make(map[string]*streampb.ConsumerCursor)
 	}
-	if existing, ok := s.State.Consumers[consumerID]; ok {
+	if existing, ok := s.State.Consumers[reg.ConsumerID]; ok {
 		// A consumer coming back after its floor was released can find the
 		// stream has moved past what its History refers to. Saying so here is
 		// the only chance to say it before the workflow depends on it again.
 		if existing.GetReplayFloor() < s.State.BaseOffset {
 			return 0, serviceerror.NewFailedPreconditionf(
 				"consumer %q recorded offset %d, and the stream now starts at %d",
-				consumerID, existing.GetReplayFloor(), s.State.BaseOffset)
+				reg.ConsumerID, existing.GetReplayFloor(), s.State.BaseOffset)
 		}
 		existing.Active = true
 		return existing.GetOffset(), nil
 	}
-	s.State.Consumers[consumerID] = &streampb.ConsumerCursor{
-		WorkflowId:  workflowID,
-		RunId:       runID,
+	s.State.Consumers[reg.ConsumerID] = &streampb.ConsumerCursor{
+		WorkflowId:  reg.WorkflowID,
+		RunId:       reg.RunID,
 		Offset:      offset,
 		Active:      true,
-		External:    external,
+		External:    reg.External,
 		ReplayFloor: offset,
 	}
 	return offset, nil

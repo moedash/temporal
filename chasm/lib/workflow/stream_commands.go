@@ -50,6 +50,7 @@ func handleAddStreamMessagesCommand(
 	validator Validator,
 	command *commandpb.Command,
 	opts CommandHandlerOptions,
+	limits stream.Limits,
 ) error {
 	badAttributes := enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_ADD_STREAM_MESSAGES_ATTRIBUTES
 	attrs := command.GetAddStreamMessagesCommandAttributes()
@@ -85,13 +86,14 @@ func handleAddStreamMessagesCommand(
 		name = DefaultStreamName
 	}
 
-	s, err := wf.streamNamed(chasmCtx, name)
+	s, err := wf.streamNamed(chasmCtx, name, limits)
 	if err != nil {
 		return StreamAdmissionFailure(badAttributes, err)
 	}
 
 	result, err := s.AddMessages(chasmCtx, stream.AddMessagesRequest{
 		Messages: toLibraryMessages(attrs.GetMessages()),
+		Limits:   limits,
 	})
 	if err != nil {
 		return StreamAdmissionFailure(badAttributes, err)
@@ -269,7 +271,11 @@ func (w *Workflow) RecordStreamMessagesAdded(
 // streamNamed returns the workflow's stream of that name, creating it on first
 // use. Implicit creation is deliberate: a workflow publishing to its own output
 // should not have to coordinate with anyone about who creates it.
-func (w *Workflow) streamNamed(ctx chasm.MutableContext, name string) (*stream.Stream, error) {
+func (w *Workflow) streamNamed(
+	ctx chasm.MutableContext,
+	name string,
+	limits stream.Limits,
+) (*stream.Stream, error) {
 	if w.Streams == nil {
 		w.Streams = make(chasm.Map[string, *stream.Stream])
 	}
@@ -286,12 +292,20 @@ func (w *Workflow) streamNamed(ctx chasm.MutableContext, name string) (*stream.S
 		return nil, serviceerror.NewInvalidArgumentf(
 			"stream name is %d characters, over the %d limit", len(name), stream.MaxStreamNameLength)
 	}
-	if len(w.Streams) >= stream.MaxOwnedStreamsPerWorkflow {
+	if len(w.Streams) >= limits.MaxOwnedStreamsPerWorkflow {
 		return nil, serviceerror.NewFailedPreconditionf(
-			"workflow already owns %d streams, the limit", stream.MaxOwnedStreamsPerWorkflow)
+			"workflow already owns %d streams, the limit", limits.MaxOwnedStreamsPerWorkflow)
 	}
 
-	created, err := stream.NewStream(ctx, stream.NewStreamRequest{Attached: true})
+	// Budgeted, because the batches live in this execution's mutable state and
+	// the size limit on that terminates the workflow instead of refusing.
+	created, err := stream.NewStream(ctx, stream.NewStreamRequest{
+		Attached: true,
+		Budget: &streamlib.StreamBudget{
+			MaxItems: int64(limits.OwnedStreamMaxItems),
+			MaxBytes: int64(limits.OwnedStreamMaxBytes),
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -313,13 +327,28 @@ func toLibraryMessages(in []*streampb.StreamMessage) []*streamlib.StreamMessage 
 	return out
 }
 
-// streamLibrary registers the stream command with the workflow registry.
-type streamLibrary struct{}
+// streamLibrary registers the stream commands with the workflow registry.
+type streamLibrary struct {
+	config *stream.Config
+}
+
+func newStreamLibrary(config *stream.Config) *streamLibrary {
+	return &streamLibrary{config: config}
+}
 
 func (l *streamLibrary) CommandHandlers() map[enumspb.CommandType]CommandHandler {
 	return map[enumspb.CommandType]CommandHandler{
-		enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES: handleAddStreamMessagesCommand,
-		enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM:    handleSubscribeStreamCommand,
+		enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES: func(
+			chasmCtx chasm.MutableContext,
+			wf *Workflow,
+			validator Validator,
+			command *commandpb.Command,
+			opts CommandHandlerOptions,
+		) error {
+			limits := l.config.LimitsFor(chasmCtx.NamespaceEntry().Name().String())
+			return handleAddStreamMessagesCommand(chasmCtx, wf, validator, command, opts, limits)
+		},
+		enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM: handleSubscribeStreamCommand,
 	}
 }
 

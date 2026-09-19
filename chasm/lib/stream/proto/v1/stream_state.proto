@@ -35,6 +35,22 @@ message StreamState {
 
   // Wall-clock close time, used to schedule retention deletion.
   google.protobuf.Timestamp close_time = 13;
+
+  // Set on a stream a workflow owns. Its batches are the owning execution's
+  // mutable state, so appends past the budget are refused rather than left to
+  // the execution size limit, which terminates the workflow.
+  StreamBudget budget = 14;
+
+  // Bytes appended over the stream's life, kept for the budget check. A stream
+  // with a budget never reclaims, so this is also what it holds.
+  int64 appended_bytes = 15;
+}
+
+// Hard bounds on what a stream may hold. Distinct from StreamLifecycle.max_items,
+// which reclaims the oldest messages: a budget refuses the newest.
+message StreamBudget {
+  int64 max_items = 1;
+  int64 max_bytes = 2;
 }
 
 message ProducerCursor {

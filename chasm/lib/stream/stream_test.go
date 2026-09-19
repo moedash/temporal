@@ -214,7 +214,9 @@ func TestTruncateStopsAtAnActiveConsumersReplayFloor(t *testing.T) {
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 
-	_, err = s.RegisterConsumer(nil, "wf-1", "wf-1", "run-1", 0, false)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "wf-1", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+	})
 	require.NoError(t, err)
 	s.AdvanceConsumer(nil, "wf-1", 2)
 
@@ -259,7 +261,9 @@ func TestCapTruncatesInline(t *testing.T) {
 func TestCapRefusesAnAppendItCouldOnlyAbsorbByDroppingReadRecords(t *testing.T) {
 	s := newTestStream(t)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
-	_, err := s.RegisterConsumer(nil, "wf-1", "wf-1", "run-1", 0, false)
+	_, err := s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "wf-1", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+	})
 	require.NoError(t, err)
 
 	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
@@ -299,7 +303,9 @@ func TestRegisterConsumerPinsFromWhereItSubscribed(t *testing.T) {
 
 	// Subscribing at 2 says nothing about offsets 0 and 1, so those stay
 	// droppable and everything from 2 up does not.
-	_, err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 2, false)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 2,
+	})
 	require.NoError(t, err)
 
 	require.NoError(t, s.Truncate(nil, 2))
@@ -311,7 +317,9 @@ func TestAdvanceConsumerTracksWhereAConsumerHasReached(t *testing.T) {
 	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
-	_, err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+	})
 	require.NoError(t, err)
 
 	// The read position decides whether this consumer is worth waking. The
@@ -326,7 +334,9 @@ func TestAdvanceConsumerNeverRewinds(t *testing.T) {
 	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
-	_, err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+	})
 	require.NoError(t, err)
 
 	s.AdvanceConsumer(nil, "workflow:output", 3)
@@ -342,7 +352,9 @@ func TestRegisterConsumerRejectsAnOffsetBelowTheFloor(t *testing.T) {
 	err = s.Truncate(nil, 2)
 	require.NoError(t, err)
 
-	_, err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1, false)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 1,
+	})
 	require.ErrorContains(t, err, "below the stream's floor")
 }
 
@@ -352,11 +364,15 @@ func TestRegisterConsumerTwiceKeepsThePin(t *testing.T) {
 	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
-	_, err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+	})
 	require.NoError(t, err)
 	s.AdvanceConsumer(nil, "workflow:output", 3)
 
-	_, err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+	})
 	require.NoError(t, err)
 
 	require.Equal(t, int64(3), s.State.Consumers["workflow:output"].GetOffset())
@@ -366,7 +382,9 @@ func TestDeregisterConsumerReleasesThePin(t *testing.T) {
 	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
-	_, err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 1, false)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 1,
+	})
 	require.NoError(t, err)
 
 	s.DeregisterConsumer(nil, "workflow:output")
@@ -399,7 +417,9 @@ func TestCapClampsToAConsumerThatRegisteredLate(t *testing.T) {
 
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
 	require.NoError(t, err)
-	_, err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+	})
 	require.NoError(t, err)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 1}
 	s.applyCap()
@@ -412,7 +432,9 @@ func TestCapClampsToAConsumerThatRegisteredLate(t *testing.T) {
 func TestAConsumerThatDeregisteredHoldsNothing(t *testing.T) {
 	s := newTestStream(t)
 	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
-	_, err := s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false)
+	_, err := s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+	})
 	require.NoError(t, err)
 	s.DeregisterConsumer(nil, "workflow:output")
 
@@ -430,14 +452,18 @@ func TestReregisteringBelowTheFloorIsRefused(t *testing.T) {
 	s := newTestStream(t)
 	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
-	_, err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 0, false)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+	})
 	require.NoError(t, err)
 	s.DeregisterConsumer(nil, "workflow:output")
 	require.NoError(t, s.Truncate(nil, 2))
 
 	// Resubscribing further along does not repair the gap. What this consumer
 	// already recorded starts at 0, and offsets 0 and 1 are gone.
-	_, err = s.RegisterConsumer(nil, "workflow:output", "wf-1", "run-1", 3, false)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 3,
+	})
 	require.ErrorContains(t, err, "the stream now starts at 2")
 }
 
@@ -486,16 +512,22 @@ func TestStreamConsumerTableIsBounded(t *testing.T) {
 	s := newTestStream(t)
 
 	for i := range MaxConsumersPerStream {
-		_, err := s.RegisterConsumer(nil, fmt.Sprintf("c%d", i), "wf", "run", 0, true)
+		_, err := s.RegisterConsumer(nil, ConsumerRegistration{
+			ConsumerID: fmt.Sprintf("c%d", i), WorkflowID: "wf", RunID: "run", External: true,
+		})
 		require.NoError(t, err)
 	}
 
-	_, err := s.RegisterConsumer(nil, "c-over", "wf", "run", 0, true)
+	_, err := s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "c-over", WorkflowID: "wf", RunID: "run", Offset: 0, External: true,
+	})
 	var invalid *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalid)
 
 	// Re-registering an existing consumer is an update, not a new entry.
-	_, err = s.RegisterConsumer(nil, "c0", "wf", "run", 0, true)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "c0", WorkflowID: "wf", RunID: "run", Offset: 0, External: true,
+	})
 	require.NoError(t, err)
 }
 
@@ -529,4 +561,32 @@ func TestAddMessagesTreatsAnUnsetKindAsData(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, retry.Deduplicated)
+}
+
+// A budgeted stream refuses the append that would not fit rather than dropping
+// older messages: its batches are someone's mutable state, and the alternative
+// to refusing is the execution size limit terminating that workflow later.
+func TestBudgetRefusesAnAppendThatDoesNotFit(t *testing.T) {
+	s := newTestStream(t)
+	s.State.Budget = &streampb.StreamBudget{MaxItems: 3}
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b")})
+	require.NoError(t, err)
+
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("c", "d")})
+	var exhausted *serviceerror.ResourceExhausted
+	require.ErrorAs(t, err, &exhausted)
+	require.Equal(t, int64(2), s.State.HeadOffset, "a refused append writes nothing")
+
+	// The last slot is still there for an append that fits.
+	_, err = s.AddMessages(nil, AddMessagesRequest{Messages: msgs("c")})
+	require.NoError(t, err)
+
+	bytesOnly := newTestStream(t)
+	bytesOnly.State.Budget = &streampb.StreamBudget{MaxBytes: 16}
+	_, err = bytesOnly.AddMessages(nil, AddMessagesRequest{Messages: msgs("small")})
+	require.NoError(t, err)
+	_, err = bytesOnly.AddMessages(nil, AddMessagesRequest{Messages: msgs("another one")})
+	require.ErrorAs(t, err, &exhausted)
+	require.Equal(t, int64(1), bytesOnly.State.HeadOffset)
 }

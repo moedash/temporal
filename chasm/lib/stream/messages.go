@@ -107,19 +107,19 @@ func CapByBytes(
 // that exceeds a consumer's byte budget can never be delivered, and CapByBytes
 // would hand it over alone forever rather than reject it. The batch bound is
 // the storage side, since a batch is written as a single node.
-func checkBatchBytes(messages []*streamlib.StreamMessage) error {
+func checkBatchBytes(messages []*streamlib.StreamMessage, limits Limits) error {
 	total := 0
 	for i, m := range messages {
 		size := proto.Size(m)
-		if size > MaxMessageBytes {
+		if size > limits.MaxMessageBytes {
 			return serviceerror.NewInvalidArgumentf(
-				"message %d is %d bytes, over the %d byte limit", i, size, MaxMessageBytes)
+				"message %d is %d bytes, over the %d byte limit", i, size, limits.MaxMessageBytes)
 		}
 		total += size
 	}
-	if total > MaxBatchBytes {
+	if total > limits.MaxBatchBytes {
 		return serviceerror.NewInvalidArgumentf(
-			"batch is %d bytes, over the %d byte limit", total, MaxBatchBytes)
+			"batch is %d bytes, over the %d byte limit", total, limits.MaxBatchBytes)
 	}
 	return nil
 }

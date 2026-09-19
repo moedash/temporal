@@ -43,7 +43,14 @@ type StreamState struct {
 	// the chain instead of stalling on a superseded run.
 	RedirectRunId string `protobuf:"bytes,12,opt,name=redirect_run_id,json=redirectRunId,proto3" json:"redirect_run_id,omitempty"`
 	// Wall-clock close time, used to schedule retention deletion.
-	CloseTime     *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	CloseTime *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	// Set on a stream a workflow owns. Its batches are the owning execution's
+	// mutable state, so appends past the budget are refused rather than left to
+	// the execution size limit, which terminates the workflow.
+	Budget *StreamBudget `protobuf:"bytes,14,opt,name=budget,proto3" json:"budget,omitempty"`
+	// Bytes appended over the stream's life, kept for the budget check. A stream
+	// with a budget never reclaims, so this is also what it holds.
+	AppendedBytes int64 `protobuf:"varint,15,opt,name=appended_bytes,json=appendedBytes,proto3" json:"appended_bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -141,6 +148,74 @@ func (x *StreamState) GetCloseTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *StreamState) GetBudget() *StreamBudget {
+	if x != nil {
+		return x.Budget
+	}
+	return nil
+}
+
+func (x *StreamState) GetAppendedBytes() int64 {
+	if x != nil {
+		return x.AppendedBytes
+	}
+	return 0
+}
+
+// Hard bounds on what a stream may hold. Distinct from StreamLifecycle.max_items,
+// which reclaims the oldest messages: a budget refuses the newest.
+type StreamBudget struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MaxItems      int64                  `protobuf:"varint,1,opt,name=max_items,json=maxItems,proto3" json:"max_items,omitempty"`
+	MaxBytes      int64                  `protobuf:"varint,2,opt,name=max_bytes,json=maxBytes,proto3" json:"max_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamBudget) Reset() {
+	*x = StreamBudget{}
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamBudget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamBudget) ProtoMessage() {}
+
+func (x *StreamBudget) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamBudget.ProtoReflect.Descriptor instead.
+func (*StreamBudget) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *StreamBudget) GetMaxItems() int64 {
+	if x != nil {
+		return x.MaxItems
+	}
+	return 0
+}
+
+func (x *StreamBudget) GetMaxBytes() int64 {
+	if x != nil {
+		return x.MaxBytes
+	}
+	return 0
+}
+
 type ProducerCursor struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Seq         int64                  `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
@@ -158,7 +233,7 @@ type ProducerCursor struct {
 
 func (x *ProducerCursor) Reset() {
 	*x = ProducerCursor{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -170,7 +245,7 @@ func (x *ProducerCursor) String() string {
 func (*ProducerCursor) ProtoMessage() {}
 
 func (x *ProducerCursor) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[1]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -183,7 +258,7 @@ func (x *ProducerCursor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProducerCursor.ProtoReflect.Descriptor instead.
 func (*ProducerCursor) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{1}
+	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ProducerCursor) GetSeq() int64 {
@@ -247,7 +322,7 @@ type ConsumerCursor struct {
 
 func (x *ConsumerCursor) Reset() {
 	*x = ConsumerCursor{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -259,7 +334,7 @@ func (x *ConsumerCursor) String() string {
 func (*ConsumerCursor) ProtoMessage() {}
 
 func (x *ConsumerCursor) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -272,7 +347,7 @@ func (x *ConsumerCursor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsumerCursor.ProtoReflect.Descriptor instead.
 func (*ConsumerCursor) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{2}
+	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ConsumerCursor) GetWorkflowId() string {
@@ -351,7 +426,7 @@ type WorkflowStreamCursor struct {
 
 func (x *WorkflowStreamCursor) Reset() {
 	*x = WorkflowStreamCursor{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -363,7 +438,7 @@ func (x *WorkflowStreamCursor) String() string {
 func (*WorkflowStreamCursor) ProtoMessage() {}
 
 func (x *WorkflowStreamCursor) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -376,7 +451,7 @@ func (x *WorkflowStreamCursor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowStreamCursor.ProtoReflect.Descriptor instead.
 func (*WorkflowStreamCursor) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{3}
+	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *WorkflowStreamCursor) GetStreamId() string {
@@ -448,7 +523,7 @@ type StreamLifecycle struct {
 
 func (x *StreamLifecycle) Reset() {
 	*x = StreamLifecycle{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[4]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -460,7 +535,7 @@ func (x *StreamLifecycle) String() string {
 func (*StreamLifecycle) ProtoMessage() {}
 
 func (x *StreamLifecycle) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[4]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -473,7 +548,7 @@ func (x *StreamLifecycle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamLifecycle.ProtoReflect.Descriptor instead.
 func (*StreamLifecycle) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{4}
+	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StreamLifecycle) GetRetention() *durationpb.Duration {
@@ -494,7 +569,7 @@ var File_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto protorefle
 
 const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc = "" +
 	"\n" +
-	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xbc\x06\n" +
+	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xb4\a\n" +
 	"\vStreamState\x12\x1f\n" +
 	"\vhead_offset\x18\x01 \x01(\x03R\n" +
 	"headOffset\x12\x1f\n" +
@@ -508,13 +583,18 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\tlifecycle\x18\v \x01(\v2:.temporal.server.chasm.lib.stream.proto.v1.StreamLifecycleR\tlifecycle\x12&\n" +
 	"\x0fredirect_run_id\x18\f \x01(\tR\rredirectRunId\x129\n" +
 	"\n" +
-	"close_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x1aw\n" +
+	"close_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x12O\n" +
+	"\x06budget\x18\x0e \x01(\v27.temporal.server.chasm.lib.stream.proto.v1.StreamBudgetR\x06budget\x12%\n" +
+	"\x0eappended_bytes\x18\x0f \x01(\x03R\rappendedBytes\x1aw\n" +
 	"\x0eProducersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12O\n" +
 	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.stream.proto.v1.ProducerCursorR\x05value:\x028\x01\x1aw\n" +
 	"\x0eConsumersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12O\n" +
-	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.stream.proto.v1.ConsumerCursorR\x05value:\x028\x01J\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\t\"\x96\x01\n" +
+	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.stream.proto.v1.ConsumerCursorR\x05value:\x028\x01J\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\t\"H\n" +
+	"\fStreamBudget\x12\x1b\n" +
+	"\tmax_items\x18\x01 \x01(\x03R\bmaxItems\x12\x1b\n" +
+	"\tmax_bytes\x18\x02 \x01(\x03R\bmaxBytes\"\x96\x01\n" +
 	"\x0eProducerCursor\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x03R\x03seq\x12!\n" +
 	"\ffirst_offset\x18\x02 \x01(\x03R\vfirstOffset\x12\x14\n" +
@@ -558,33 +638,35 @@ func file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescGZ
 	return file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_goTypes = []any{
 	(*StreamState)(nil),           // 0: temporal.server.chasm.lib.stream.proto.v1.StreamState
-	(*ProducerCursor)(nil),        // 1: temporal.server.chasm.lib.stream.proto.v1.ProducerCursor
-	(*ConsumerCursor)(nil),        // 2: temporal.server.chasm.lib.stream.proto.v1.ConsumerCursor
-	(*WorkflowStreamCursor)(nil),  // 3: temporal.server.chasm.lib.stream.proto.v1.WorkflowStreamCursor
-	(*StreamLifecycle)(nil),       // 4: temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
-	nil,                           // 5: temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntry
-	nil,                           // 6: temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntry
-	(*v1.Payload)(nil),            // 7: temporal.api.common.v1.Payload
-	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 9: google.protobuf.Duration
+	(*StreamBudget)(nil),          // 1: temporal.server.chasm.lib.stream.proto.v1.StreamBudget
+	(*ProducerCursor)(nil),        // 2: temporal.server.chasm.lib.stream.proto.v1.ProducerCursor
+	(*ConsumerCursor)(nil),        // 3: temporal.server.chasm.lib.stream.proto.v1.ConsumerCursor
+	(*WorkflowStreamCursor)(nil),  // 4: temporal.server.chasm.lib.stream.proto.v1.WorkflowStreamCursor
+	(*StreamLifecycle)(nil),       // 5: temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
+	nil,                           // 6: temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntry
+	nil,                           // 7: temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntry
+	(*v1.Payload)(nil),            // 8: temporal.api.common.v1.Payload
+	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 10: google.protobuf.Duration
 }
 var file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_depIdxs = []int32{
-	7, // 0: temporal.server.chasm.lib.stream.proto.v1.StreamState.close_reason:type_name -> temporal.api.common.v1.Payload
-	5, // 1: temporal.server.chasm.lib.stream.proto.v1.StreamState.producers:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntry
-	6, // 2: temporal.server.chasm.lib.stream.proto.v1.StreamState.consumers:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntry
-	4, // 3: temporal.server.chasm.lib.stream.proto.v1.StreamState.lifecycle:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
-	8, // 4: temporal.server.chasm.lib.stream.proto.v1.StreamState.close_time:type_name -> google.protobuf.Timestamp
-	9, // 5: temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle.retention:type_name -> google.protobuf.Duration
-	1, // 6: temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntry.value:type_name -> temporal.server.chasm.lib.stream.proto.v1.ProducerCursor
-	2, // 7: temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntry.value:type_name -> temporal.server.chasm.lib.stream.proto.v1.ConsumerCursor
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	8,  // 0: temporal.server.chasm.lib.stream.proto.v1.StreamState.close_reason:type_name -> temporal.api.common.v1.Payload
+	6,  // 1: temporal.server.chasm.lib.stream.proto.v1.StreamState.producers:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntry
+	7,  // 2: temporal.server.chasm.lib.stream.proto.v1.StreamState.consumers:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntry
+	5,  // 3: temporal.server.chasm.lib.stream.proto.v1.StreamState.lifecycle:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
+	9,  // 4: temporal.server.chasm.lib.stream.proto.v1.StreamState.close_time:type_name -> google.protobuf.Timestamp
+	1,  // 5: temporal.server.chasm.lib.stream.proto.v1.StreamState.budget:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamBudget
+	10, // 6: temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle.retention:type_name -> google.protobuf.Duration
+	2,  // 7: temporal.server.chasm.lib.stream.proto.v1.StreamState.ProducersEntry.value:type_name -> temporal.server.chasm.lib.stream.proto.v1.ProducerCursor
+	3,  // 8: temporal.server.chasm.lib.stream.proto.v1.StreamState.ConsumersEntry.value:type_name -> temporal.server.chasm.lib.stream.proto.v1.ConsumerCursor
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_init() }
@@ -598,7 +680,7 @@ func file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc), len(file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

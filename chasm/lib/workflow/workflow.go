@@ -104,6 +104,7 @@ func (w *Workflow) SubscribeToOwnedStream(
 	mctx chasm.MutableContext,
 	name string,
 	startOffset int64,
+	limits stream.Limits,
 ) (int64, error) {
 	field, ok := w.Streams[name]
 	if !ok {
@@ -124,8 +125,13 @@ func (w *Workflow) SubscribeToOwnedStream(
 	// separately it could be lost while the cursor survived, and truncation
 	// would then be free to take a range the cursor still points at.
 	key := mctx.ExecutionKey()
-	startOffset, err := owned.RegisterConsumer(
-		mctx, streamConsumerID(name), key.BusinessID, key.RunID, startOffset, false)
+	startOffset, err := owned.RegisterConsumer(mctx, stream.ConsumerRegistration{
+		ConsumerID:   streamConsumerID(name),
+		WorkflowID:   key.BusinessID,
+		RunID:        key.RunID,
+		Offset:       startOffset,
+		MaxConsumers: limits.MaxConsumersPerStream,
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -640,7 +646,7 @@ func (w *Workflow) AppendToOwnedStream(
 	name string,
 	req stream.AddMessagesRequest,
 ) (stream.AddMessagesResult, error) {
-	s, err := w.streamNamed(mctx, name)
+	s, err := w.streamNamed(mctx, name, req.Limits)
 	if err != nil {
 		return stream.AddMessagesResult{}, err
 	}

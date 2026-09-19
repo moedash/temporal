@@ -15,9 +15,12 @@ import (
 	streampb "go.temporal.io/api/stream/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	chasmstream "go.temporal.io/server/chasm/lib/stream"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -479,4 +482,59 @@ func TestOutsideAppendsRaceTheWorkflowPublishWithoutFailing(t *testing.T) {
 	}
 	require.Len(t, seen, producers*perProducer+1, "every outside message appears exactly once")
 	require.Equal(t, workflowTasks, seen["from-workflow"])
+}
+
+// A stream a workflow owns has a budget, because its batches are the workflow's
+// own mutable state. Past it the workflow's publish fails its task with a cause
+// and an outside producer is told the stream is full, instead of the execution
+// size limit terminating the workflow later.
+func TestOwnedStreamRefusesAppendsPastItsBudget(t *testing.T) {
+	env := testcore.NewEnv(t, testcore.WithDynamicConfig(chasmstream.OwnedStreamMaxItemsSetting, 3))
+	s := newStreamTestEnvFrom(t, env)
+	execution, tq := startConsumer(t, s, "stream-wf-budget-")
+
+	task := 0
+	//nolint:staticcheck // SA1019: deprecated poller is the only one that can emit the command.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			task++
+			if task == 1 {
+				return publishCommand("one", "two"), nil
+			}
+			return publishCommand("three", "four"), nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	_, err := poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	signalWorkflow(t, s, execution.GetWorkflowId(), execution.GetRunId())
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.Error(t, err, "two more do not fit in a budget of three")
+	failed := workflowTaskFailedWith(env.GetHistory(s.ns, execution),
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_ADD_STREAM_MESSAGES_ATTRIBUTES)
+	require.NotNil(t, failed)
+	require.Contains(t, failed.GetFailure().GetMessage(), "budget")
+
+	appendOutside := func(bodies ...string) error {
+		messages := make([]*streamlib.StreamMessage, len(bodies))
+		for i, b := range bodies {
+			messages[i] = &streamlib.StreamMessage{Body: &commonpb.Payload{Data: []byte(b)}}
+		}
+		_, err := s.client.AddWorkflowMessages(s.ctx(), &streamlib.AddWorkflowMessagesRequest{
+			FrontendRequest: &streamlib.AddWorkflowMessagesInput{
+				Namespace: s.ns, WorkflowId: execution.GetWorkflowId(), Messages: messages,
+			},
+		})
+		return err
+	}
+	// The test client is a bare gRPC connection, so the code is what it sees.
+	require.Equal(t, codes.ResourceExhausted, status.Code(appendOutside("three", "four")))
+	require.NoError(t, appendOutside("three"), "the last slot is still there for one that fits")
+	require.Equal(t, codes.ResourceExhausted, status.Code(appendOutside("four")))
 }

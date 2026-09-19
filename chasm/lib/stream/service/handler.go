@@ -23,6 +23,7 @@ type handler struct {
 	shardController   shard.Controller
 	namespaceRegistry namespace.Registry
 	logger            log.Logger
+	config            *stream.Config
 
 	// Routes a call to the host that owns a shard. A step spanning two
 	// executions cannot resolve both through the local controller, which
@@ -35,14 +36,27 @@ func newHandler(
 	shardController shard.Controller,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	config *stream.Config,
 	routed streampb.StreamServiceClient,
 ) *handler {
 	return &handler{
 		shardController:   shardController,
 		namespaceRegistry: namespaceRegistry,
 		logger:            logger,
+		config:            config,
 		routed:            routed,
 	}
+}
+
+// limitsFor resolves the namespace's limits. An id the registry cannot name
+// falls back to the defaults; the interceptors have already refused requests
+// for namespaces that do not exist.
+func (h *handler) limitsFor(namespaceID string) stream.Limits {
+	name, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
+	if err != nil {
+		return stream.DefaultLimits()
+	}
+	return h.config.LimitsFor(name.String())
 }
 
 // withCallerInfo tags the context so the stream's direct persistence calls are
@@ -143,6 +157,7 @@ func (h *handler) AddMessages(
 		Messages:   in.GetMessages(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
+		Limits:     h.limitsFor(req.GetNamespaceId()),
 	}
 	if in.GetUseExpectedOffset() {
 		expected := in.GetExpectedOffset()
@@ -193,6 +208,7 @@ func (h *handler) AddWorkflowMessages(
 		Messages:   in.GetMessages(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
+		Limits:     h.limitsFor(req.GetNamespaceId()),
 	}
 	result, _, err := chasm.UpdateComponent(ctx,
 		workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId()),
@@ -251,12 +267,15 @@ func (h *handler) SubscribeWorkflow(
 		return h.subscribeToExternalStream(ctx, req.GetNamespaceId(), in)
 	}
 
+	limits := h.limitsFor(req.GetNamespaceId())
 	startOffset, _, err := chasm.UpdateComponent(
 		ctx,
 		workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId()),
-		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, input *streampb.SubscribeWorkflowInput) (int64, error) {
+		func(
+			wf *chasmworkflow.Workflow, mctx chasm.MutableContext, input *streampb.SubscribeWorkflowInput,
+		) (int64, error) {
 			return wf.SubscribeToOwnedStream(
-				mctx, ownedStreamName(input.GetStreamName()), input.GetStartOffset())
+				mctx, ownedStreamName(input.GetStreamName()), input.GetStartOffset(), limits)
 		},
 		in,
 	)
@@ -341,14 +360,20 @@ func (h *handler) RegisterStreamConsumer(
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
 	consumerID := "workflow:" + in.GetConsumerWorkflowId()
+	limits := h.limitsFor(req.GetNamespaceId())
 	pin, _, err := chasm.UpdateComponent(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
 		func(
 			s *stream.Stream, mctx chasm.MutableContext, offset int64,
 		) (*streampb.RegisterStreamConsumerOutput, error) {
-			startOffset, err := s.RegisterConsumer(
-				mctx, consumerID, in.GetConsumerWorkflowId(), "", offset, true)
+			startOffset, err := s.RegisterConsumer(mctx, stream.ConsumerRegistration{
+				ConsumerID:   consumerID,
+				WorkflowID:   in.GetConsumerWorkflowId(),
+				Offset:       offset,
+				External:     true,
+				MaxConsumers: limits.MaxConsumersPerStream,
+			})
 			if err != nil {
 				return nil, err
 			}

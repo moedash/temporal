@@ -467,6 +467,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				ctx,
 				ms,
 				ms.GetWorkflowKey().NamespaceID,
+				handler.config.Stream.LimitsFor(namespaceEntry.Name().String()),
 				workflowTaskHandler.stagedStreamSubscriptions,
 			)
 			if failWFTErr, ok := errors.AsType[chasmworkflow.FailWorkflowTaskError](err); ok {

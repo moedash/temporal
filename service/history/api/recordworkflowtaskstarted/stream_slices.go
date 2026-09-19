@@ -141,6 +141,7 @@ func readDeliverable(
 	name string,
 	cursor *stream.Cursor,
 	from, to int64,
+	limits stream.Limits,
 ) ([]*streampb.StreamMessage, int64, string, error) {
 	if to <= from {
 		return nil, from, "", nil
@@ -155,13 +156,13 @@ func readDeliverable(
 	// The collected run is contiguous from `from`, so the byte cap recomputes
 	// the same end offset the read would have reported.
 	collected, _, err := stream.CollectMessages(
-		w.Blobs, w.Starts, from, w.To, stream.MaxConsumeItemsPerTask, nil)
+		w.Blobs, w.Starts, from, w.To, limits.MaxConsumeItemsPerTask, nil)
 	if err != nil {
 		return nil, 0, "", err
 	}
 	// Cap before converting: the byte budget applies to the run as stored, and
 	// trimming decides how far the recorded range reaches.
-	collected, readTo := stream.CapByBytes(collected, from, stream.MaxConsumeBytesPerTask)
+	collected, readTo := stream.CapByBytes(collected, from, limits.MaxConsumeBytesPerTask)
 	return stream.ToAPIMessages(collected), readTo, w.RunID, nil
 }
 
@@ -246,7 +247,8 @@ func deliverStreamSlices(
 	// ranges in the order they were produced.
 	slices.Sort(names)
 
-	maxItems := stream.MaxConsumeItemsPerTask
+	limits := shardContext.GetConfig().Stream.LimitsFor(ms.GetNamespaceEntry().Name().String())
+	maxItems := limits.MaxConsumeItemsPerTask
 	consumer := ms.GetWorkflowKey()
 
 	slicesOut := make([]*streampb.StreamSlice, 0, len(names))
@@ -272,7 +274,7 @@ func deliverStreamSlices(
 		}
 
 		messages, next, ownerRunID, err := readDeliverable(
-			ctx, chasmCtx, wf, consumer.NamespaceID, name, cursor, from, to)
+			ctx, chasmCtx, wf, consumer.NamespaceID, name, cursor, from, to, limits)
 		if err != nil {
 			return nil, nil, err
 		}
