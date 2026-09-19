@@ -439,7 +439,7 @@ type StreamLifecycle struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// How long a closed stream stays readable before it is deleted.
 	Retention *durationpb.Duration `protobuf:"bytes,1,opt,name=retention,proto3" json:"retention,omitempty"`
-	// Cap on readable messages. Older whole buckets are reclaimed once the floor
+	// Cap on readable messages. Whole batches are reclaimed once the floor
 	// passes them, so a capped stream has bounded storage.
 	MaxItems      int64 `protobuf:"varint,2,opt,name=max_items,json=maxItems,proto3" json:"max_items,omitempty"`
 	unknownFields protoimpl.UnknownFields

@@ -176,7 +176,7 @@ func (x *StreamMessage) GetOffset() int64 {
 	return 0
 }
 
-// One append is one batch, and one batch is one log node. The server stores
+// One append is one batch, and one batch is one data node. The server stores
 // this serialized and opaque; it decodes only to trim a partial first page or
 // to apply a topic filter.
 type StreamMessageBatch struct {
