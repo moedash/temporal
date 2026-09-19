@@ -3,6 +3,7 @@ package respondworkflowtaskcompleted
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -28,6 +29,12 @@ import (
 // request context resolves shards through the local controller, which refuses
 // any shard this host does not own, so a stream living elsewhere in the
 // cluster can only be reached by going back out through the service.
+//
+// A refusal, such as a stream that does not exist or an offset below its floor,
+// comes back as a workflow task failure so the worker sees a cause rather than
+// retrying the same command. A pin already taken for an earlier subscription
+// in the same task stays on its stream; the notify task releases it when it
+// finds this workflow does not consume that stream.
 func resolveStagedStreamSubscriptions(
 	ctx context.Context,
 	ms historyi.MutableState,
@@ -64,7 +71,8 @@ func resolveStagedStreamSubscriptions(
 			startOffset, err := wf.SubscribeToOwnedStream(
 				chasmCtx, pending.StreamID, pending.StartOffset)
 			if err != nil {
-				return err
+				return chasmworkflow.StreamAdmissionFailure(
+					enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
 			}
 			chasmworkflow.RecordStreamSubscribedOffset(pending.Event, startOffset)
 			continue
@@ -72,7 +80,8 @@ func resolveStagedStreamSubscriptions(
 
 		pin, err := registerExternalConsumer(ctx, ms, namespaceID, pending)
 		if err != nil {
-			return err
+			return chasmworkflow.StreamAdmissionFailure(
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
 		}
 
 		if _, err := wf.SubscribeToExternalStream(chasmCtx, chasmworkflow.ExternalStreamSubscription{

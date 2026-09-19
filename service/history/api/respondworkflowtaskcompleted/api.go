@@ -463,12 +463,18 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// command does not return an error, so this has to be checked here
 		// rather than inferred from err.
 		if workflowTaskHandler.workflowTaskFailedCause == nil && !workflowTaskHandler.stopProcessing {
-			if err = resolveStagedStreamSubscriptions(
+			err = resolveStagedStreamSubscriptions(
 				ctx,
 				ms,
 				ms.GetWorkflowKey().NamespaceID,
 				workflowTaskHandler.stagedStreamSubscriptions,
-			); err != nil {
+			)
+			if failWFTErr, ok := errors.AsType[chasmworkflow.FailWorkflowTaskError](err); ok {
+				// A refused subscription fails the task the way a refused
+				// command does, so the cause lands in History.
+				err = workflowTaskHandler.failWorkflowTask(failWFTErr.Cause, failWFTErr)
+			}
+			if err != nil {
 				return nil, err
 			}
 		}

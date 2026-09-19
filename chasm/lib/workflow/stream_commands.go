@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"errors"
+
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -13,6 +15,26 @@ import (
 
 // DefaultStreamName is the stream a command addresses when it names none.
 const DefaultStreamName = "output"
+
+// StreamAdmissionFailure turns a refusal of a stream command into a workflow
+// task failure with the given cause.
+//
+// A refusal returned as a plain error fails the RespondWorkflowTaskCompleted
+// call instead, and the worker then retries the same commands against the same
+// limits until the task times out, with nothing in History saying why. Only
+// refusals are converted: an internal or storage error is still the request's
+// to report, because a retry can succeed.
+func StreamAdmissionFailure(cause enumspb.WorkflowTaskFailedCause, err error) error {
+	var invalid *serviceerror.InvalidArgument
+	var precondition *serviceerror.FailedPrecondition
+	var exhausted *serviceerror.ResourceExhausted
+	var notFound *serviceerror.NotFound
+	if errors.As(err, &invalid) || errors.As(err, &precondition) ||
+		errors.As(err, &exhausted) || errors.As(err, &notFound) {
+		return FailWorkflowTaskError{Cause: cause, Message: err.Error()}
+	}
+	return err
+}
 
 // handleAddStreamMessagesCommand appends to a stream the workflow owns.
 //
@@ -29,12 +51,17 @@ func handleAddStreamMessagesCommand(
 	command *commandpb.Command,
 	opts CommandHandlerOptions,
 ) error {
+	badAttributes := enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_ADD_STREAM_MESSAGES_ATTRIBUTES
 	attrs := command.GetAddStreamMessagesCommandAttributes()
 	if attrs == nil {
-		return serviceerror.NewInvalidArgument("AddStreamMessagesCommandAttributes is not set")
+		return FailWorkflowTaskError{
+			Cause: badAttributes, Message: "AddStreamMessagesCommandAttributes is not set",
+		}
 	}
 	if len(attrs.GetMessages()) == 0 {
-		return serviceerror.NewInvalidArgument("AddStreamMessages command carries no messages")
+		return FailWorkflowTaskError{
+			Cause: badAttributes, Message: "AddStreamMessages command carries no messages",
+		}
 	}
 
 	// The batch becomes one data node, so the whole batch is what has to fit.
@@ -60,14 +87,14 @@ func handleAddStreamMessagesCommand(
 
 	s, err := wf.streamNamed(chasmCtx, name)
 	if err != nil {
-		return err
+		return StreamAdmissionFailure(badAttributes, err)
 	}
 
 	result, err := s.AddMessages(chasmCtx, stream.AddMessagesRequest{
 		Messages: toLibraryMessages(attrs.GetMessages()),
 	})
 	if err != nil {
-		return err
+		return StreamAdmissionFailure(badAttributes, err)
 	}
 	// Written even when a producer sequence deduplicated the append, because
 	// the command was still issued and the event is what the replaying worker
@@ -91,13 +118,18 @@ func handleSubscribeStreamCommand(
 	command *commandpb.Command,
 	opts CommandHandlerOptions,
 ) error {
+	badAttributes := enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES
 	attrs := command.GetSubscribeStreamCommandAttributes()
 	if attrs == nil {
-		return serviceerror.NewInvalidArgument("SubscribeStreamCommandAttributes is not set")
+		return FailWorkflowTaskError{
+			Cause: badAttributes, Message: "SubscribeStreamCommandAttributes is not set",
+		}
 	}
 	streamID := attrs.GetStreamId()
 	if streamID == "" {
-		return serviceerror.NewInvalidArgument("SubscribeStream command names no stream")
+		return FailWorkflowTaskError{
+			Cause: badAttributes, Message: "SubscribeStream command names no stream",
+		}
 	}
 
 	// A second subscribe to the same stream registers nothing, but it still
