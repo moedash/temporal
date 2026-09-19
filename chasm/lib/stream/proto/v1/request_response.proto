@@ -107,6 +107,9 @@ message PollMessagesOutput {
   int64 head_offset = 3;
   bool closed = 4;
   temporal.api.common.v1.Payload close_reason = 5;
+  // The execution holding the stream. A workflow task slice built from this
+  // read names the run it came from.
+  string run_id = 6;
 }
 
 message DescribeStreamInput {

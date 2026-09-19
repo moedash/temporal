@@ -430,6 +430,9 @@ type Window struct {
 	Starts []int64
 	To     int64
 	Limit  int
+	// The execution holding the stream, so a slice built from this window can
+	// say which run it came from.
+	RunID string
 }
 
 // ReadWindow serves a read from the component, so the frontier and the bytes
@@ -451,7 +454,12 @@ func (s *Stream) ReadWindow(ctx chasm.Context, req WindowRequest) (Window, error
 	if limit <= 0 || limit > DefaultMaxMessagesPerPoll {
 		limit = DefaultMaxMessagesPerPoll
 	}
-	w := Window{State: common.CloneProto(s.State), To: req.From, Limit: limit}
+	w := Window{
+		State: common.CloneProto(s.State),
+		To:    req.From,
+		Limit: limit,
+		RunID: ctx.ExecutionKey().RunID,
+	}
 	if req.From == s.State.HeadOffset {
 		return w, nil
 	}

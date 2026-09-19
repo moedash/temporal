@@ -636,12 +636,15 @@ func (x *PollMessagesInput) GetWaitNewMessages() bool {
 }
 
 type PollMessagesOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Messages      []*StreamMessage       `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
-	NextOffset    int64                  `protobuf:"varint,2,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
-	HeadOffset    int64                  `protobuf:"varint,3,opt,name=head_offset,json=headOffset,proto3" json:"head_offset,omitempty"`
-	Closed        bool                   `protobuf:"varint,4,opt,name=closed,proto3" json:"closed,omitempty"`
-	CloseReason   *v1.Payload            `protobuf:"bytes,5,opt,name=close_reason,json=closeReason,proto3" json:"close_reason,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Messages    []*StreamMessage       `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	NextOffset  int64                  `protobuf:"varint,2,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
+	HeadOffset  int64                  `protobuf:"varint,3,opt,name=head_offset,json=headOffset,proto3" json:"head_offset,omitempty"`
+	Closed      bool                   `protobuf:"varint,4,opt,name=closed,proto3" json:"closed,omitempty"`
+	CloseReason *v1.Payload            `protobuf:"bytes,5,opt,name=close_reason,json=closeReason,proto3" json:"close_reason,omitempty"`
+	// The execution holding the stream. A workflow task slice built from this
+	// read names the run it came from.
+	RunId         string `protobuf:"bytes,6,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -709,6 +712,13 @@ func (x *PollMessagesOutput) GetCloseReason() *v1.Payload {
 		return x.CloseReason
 	}
 	return nil
+}
+
+func (x *PollMessagesOutput) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
 }
 
 type DescribeStreamInput struct {
@@ -3275,7 +3285,7 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"fromOffset\x12!\n" +
 	"\fmax_messages\x18\x04 \x01(\x05R\vmaxMessages\x12\x16\n" +
 	"\x06topics\x18\x05 \x03(\tR\x06topics\x12*\n" +
-	"\x11wait_new_messages\x18\x06 \x01(\bR\x0fwaitNewMessages\"\x88\x02\n" +
+	"\x11wait_new_messages\x18\x06 \x01(\bR\x0fwaitNewMessages\"\x9f\x02\n" +
 	"\x12PollMessagesOutput\x12T\n" +
 	"\bmessages\x18\x01 \x03(\v28.temporal.server.chasm.lib.stream.proto.v1.StreamMessageR\bmessages\x12\x1f\n" +
 	"\vnext_offset\x18\x02 \x01(\x03R\n" +
@@ -3283,7 +3293,8 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\vhead_offset\x18\x03 \x01(\x03R\n" +
 	"headOffset\x12\x16\n" +
 	"\x06closed\x18\x04 \x01(\bR\x06closed\x12B\n" +
-	"\fclose_reason\x18\x05 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\vcloseReason\"P\n" +
+	"\fclose_reason\x18\x05 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\vcloseReason\x12\x15\n" +
+	"\x06run_id\x18\x06 \x01(\tR\x05runId\"P\n" +
 	"\x13DescribeStreamInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\"\xa5\x02\n" +

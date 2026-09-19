@@ -87,6 +87,7 @@ func readExternalWindow(
 		},
 		To:    out.GetNextOffset(),
 		Limit: int(limit),
+		RunID: out.GetRunId(),
 	}
 	if len(out.GetMessages()) == 0 {
 		return w, nil

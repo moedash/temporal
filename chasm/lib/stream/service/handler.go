@@ -551,6 +551,7 @@ func formatWindow(w stream.Window, req stream.WindowRequest) (*streampb.PollMess
 		HeadOffset:  w.State.GetHeadOffset(),
 		Closed:      w.State.GetClosed(),
 		CloseReason: w.State.GetCloseReason(),
+		RunId:       w.RunID,
 	}
 	if req.From == w.State.GetHeadOffset() {
 		return out, nil
