@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"sync"
 
-	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -31,24 +29,6 @@ type handler struct {
 	// refuses a shard this host does not own, so the far half goes back out
 	// through the service and lands wherever it belongs.
 	routed streampb.StreamServiceClient
-
-	// Appends to one stream are serialized here. The node has to be durable
-	// before the frontier advances, which means writing it outside the
-	// transition that advances the frontier, and two concurrent writers could
-	// then commit in a different order than they wrote. Whichever node carried
-	// the higher transaction ID would win the read regardless of which writer
-	// actually committed.
-	//
-	// Serializing removes the interleaving. It is a stopgap: the real fix is to
-	// stage the node inside the CHASM transaction so write and commit order
-	// cannot diverge. Until then this also means appends are only safe within
-	// one process, which holds because these RPCs route to the shard owner.
-	//
-	// Striped rather than one lock per stream. The key comes from request input
-	// before the stream is known to exist, so a per-stream map would grow once
-	// per distinct id a caller names, including ids that resolve to nothing.
-	// Unrelated streams sharing a stripe only serialize with each other.
-	appendLk [appendStripes]sync.Mutex
 }
 
 func newHandler(
@@ -65,10 +45,6 @@ func newHandler(
 	}
 }
 
-func streamKey(namespaceID, streamID string) string {
-	return namespaceID + "/" + streamID
-}
-
 // withCallerInfo tags the context so the stream's direct persistence calls are
 // attributed to the namespace that caused them. Without it they carry no caller
 // name, which means they escape namespace rate limiting and priority as well as
@@ -81,21 +57,6 @@ func (h *handler) withCallerInfo(ctx context.Context, namespaceID string) contex
 	}
 	return headers.SetCallerInfo(ctx, headers.NewCallerInfo(
 		name.String(), headers.CallerTypeAPI, ""))
-}
-
-func (h *handler) lockStream(namespaceID, streamID string) func() {
-	mu := &h.appendLk[appendStripe(streamKey(namespaceID, streamID))]
-	mu.Lock()
-	return mu.Unlock
-}
-
-// Sized well above the per-host stream count that would make collisions matter.
-// Appends to one stream are serialized anyway, so a collision costs only the
-// unrelated stream's concurrency, never correctness.
-const appendStripes = 2048
-
-func appendStripe(key string) uint32 {
-	return farm.Fingerprint32([]byte(key)) % appendStripes
 }
 
 // refFor builds a reference to a stream. A supplied run ID lets the engine skip
@@ -172,18 +133,12 @@ func (h *handler) AddMessages(
 	if len(in.GetMessages()) == 0 {
 		return nil, serviceerror.NewInvalidArgument("no messages to append")
 	}
-
-	unlock := h.lockStream(req.GetNamespaceId(), in.GetStreamId())
-	defer unlock()
-
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	ref := refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId())
-	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
-	if err != nil {
-		return nil, err
-	}
-
+	// The batch and the frontier commit in one transition, and the execution
+	// serializes transitions, so a producer that names no expected offset takes
+	// whatever offset it lands at. A retried sequence is answered by the
+	// producer table, not by a pin on the head.
 	addReq := stream.AddMessagesRequest{
 		Messages:   in.GetMessages(),
 		ProducerID: in.GetProducerId(),
@@ -192,15 +147,11 @@ func (h *handler) AddMessages(
 	if in.GetUseExpectedOffset() {
 		expected := in.GetExpectedOffset()
 		addReq.ExpectedOffset = &expected
-	} else {
-		// Without a caller-supplied expectation, pin to the head we just read.
-		// The transition then fails rather than appending at an offset whose
-		// node we did not write.
-		head := state.GetHeadOffset()
-		addReq.ExpectedOffset = &head
 	}
 
-	result, _, err := chasm.UpdateComponent(ctx, ref, (*stream.Stream).AddMessages, addReq)
+	result, _, err := chasm.UpdateComponent(ctx,
+		refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId()),
+		(*stream.Stream).AddMessages, addReq)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +174,10 @@ func (h *handler) AddMessages(
 // owning execution per batch, and batching is what keeps that cheap. It is the
 // path a model activity streaming tokens takes, where the workflow is only
 // bracketing what the activity produces.
+//
+// One transition does everything: the stream is created on first write, and
+// the workflow's own publishes are serialized against this append by the
+// execution, so neither producer needs to pin the head against the other.
 func (h *handler) AddWorkflowMessages(
 	ctx context.Context,
 	req *streampb.AddWorkflowMessagesRequest,
@@ -231,47 +186,19 @@ func (h *handler) AddWorkflowMessages(
 	if len(in.GetMessages()) == 0 {
 		return nil, serviceerror.NewInvalidArgument("no messages to append")
 	}
-
-	name := ownedStreamName(in.GetStreamName())
-
-	// Keyed on the owner and the name, which is what identifies the stream here.
-	unlock := h.lockStream(req.GetNamespaceId(), in.GetWorkflowId()+"/"+name)
-	defer unlock()
-
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	ref := workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId())
-
-	state, err := chasm.ReadComponent(ctx, ref,
-		func(wf *chasmworkflow.Workflow, cctx chasm.Context, streamName string) (*streampb.StreamState, error) {
-			return wf.OwnedStreamState(cctx, streamName)
-		}, name)
-	if err != nil {
-		return nil, err
-	}
-	if state == nil {
-		// Nothing has published yet. Creating the stream is a transition, and
-		// only the first writer ever pays it.
-		state, _, err = chasm.UpdateComponent(ctx, ref,
-			(*chasmworkflow.Workflow).EnsureOwnedStream, name)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	head := state.GetHeadOffset()
+	name := ownedStreamName(in.GetStreamName())
 	addReq := stream.AddMessagesRequest{
 		Messages:   in.GetMessages(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
-		// Pinned to the head just read, so a workflow task that published
-		// between the read and the commit fails this append rather than
-		// letting it claim offsets whose node it did not write.
-		ExpectedOffset: &head,
 	}
-
-	result, _, err := chasm.UpdateComponent(ctx, ref,
-		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, r stream.AddMessagesRequest) (stream.AddMessagesResult, error) {
+	result, _, err := chasm.UpdateComponent(ctx,
+		workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId()),
+		func(
+			wf *chasmworkflow.Workflow, mctx chasm.MutableContext, r stream.AddMessagesRequest,
+		) (stream.AddMessagesResult, error) {
 			return wf.AppendToOwnedStream(mctx, name, r)
 		}, addReq)
 	if err != nil {

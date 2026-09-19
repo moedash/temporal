@@ -1,6 +1,8 @@
 package tests
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -406,4 +408,75 @@ func TestStreamWorkflowStreamClosesWithItsWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"last word"}, bodies(poll.GetFrontendResponse().GetMessages()))
 	require.True(t, poll.GetFrontendResponse().GetClosed())
+}
+
+// An outside producer and the workflow's own publishes land in one log, with
+// neither pinning the head against the other. Run concurrently, every append
+// has to succeed and every message has to appear once, in a contiguous range.
+func TestOutsideAppendsRaceTheWorkflowPublishWithoutFailing(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+	execution, tq := startConsumer(t, s, "stream-wf-race-")
+
+	const producers = 8
+	const perProducer = 10
+	const workflowTasks = 5
+
+	//nolint:staticcheck // SA1019: deprecated poller is the only one that can emit the command.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return publishCommand("from-workflow"), nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+
+	errs := make(chan error, producers*perProducer)
+	var wg sync.WaitGroup
+	for p := range producers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range perProducer {
+				_, err := s.client.AddWorkflowMessages(s.ctx(), &streamlib.AddWorkflowMessagesRequest{
+					FrontendRequest: &streamlib.AddWorkflowMessagesInput{
+						Namespace: s.ns, WorkflowId: execution.GetWorkflowId(),
+						Messages: []*streamlib.StreamMessage{{
+							Body: &commonpb.Payload{Data: []byte(fmt.Sprintf("outside-%d-%d", p, i))},
+						}},
+					},
+				})
+				errs <- err
+			}
+		}()
+	}
+	for range workflowTasks {
+		_, err := poller.PollAndProcessWorkflowTask()
+		require.NoError(t, err)
+		signalWorkflow(t, s, execution.GetWorkflowId(), execution.GetRunId())
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err, "an outside append must not fail because the workflow published")
+	}
+
+	total := producers*perProducer + workflowTasks
+	poll, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(), FromOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(total), poll.GetFrontendResponse().GetHeadOffset())
+	seen := make(map[string]int, total)
+	for _, body := range bodies(poll.GetFrontendResponse().GetMessages()) {
+		seen[body]++
+	}
+	require.Len(t, seen, producers*perProducer+1, "every outside message appears exactly once")
+	require.Equal(t, workflowTasks, seen["from-workflow"])
 }

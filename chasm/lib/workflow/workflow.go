@@ -628,19 +628,6 @@ func (w *Workflow) OwnedStream(
 	return field.Get(ctx)
 }
 
-// EnsureOwnedStream creates a stream this workflow owns if the first writer to
-// it is not the workflow itself, and returns its state either way.
-func (w *Workflow) EnsureOwnedStream(
-	mctx chasm.MutableContext,
-	name string,
-) (*streamlib.StreamState, error) {
-	s, err := w.streamNamed(mctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return s.Snapshot(mctx, struct{}{})
-}
-
 // AppendToOwnedStream appends to a stream this workflow owns on behalf of a
 // writer outside the execution.
 //
