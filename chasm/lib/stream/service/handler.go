@@ -586,12 +586,14 @@ func (h *handler) PollWorkflowMessages(
 	return &streampb.PollWorkflowMessagesResponse{FrontendResponse: out}, nil
 }
 
-// readWindow serves a reader's window out of a frontier the caller resolved.
-// Standalone and attached streams differ only in where that frontier comes
-// from, so nothing past it is aware of the difference.
 // formatWindow turns a component read into the wire response. The read happens
 // in the component, so the frontier and the bytes it was served with cannot
 // disagree.
+//
+// The reader is advanced only over offsets that were examined. CollectMessages
+// steps past every message it filtered out, so a filtered page that matched
+// nothing still moves the reader; a window whose batches stop short of its end
+// must not be reported as read to the end.
 func formatWindow(w stream.Window, req stream.WindowRequest) (*streampb.PollMessagesOutput, error) {
 	out := &streampb.PollMessagesOutput{
 		NextOffset:  req.From,
@@ -604,16 +606,10 @@ func formatWindow(w stream.Window, req stream.WindowRequest) (*streampb.PollMess
 		return out, nil
 	}
 
-	messages, next, err := stream.CollectMessages(w.Blobs, w.Starts, req.From, w.To, w.Limit, req.Topics)
+	messages, next, err := stream.CollectMessages(
+		w.Blobs, w.Starts, req.From, w.To, w.Limit, req.Topics)
 	if err != nil {
 		return nil, err
-	}
-	if next < w.To && len(messages) == 0 && len(req.Topics) > 0 {
-		// A page that filtered everything out still has to advance, or the
-		// caller loops forever on the same offsets. Limited to a filtered read
-		// on purpose: for any other reason a page comes back short, moving the
-		// reader past offsets it was never given would hide the short read.
-		next = w.To
 	}
 	out.Messages = messages
 	out.NextOffset = next
