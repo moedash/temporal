@@ -974,3 +974,57 @@ func TestStreamSubscribeEventKeepsCommandOrder(t *testing.T) {
 		enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED,
 	}, order, "the events must be in the order their commands were issued")
 }
+
+// An activity streaming tokens over the RPC has no reason to know about message
+// kinds. A message appended with the kind left unset has to reach a subscribed
+// workflow like any other, rather than take an offset and vanish.
+func TestMessagesAppendedWithoutAKindReachTheWorkflow(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	streamID := "kindless-stream-" + uuid.NewString()
+	s.create(s.ctx(), t, streamID)
+	execution, tq := startConsumer(t, s, "stream-wf-kindless-")
+
+	var delivered [][]*streampb.StreamSlice
+	//nolint:staticcheck // SA1019: consistent with the other stream tests.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			delivered = append(delivered, resp.GetStreamSlices())
+			return nil, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	_, err := poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	_, err = s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(), StreamId: streamID, StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
+		FrontendRequest: &streamlib.AddMessagesInput{
+			Namespace: s.ns, StreamId: streamID,
+			Messages: []*streamlib.StreamMessage{
+				{Body: &commonpb.Payload{Data: []byte("no-kind-1")}},
+				{Body: &commonpb.Payload{Data: []byte("no-kind-2")}},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	got := currentSlice(t, delivered[1])
+	require.Equal(t, int64(2), got.GetToOffset())
+	require.Equal(t, []string{"no-kind-1", "no-kind-2"}, apiBodies(got.GetMessages()),
+		"the slice must carry the messages, not just advance past them")
+}

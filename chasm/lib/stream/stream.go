@@ -143,6 +143,15 @@ func (s *Stream) AddMessages(
 	if err := checkBatchBytes(req.Messages); err != nil {
 		return AddMessagesResult{}, err
 	}
+	// A message with no kind is data. Delivery to a workflow drops anything
+	// that is not, so a producer leaving the field at its zero value would get
+	// an offset for a message no subscriber ever sees. Settled before the batch
+	// is marshalled, so a retry hashes the same bytes.
+	for _, m := range req.Messages {
+		if m.GetKind() == streampb.STREAM_MESSAGE_KIND_UNSPECIFIED {
+			m.Kind = streampb.STREAM_MESSAGE_KIND_DATA
+		}
+	}
 
 	blob, err := marshalBatch(req.Messages)
 	if err != nil {

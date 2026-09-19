@@ -498,3 +498,35 @@ func TestStreamConsumerTableIsBounded(t *testing.T) {
 	_, err = s.RegisterConsumer(nil, "c0", "wf", "run", 0, true)
 	require.NoError(t, err)
 }
+
+// A producer that leaves the kind unset means data. Delivery to a workflow
+// drops anything that is not data, so without this the message would take an
+// offset and never be seen by a subscriber.
+func TestAddMessagesTreatsAnUnsetKindAsData(t *testing.T) {
+	s := newTestStream(t)
+	unset := []*streampb.StreamMessage{
+		{Body: &commonpb.Payload{Data: []byte("a")}},
+		{Body: &commonpb.Payload{Data: []byte("b")}},
+	}
+	_, err := s.AddMessages(nil, AddMessagesRequest{
+		Messages: unset, ProducerID: "p", Sequence: 1,
+	})
+	require.NoError(t, err)
+
+	blobs, starts, err := s.ReadBatches(nil, 0, 2, 0)
+	require.NoError(t, err)
+	collected, _, err := CollectMessages(blobs, starts, 0, 2, 10, nil)
+	require.NoError(t, err)
+	require.Len(t, ToAPIMessages(collected), 2, "both messages must reach a subscriber")
+
+	// The retry carries the same unset kind and has to hash the same.
+	retry, err := s.AddMessages(nil, AddMessagesRequest{
+		Messages: []*streampb.StreamMessage{
+			{Body: &commonpb.Payload{Data: []byte("a")}},
+			{Body: &commonpb.Payload{Data: []byte("b")}},
+		},
+		ProducerID: "p", Sequence: 1,
+	})
+	require.NoError(t, err)
+	require.True(t, retry.Deduplicated)
+}
