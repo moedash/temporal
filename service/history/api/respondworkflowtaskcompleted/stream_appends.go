@@ -126,6 +126,7 @@ func registerExternalConsumer(
 			Namespace:          ms.GetNamespaceEntry().Name().String(),
 			StreamId:           pending.StreamID,
 			ConsumerWorkflowId: key.WorkflowID,
+			ConsumerRunId:      key.RunID,
 			StartOffset:        pending.StartOffset,
 		},
 	})

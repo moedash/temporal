@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -301,6 +302,18 @@ func (h *handler) subscribeToExternalStream(
 	namespaceID string,
 	in *streampb.SubscribeWorkflowInput,
 ) (*streampb.SubscribeWorkflowResponse, error) {
+	// The pin is keyed by the consuming run, so the run is resolved first. It
+	// also pins the cursor write below to that run, so a run that ends between
+	// the two steps cannot leave the pin on one run and the cursor on another.
+	consumerRunID, err := chasm.ReadComponent(ctx,
+		workflowRef(namespaceID, in.GetWorkflowId(), in.GetOwnerRunId()),
+		func(_ *chasmworkflow.Workflow, cctx chasm.Context, _ struct{}) (string, error) {
+			return cctx.ExecutionKey().RunID, nil
+		}, struct{}{})
+	if err != nil {
+		return nil, err
+	}
+
 	// The stream half goes out and comes back on the shard that owns it. This
 	// handler was routed to the consuming workflow, so the stream may well be
 	// somewhere else, and resolving it here would fail on any cluster with more
@@ -316,6 +329,7 @@ func (h *handler) subscribeToExternalStream(
 			Namespace:          in.GetNamespace(),
 			StreamId:           in.GetStreamId(),
 			ConsumerWorkflowId: in.GetWorkflowId(),
+			ConsumerRunId:      consumerRunID,
 			StartOffset:        in.GetStartOffset(),
 		},
 	})
@@ -326,7 +340,7 @@ func (h *handler) subscribeToExternalStream(
 
 	startOffset, _, err := chasm.UpdateComponent(
 		ctx,
-		workflowRef(namespaceID, in.GetWorkflowId(), in.GetOwnerRunId()),
+		workflowRef(namespaceID, in.GetWorkflowId(), consumerRunID),
 		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, offset int64) (int64, error) {
 			return wf.SubscribeToExternalStream(mctx, chasmworkflow.ExternalStreamSubscription{
 				StreamID:    in.GetStreamId(),
@@ -359,7 +373,6 @@ func (h *handler) RegisterStreamConsumer(
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	consumerID := "workflow:" + in.GetConsumerWorkflowId()
 	limits := h.limitsFor(req.GetNamespaceId())
 	pin, _, err := chasm.UpdateComponent(
 		ctx,
@@ -368,8 +381,9 @@ func (h *handler) RegisterStreamConsumer(
 			s *stream.Stream, mctx chasm.MutableContext, offset int64,
 		) (*streampb.RegisterStreamConsumerOutput, error) {
 			startOffset, err := s.RegisterConsumer(mctx, stream.ConsumerRegistration{
-				ConsumerID:   consumerID,
+				ConsumerID:   externalConsumerID(in.GetConsumerWorkflowId(), in.GetConsumerRunId()),
 				WorkflowID:   in.GetConsumerWorkflowId(),
+				RunID:        in.GetConsumerRunId(),
 				Offset:       offset,
 				External:     true,
 				MaxConsumers: limits.MaxConsumersPerStream,
@@ -390,31 +404,112 @@ func (h *handler) RegisterStreamConsumer(
 	return &streampb.RegisterStreamConsumerResponse{FrontendResponse: pin}, nil
 }
 
+// externalConsumerID names a workflow run's pin on a stream in another
+// execution. Keyed by run, so a later run of the same workflow id registers
+// fresh instead of inheriting a closed run's floor.
+func externalConsumerID(workflowID, runID string) string {
+	return "workflow:" + workflowID + "/" + runID
+}
+
+// consumerProbe is what one run says about a subscription: whether the run is
+// still open, whether it holds a cursor for the stream, and where that cursor
+// began, which is the floor a re-keyed pin has to hold.
+type consumerProbe struct {
+	runID       string
+	closed      bool
+	consumes    bool
+	startOffset int64
+}
+
+// probeConsumer reads a run without touching it. A run that is gone reads as
+// closed, since the notify task only needs to know whether pushing at it can
+// achieve anything.
+func (h *handler) probeConsumer(
+	ctx context.Context,
+	namespaceID, workflowID, runID, streamID string,
+) (consumerProbe, error) {
+	probe, err := chasm.ReadComponent(ctx, workflowRef(namespaceID, workflowID, runID),
+		func(wf *chasmworkflow.Workflow, cctx chasm.Context, _ struct{}) (consumerProbe, error) {
+			p := consumerProbe{
+				runID:  cctx.ExecutionKey().RunID,
+				closed: !cctx.ExecutionInfo().CloseTime.IsZero(),
+			}
+			if field, ok := wf.StreamCursors[streamID]; ok {
+				p.consumes = true
+				p.startOffset = field.Get(cctx).StartOffset()
+			}
+			return p, nil
+		}, struct{}{})
+	var notFound *serviceerror.NotFound
+	if errors.As(err, &notFound) {
+		return consumerProbe{runID: runID, closed: true}, nil
+	}
+	return probe, err
+}
+
+func (h *handler) pushHead(
+	ctx context.Context,
+	namespaceID, workflowID, runID, streamID string,
+	head int64,
+) error {
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		workflowRef(namespaceID, workflowID, runID),
+		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, at int64) (struct{}, error) {
+			return struct{}{}, wf.AdvanceKnownHead(mctx, streamID, at)
+		},
+		head,
+	)
+	return err
+}
+
 // AdvanceConsumerHead tells one consumer that the frontier moved, on the shard
 // that owns that consumer.
 //
 // Internal. Called by the notify task, which runs on the stream's shard and so
-// cannot reach a consumer living anywhere else.
+// cannot reach a consumer living anywhere else. The task pins a run, and a run
+// ends: the answer then says whether a successor carries the subscription, so
+// the stream re-keys its pin, or nothing does, so the stream releases it.
 func (h *handler) AdvanceConsumerHead(
 	ctx context.Context,
 	req *streampb.AdvanceConsumerHeadRequest,
 ) (*streampb.AdvanceConsumerHeadResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
+	namespaceID, workflowID, streamID := req.GetNamespaceId(), in.GetWorkflowId(), in.GetStreamId()
 
-	if _, _, err := chasm.UpdateComponent(
-		ctx,
-		workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId()),
-		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, at int64) (struct{}, error) {
-			return struct{}{}, wf.AdvanceKnownHead(mctx, in.GetStreamId(), at)
-		},
-		in.GetHeadOffset(),
-	); err != nil {
+	pinned, err := h.probeConsumer(ctx, namespaceID, workflowID, in.GetOwnerRunId(), streamID)
+	if err != nil {
 		return nil, err
 	}
-	return &streampb.AdvanceConsumerHeadResponse{
-		FrontendResponse: &streampb.AdvanceConsumerHeadOutput{},
-	}, nil
+	out := &streampb.AdvanceConsumerHeadOutput{}
+	if !pinned.closed {
+		if !pinned.consumes {
+			out.ConsumerClosed = true
+			return &streampb.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
+		}
+		if err := h.pushHead(ctx, namespaceID, workflowID, pinned.runID, streamID, in.GetHeadOffset()); err != nil {
+			return nil, err
+		}
+		return &streampb.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
+	}
+
+	// The pinned run is over. A continue-as-new carries the subscription to the
+	// current run, and that is the only run worth pushing at.
+	current, err := h.probeConsumer(ctx, namespaceID, workflowID, "", streamID)
+	if err != nil {
+		return nil, err
+	}
+	if current.closed || current.runID == pinned.runID || !current.consumes {
+		out.ConsumerClosed = true
+		return &streampb.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
+	}
+	if err := h.pushHead(ctx, namespaceID, workflowID, current.runID, streamID, in.GetHeadOffset()); err != nil {
+		return nil, err
+	}
+	out.SuccessorRunId = current.runID
+	out.SuccessorStartOffset = current.startOffset
+	return &streampb.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
 }
 
 func (h *handler) PollMessages(

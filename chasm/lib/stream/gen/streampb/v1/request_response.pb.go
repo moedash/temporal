@@ -2151,8 +2151,11 @@ type RegisterStreamConsumerInput struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	StreamId  string                 `protobuf:"bytes,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
-	// The workflow that will consume, which names the pin.
+	// The workflow that will consume. Together with the run it names the pin,
+	// so a later run of the same workflow id registers fresh rather than
+	// inheriting a closed run's floor.
 	ConsumerWorkflowId string `protobuf:"bytes,3,opt,name=consumer_workflow_id,json=consumerWorkflowId,proto3" json:"consumer_workflow_id,omitempty"`
+	ConsumerRunId      string `protobuf:"bytes,5,opt,name=consumer_run_id,json=consumerRunId,proto3" json:"consumer_run_id,omitempty"`
 	// Negative means from wherever the stream is when the pin is taken. Resolved
 	// here, where the frontier is, and returned so the cursor records a fact.
 	StartOffset   int64 `protobuf:"varint,4,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
@@ -2207,6 +2210,13 @@ func (x *RegisterStreamConsumerInput) GetStreamId() string {
 func (x *RegisterStreamConsumerInput) GetConsumerWorkflowId() string {
 	if x != nil {
 		return x.ConsumerWorkflowId
+	}
+	return ""
+}
+
+func (x *RegisterStreamConsumerInput) GetConsumerRunId() string {
+	if x != nil {
+		return x.ConsumerRunId
 	}
 	return ""
 }
@@ -2353,9 +2363,17 @@ func (x *AdvanceConsumerHeadInput) GetHeadOffset() int64 {
 }
 
 type AdvanceConsumerHeadOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The run that held the pin is closed and no current run of the workflow
+	// consumes the stream, so the stream can release the pin.
+	ConsumerClosed bool `protobuf:"varint,1,opt,name=consumer_closed,json=consumerClosed,proto3" json:"consumer_closed,omitempty"`
+	// The run that held the pin is closed but a successor carries the
+	// subscription, so the stream re-keys the pin to it, with the floor the
+	// successor's cursor started from.
+	SuccessorRunId       string `protobuf:"bytes,2,opt,name=successor_run_id,json=successorRunId,proto3" json:"successor_run_id,omitempty"`
+	SuccessorStartOffset int64  `protobuf:"varint,3,opt,name=successor_start_offset,json=successorStartOffset,proto3" json:"successor_start_offset,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *AdvanceConsumerHeadOutput) Reset() {
@@ -2386,6 +2404,27 @@ func (x *AdvanceConsumerHeadOutput) ProtoReflect() protoreflect.Message {
 // Deprecated: Use AdvanceConsumerHeadOutput.ProtoReflect.Descriptor instead.
 func (*AdvanceConsumerHeadOutput) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *AdvanceConsumerHeadOutput) GetConsumerClosed() bool {
+	if x != nil {
+		return x.ConsumerClosed
+	}
+	return false
+}
+
+func (x *AdvanceConsumerHeadOutput) GetSuccessorRunId() string {
+	if x != nil {
+		return x.SuccessorRunId
+	}
+	return ""
+}
+
+func (x *AdvanceConsumerHeadOutput) GetSuccessorStartOffset() int64 {
+	if x != nil {
+		return x.SuccessorStartOffset
+	}
+	return 0
 }
 
 type AddWorkflowMessagesRequest struct {
@@ -3386,11 +3425,12 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12q\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2F.temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamInputR\x0ffrontendRequest\"\x8e\x01\n" +
 	"\x1eDescribeWorkflowStreamResponse\x12l\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2?.temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutputR\x10frontendResponse\"\xad\x01\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2?.temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutputR\x10frontendResponse\"\xd5\x01\n" +
 	"\x1bRegisterStreamConsumerInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x120\n" +
-	"\x14consumer_workflow_id\x18\x03 \x01(\tR\x12consumerWorkflowId\x12!\n" +
+	"\x14consumer_workflow_id\x18\x03 \x01(\tR\x12consumerWorkflowId\x12&\n" +
+	"\x0fconsumer_run_id\x18\x05 \x01(\tR\rconsumerRunId\x12!\n" +
 	"\fstart_offset\x18\x04 \x01(\x03R\vstartOffset\"l\n" +
 	"\x1cRegisterStreamConsumerOutput\x12!\n" +
 	"\fstart_offset\x18\x01 \x01(\x03R\vstartOffset\x12\x1d\n" +
@@ -3404,8 +3444,11 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"ownerRunId\x12\x1b\n" +
 	"\tstream_id\x18\x03 \x01(\tR\bstreamId\x12\x1f\n" +
 	"\vhead_offset\x18\x04 \x01(\x03R\n" +
-	"headOffset\"\x1b\n" +
-	"\x19AdvanceConsumerHeadOutput\"\xaf\x01\n" +
+	"headOffset\"\xa4\x01\n" +
+	"\x19AdvanceConsumerHeadOutput\x12'\n" +
+	"\x0fconsumer_closed\x18\x01 \x01(\bR\x0econsumerClosed\x12(\n" +
+	"\x10successor_run_id\x18\x02 \x01(\tR\x0esuccessorRunId\x124\n" +
+	"\x16successor_start_offset\x18\x03 \x01(\x03R\x14successorStartOffset\"\xaf\x01\n" +
 	"\x1aAddWorkflowMessagesRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12n\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2C.temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInputR\x0ffrontendRequest\"\x88\x01\n" +

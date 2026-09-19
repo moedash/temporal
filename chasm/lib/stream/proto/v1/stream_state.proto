@@ -44,6 +44,11 @@ message StreamState {
   // Bytes appended over the stream's life, kept for the budget check. A stream
   // with a budget never reclaims, so this is also what it holds.
   int64 appended_bytes = 15;
+
+  // A notify task is scheduled and has not run yet. Appends while it is set
+  // schedule none of their own; the task reads the head when it runs, so it
+  // carries every append that landed before it.
+  bool notify_pending = 16;
 }
 
 // Hard bounds on what a stream may hold. Distinct from StreamLifecycle.max_items,

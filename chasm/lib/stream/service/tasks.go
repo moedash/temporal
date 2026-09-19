@@ -137,7 +137,9 @@ func (h *notifyConsumersTaskHandler) Execute(
 		ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundLowCallerInfo(name.String()))
 	}
 
-	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
+	// A write rather than a read, because it also lowers the coalescing flag.
+	// Appends that commit after this transition schedule their own task.
+	state, _, err := chasm.UpdateComponent(ctx, ref, (*stream.Stream).TakeNotifySnapshot, struct{}{})
 	if err != nil {
 		return err
 	}
@@ -147,11 +149,8 @@ func (h *notifyConsumersTaskHandler) Execute(
 	// consumer does not stop the others being told in this pass, and returned
 	// at the end so the task retries rather than dropping the notification.
 	//
-	// Dropping it is not survivable for a consumer on another host. The engine
-	// resolves this ref against the local shard controller, so a consumer whose
-	// shard lives elsewhere fails every time, its known head never advances,
-	// and delivery clips to it: Path C across executions never delivers at all.
-	// A retry does not fix that. It makes it visible, which a warning did not.
+	// Dropping it is not survivable for a consumer on another host: its known
+	// head would never advance, and delivery clips to it.
 	var notifyErrs []error
 
 	for consumerID, consumer := range state.GetConsumers() {
@@ -159,7 +158,7 @@ func (h *notifyConsumersTaskHandler) Execute(
 			continue
 		}
 
-		_, err := h.routed.AdvanceConsumerHead(ctx, &streampb.AdvanceConsumerHeadRequest{
+		response, err := h.routed.AdvanceConsumerHead(ctx, &streampb.AdvanceConsumerHeadRequest{
 			NamespaceId: namespaceID,
 			FrontendRequest: &streampb.AdvanceConsumerHeadInput{
 				WorkflowId: consumer.GetWorkflowId(),
@@ -169,34 +168,66 @@ func (h *notifyConsumersTaskHandler) Execute(
 			},
 		})
 		var gone *serviceerror.NotFound
+		out := response.GetFrontendResponse()
 		switch {
-		case errors.As(err, &gone):
-			// The consumer's execution is gone, so its replay floor is holding
-			// storage for a recovery that can no longer be asked for. This is
-			// the one place that finds out: the probe happens exactly when the
-			// frontier has moved past the consumer, which is exactly when the
-			// floor starts to matter.
-			if _, _, releaseErr := chasm.UpdateComponent(
-				ctx, ref,
-				func(s *stream.Stream, mctx chasm.MutableContext, id string) (struct{}, error) {
-					s.DeregisterConsumer(mctx, id)
-					return struct{}{}, nil
-				},
-				consumerID,
-			); releaseErr != nil {
-				notifyErrs = append(notifyErrs, releaseErr)
-			}
+		case errors.As(err, &gone), err == nil && out.GetConsumerClosed():
+			// The run that subscribed is over and nothing carries the
+			// subscription on. Its replay floor is holding storage for a
+			// recovery that can no longer be asked for, and this probe is the
+			// one place that finds out.
+			notifyErrs = append(notifyErrs, h.forget(ctx, ref, consumerID))
 		case err != nil:
 			h.logger.Error("failed to tell a stream consumer that the frontier moved",
 				tag.NewStringTag("stream-id", streamID),
 				tag.NewStringTag("consumer-workflow-id", consumer.GetWorkflowId()),
 				tag.Error(err))
 			notifyErrs = append(notifyErrs, err)
+		case out.GetSuccessorRunId() != "":
+			// A continue-as-new moved the subscription to a new run. The pin
+			// follows it, with the floor the successor's cursor began at; the
+			// predecessor's ranges are in a closed history that never replays.
+			notifyErrs = append(notifyErrs, h.rekey(ctx, ref, consumer, out))
 		default:
 			// Told, and still there. Nothing to clean up.
 		}
 	}
 	return errors.Join(notifyErrs...)
+}
+
+func (h *notifyConsumersTaskHandler) forget(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	consumerID string,
+) error {
+	_, _, err := chasm.UpdateComponent(ctx, ref,
+		func(s *stream.Stream, mctx chasm.MutableContext, id string) (struct{}, error) {
+			s.ForgetConsumer(mctx, id)
+			return struct{}{}, nil
+		}, consumerID)
+	return err
+}
+
+func (h *notifyConsumersTaskHandler) rekey(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	consumer *streampb.ConsumerCursor,
+	out *streampb.AdvanceConsumerHeadOutput,
+) error {
+	registration := stream.ConsumerRegistration{
+		ConsumerID: externalConsumerID(consumer.GetWorkflowId(), out.GetSuccessorRunId()),
+		WorkflowID: consumer.GetWorkflowId(),
+		RunID:      out.GetSuccessorRunId(),
+		Offset:     out.GetSuccessorStartOffset(),
+		External:   true,
+	}
+	_, _, err := chasm.UpdateComponent(ctx, ref,
+		func(s *stream.Stream, mctx chasm.MutableContext, reg stream.ConsumerRegistration) (struct{}, error) {
+			// Registering the successor drops the predecessor's entry, since
+			// they share a workflow id and differ in run.
+			_, err := s.RegisterConsumer(mctx, reg)
+			return struct{}{}, err
+		}, registration)
+	return err
 }
 
 func (h *notifyConsumersTaskHandler) Discard(

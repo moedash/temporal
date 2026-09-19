@@ -264,8 +264,11 @@ message DescribeWorkflowStreamResponse {
 message RegisterStreamConsumerInput {
   string namespace = 1;
   string stream_id = 2;
-  // The workflow that will consume, which names the pin.
+  // The workflow that will consume. Together with the run it names the pin,
+  // so a later run of the same workflow id registers fresh rather than
+  // inheriting a closed run's floor.
   string consumer_workflow_id = 3;
+  string consumer_run_id = 5;
   // Negative means from wherever the stream is when the pin is taken. Resolved
   // here, where the frontier is, and returned so the cursor records a fact.
   int64 start_offset = 4;
@@ -292,7 +295,16 @@ message AdvanceConsumerHeadInput {
   int64 head_offset = 4;
 }
 
-message AdvanceConsumerHeadOutput {}
+message AdvanceConsumerHeadOutput {
+  // The run that held the pin is closed and no current run of the workflow
+  // consumes the stream, so the stream can release the pin.
+  bool consumer_closed = 1;
+  // The run that held the pin is closed but a successor carries the
+  // subscription, so the stream re-keys the pin to it, with the floor the
+  // successor's cursor started from.
+  string successor_run_id = 2;
+  int64 successor_start_offset = 3;
+}
 
 message AddWorkflowMessagesRequest {
   string namespace_id = 1;

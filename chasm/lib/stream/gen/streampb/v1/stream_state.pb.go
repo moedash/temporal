@@ -51,6 +51,10 @@ type StreamState struct {
 	// Bytes appended over the stream's life, kept for the budget check. A stream
 	// with a budget never reclaims, so this is also what it holds.
 	AppendedBytes int64 `protobuf:"varint,15,opt,name=appended_bytes,json=appendedBytes,proto3" json:"appended_bytes,omitempty"`
+	// A notify task is scheduled and has not run yet. Appends while it is set
+	// schedule none of their own; the task reads the head when it runs, so it
+	// carries every append that landed before it.
+	NotifyPending bool `protobuf:"varint,16,opt,name=notify_pending,json=notifyPending,proto3" json:"notify_pending,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -160,6 +164,13 @@ func (x *StreamState) GetAppendedBytes() int64 {
 		return x.AppendedBytes
 	}
 	return 0
+}
+
+func (x *StreamState) GetNotifyPending() bool {
+	if x != nil {
+		return x.NotifyPending
+	}
+	return false
 }
 
 // Hard bounds on what a stream may hold. Distinct from StreamLifecycle.max_items,
@@ -569,7 +580,7 @@ var File_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto protorefle
 
 const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc = "" +
 	"\n" +
-	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xb4\a\n" +
+	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xdb\a\n" +
 	"\vStreamState\x12\x1f\n" +
 	"\vhead_offset\x18\x01 \x01(\x03R\n" +
 	"headOffset\x12\x1f\n" +
@@ -585,7 +596,8 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\n" +
 	"close_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x12O\n" +
 	"\x06budget\x18\x0e \x01(\v27.temporal.server.chasm.lib.stream.proto.v1.StreamBudgetR\x06budget\x12%\n" +
-	"\x0eappended_bytes\x18\x0f \x01(\x03R\rappendedBytes\x1aw\n" +
+	"\x0eappended_bytes\x18\x0f \x01(\x03R\rappendedBytes\x12%\n" +
+	"\x0enotify_pending\x18\x10 \x01(\bR\rnotifyPending\x1aw\n" +
 	"\x0eProducersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12O\n" +
 	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.stream.proto.v1.ProducerCursorR\x05value:\x028\x01\x1aw\n" +

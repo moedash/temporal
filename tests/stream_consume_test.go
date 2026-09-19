@@ -698,6 +698,22 @@ func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
 	require.Equal(t, int64(2), afterCAN.GetToOffset())
 	require.Len(t, afterCAN.GetMessages(), 1)
 	require.Equal(t, "after-can", string(afterCAN.GetMessages()[0].GetBody().GetData()))
+
+	// The pin followed the subscription to the new run, with the floor where
+	// that run's cursor began. The predecessor's ranges are in a closed history
+	// that never replays, so nothing holds offset 0 any more.
+	described, err := env.FrontendClient().DescribeWorkflowExecution(s.ctx(),
+		&workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.ns, Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+		})
+	require.NoError(t, err)
+	successor := described.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+	state := describeStream(t, s, streamID)
+	require.Len(t, state.GetConsumers(), 1, "one pin, keyed to the run that consumes")
+	for _, consumer := range state.GetConsumers() {
+		require.Equal(t, successor, consumer.GetRunId())
+		require.Equal(t, int64(1), consumer.GetReplayFloor())
+	}
 }
 
 // A workflow subscribing itself, rather than being subscribed out of band.

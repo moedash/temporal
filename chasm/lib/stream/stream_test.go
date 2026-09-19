@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -589,4 +590,63 @@ func TestBudgetRefusesAnAppendThatDoesNotFit(t *testing.T) {
 	_, err = bytesOnly.AddMessages(nil, AddMessagesRequest{Messages: msgs("another one")})
 	require.ErrorAs(t, err, &exhausted)
 	require.Equal(t, int64(1), bytesOnly.State.HeadOffset)
+}
+
+// One workflow id has one open run, so a pin from another run of the same
+// workflow belongs to a run that finished. Registering the new run drops it,
+// which is what lets the new run start at its own offset instead of inheriting
+// a floor that may already be below the stream's base.
+func TestRegisterConsumerReplacesAnEntryFromAnotherRun(t *testing.T) {
+	s := newTestStream(t)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Messages: msgs("a", "b", "c", "d")})
+	require.NoError(t, err)
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:wf/run-1", WorkflowID: "wf", RunID: "run-1", Offset: 0, External: true,
+	})
+	require.NoError(t, err)
+
+	start, err := s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:wf/run-2", WorkflowID: "wf", RunID: "run-2", Offset: 3, External: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), start)
+	require.Len(t, s.State.Consumers, 1)
+	require.Equal(t, "run-2", s.State.Consumers["workflow:wf/run-2"].GetRunId())
+	require.NoError(t, s.Truncate(nil, 3), "only the new run's floor holds")
+
+	// A different workflow id is not the same consumer and keeps its pin.
+	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
+		ConsumerID: "workflow:other/run-9", WorkflowID: "other", RunID: "run-9", Offset: 3, External: true,
+	})
+	require.NoError(t, err)
+	require.Len(t, s.State.Consumers, 2)
+}
+
+// Every append that leaves an external consumer behind would otherwise queue a
+// task of its own. One outstanding task carries every append that lands before
+// it runs, and the task's own read lowers the flag before the next one is owed.
+func TestNotifyCoalescesIntoOneOutstandingTask(t *testing.T) {
+	mctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
+		HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+	}}
+	s := newTestStream(t)
+	s.Batches = make(chasm.Map[int64, *commonpb.DataBlob])
+	_, err := s.RegisterConsumer(mctx, ConsumerRegistration{
+		ConsumerID: "workflow:wf/run-1", WorkflowID: "wf", RunID: "run-1", Offset: 0, External: true,
+	})
+	require.NoError(t, err)
+
+	_, err = s.AddMessages(mctx, AddMessagesRequest{Messages: msgs("a")})
+	require.NoError(t, err)
+	_, err = s.AddMessages(mctx, AddMessagesRequest{Messages: msgs("b")})
+	require.NoError(t, err)
+	require.Len(t, mctx.Tasks, 1, "the second append rides the task the first scheduled")
+
+	// The task's read lowers the flag, so the next append owes a new task.
+	state, err := s.TakeNotifySnapshot(mctx, struct{}{})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), state.GetHeadOffset(), "the task sees every append that landed before it")
+	_, err = s.AddMessages(mctx, AddMessagesRequest{Messages: msgs("c")})
+	require.NoError(t, err)
+	require.Len(t, mctx.Tasks, 2)
 }

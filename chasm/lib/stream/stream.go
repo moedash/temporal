@@ -242,12 +242,28 @@ func (s *Stream) notifyConsumers(mctx chasm.MutableContext) {
 	if mctx == nil {
 		return
 	}
+	// One task outstanding at a time. The task reads the head when it runs and
+	// clears the flag before it reads, so an append that lands after the clear
+	// schedules the next one and nothing is missed.
+	if s.State.NotifyPending {
+		return
+	}
 	for _, consumer := range s.State.Consumers {
 		if consumer.GetExternal() && consumer.GetActive() && consumer.GetOffset() < s.State.HeadOffset {
+			s.State.NotifyPending = true
 			mctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: mctx.Now(s)}, &streampb.StreamNotifyConsumersTask{})
 			return
 		}
 	}
+}
+
+// TakeNotifySnapshot is the notify task's read of the stream. Clearing the
+// pending flag in the same transition that reads the head is what makes the
+// coalescing safe: any append that commits after this one sees the flag down
+// and schedules its own task.
+func (s *Stream) TakeNotifySnapshot(_ chasm.MutableContext, _ struct{}) (*streampb.StreamState, error) {
+	s.State.NotifyPending = false
+	return common.CloneProto(s.State), nil
 }
 
 // checkProducerRoom keeps the dedup table bounded.
@@ -666,6 +682,15 @@ func (s *Stream) RegisterConsumer(_ chasm.MutableContext, reg ConsumerRegistrati
 	if s.State.Consumers == nil {
 		s.State.Consumers = make(map[string]*streampb.ConsumerCursor)
 	}
+	// One workflow id has one open run, so an entry for another run of this
+	// workflow belongs to a closed run. Its floor would otherwise hold storage
+	// for a replay nobody can ask for, and the new run would inherit it.
+	for id, c := range s.State.Consumers {
+		if id != reg.ConsumerID && c.GetExternal() &&
+			c.GetWorkflowId() == reg.WorkflowID && c.GetRunId() != reg.RunID {
+			delete(s.State.Consumers, id)
+		}
+	}
 	if existing, ok := s.State.Consumers[reg.ConsumerID]; ok {
 		// A consumer coming back after its floor was released can find the
 		// stream has moved past what its History refers to. Saying so here is
@@ -701,11 +726,20 @@ func (s *Stream) AdvanceConsumer(_ chasm.MutableContext, consumerID string, offs
 }
 
 // DeregisterConsumer releases the floor a consumer was holding, so retention
-// and the message cap can reach its messages again.
+// and the message cap can reach its messages again. The entry stays, inactive,
+// so the same consumer coming back is refused if the stream has moved past
+// what its History refers to.
 func (s *Stream) DeregisterConsumer(_ chasm.MutableContext, consumerID string) {
 	if consumer, ok := s.State.Consumers[consumerID]; ok {
 		consumer.Active = false
 	}
+}
+
+// ForgetConsumer drops a consumer whose run is closed. A closed run never
+// replays and never comes back, so unlike a deregistration there is nothing
+// left to refuse later.
+func (s *Stream) ForgetConsumer(_ chasm.MutableContext, consumerID string) {
+	delete(s.State.Consumers, consumerID)
 }
 
 func marshalBatch(messages []*streampb.StreamMessage) (*commonpb.DataBlob, error) {
