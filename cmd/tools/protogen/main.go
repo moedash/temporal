@@ -165,12 +165,61 @@ func newGenerator() (*generator, error) {
 	return &gen, nil
 }
 
+// removeExistingGenDirs clears out the previous run's output so a proto that
+// was deleted does not leave its Go behind.
+//
+// Only generated files go. A gen package sometimes needs a hand-written file
+// beside the generated ones, because a method has to be declared in the same
+// package as the type it is on, and wiping the directory deleted those without
+// saying so. Empty directories are then pruned, which is what removing a proto
+// used to rely on.
 func (g *generator) removeExistingGenDirs() error {
 	for _, dir := range g.chasmLibDirs {
 		genDir := filepath.Join(dir, "gen")
-		if err := os.RemoveAll(genDir); err != nil {
-			return fmt.Errorf("error removing directory %s: %w", genDir, err)
+		if !exists(genDir) {
+			continue
 		}
+		if err := filepath.Walk(genDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() || !strings.HasSuffix(info.Name(), ".pb.go") {
+				return nil
+			}
+			return os.Remove(path)
+		}); err != nil {
+			return fmt.Errorf("error removing generated files under %s: %w", genDir, err)
+		}
+		if err := pruneEmptyDirs(genDir); err != nil {
+			return fmt.Errorf("error pruning empty directories under %s: %w", genDir, err)
+		}
+	}
+	return nil
+}
+
+// pruneEmptyDirs removes dir and any descendant left with nothing in it,
+// deepest first.
+func pruneEmptyDirs(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			if err := pruneEmptyDirs(filepath.Join(dir, entry.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	remaining, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	if len(remaining) == 0 {
+		return os.Remove(dir)
 	}
 	return nil
 }

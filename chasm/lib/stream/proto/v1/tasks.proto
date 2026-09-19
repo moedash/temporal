@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+// Fires at close_time plus retention. A closed stream stays readable until
+// then, which is what removes the shutdown handshake the signal-based
+// implementation forces on producers and consumers.
+message StreamRetentionTask {}
+
+// Fires after an append that leaves a registered consumer behind. Appending
+// never schedules a workflow task on its own, because a stream item is data an
+// execution produced rather than a decision input to it. A workflow that
+// subscribed is the exception: it asked to be told, and it cannot find out any
+// other way, since nothing else it does would notice the stream moved.
+message StreamNotifyConsumersTask {}

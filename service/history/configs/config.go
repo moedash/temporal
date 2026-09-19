@@ -3,6 +3,7 @@ package configs
 import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/stream"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/health"
@@ -253,6 +254,7 @@ type Config struct {
 	HistoryCountLimitWarn                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	HistoryCountSuggestContinueAsNew          dynamicconfig.IntPropertyFnWithNamespaceFilter
 	HistoryMaxPageSize                        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	Stream                                    *stream.Config
 	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateActivityFailureSizeLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateSizeLimitError                dynamicconfig.IntPropertyFn
@@ -711,6 +713,7 @@ func NewConfig(
 		HistoryCountLimitWarn:                     dynamicconfig.HistoryCountLimitWarn.Get(dc),
 		HistoryCountSuggestContinueAsNew:          dynamicconfig.HistoryCountSuggestContinueAsNew.Get(dc),
 		HistoryMaxPageSize:                        dynamicconfig.HistoryMaxPageSize.Get(dc),
+		Stream:                                    stream.NewConfig(dc),
 		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
 		MutableStateActivityFailureSizeLimitWarn:  dynamicconfig.MutableStateActivityFailureSizeLimitWarn.Get(dc),
 		MutableStateSizeLimitError:                dynamicconfig.MutableStateSizeLimitError.Get(dc),
