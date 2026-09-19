@@ -1288,9 +1288,13 @@ func (*TruncateStreamOutput) Descriptor() ([]byte, []int) {
 }
 
 type DeleteStreamInput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	StreamId      string                 `protobuf:"bytes,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	StreamId  string                 `protobuf:"bytes,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	// Delete even while a workflow consumer is active. Without it the call is
+	// refused, because the consumer's History depends on ranges the deletion
+	// takes with it.
+	Force         bool `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1337,6 +1341,13 @@ func (x *DeleteStreamInput) GetStreamId() string {
 		return x.StreamId
 	}
 	return ""
+}
+
+func (x *DeleteStreamInput) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
 }
 
 type DeleteStreamOutput struct {
@@ -3381,10 +3392,11 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12&\n" +
 	"\x0fnew_base_offset\x18\x03 \x01(\x03R\rnewBaseOffset\"\x16\n" +
-	"\x14TruncateStreamOutput\"N\n" +
+	"\x14TruncateStreamOutput\"d\n" +
 	"\x11DeleteStreamInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
-	"\tstream_id\x18\x02 \x01(\tR\bstreamId\"\x14\n" +
+	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x14\n" +
+	"\x05force\x18\x03 \x01(\bR\x05force\"\x14\n" +
 	"\x12DeleteStreamOutput\"\xa1\x01\n" +
 	"\x13CreateStreamRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12g\n" +

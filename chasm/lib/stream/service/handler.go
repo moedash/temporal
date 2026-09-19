@@ -857,6 +857,26 @@ func (h *handler) DeleteStream(
 	in := req.GetFrontendRequest()
 	key := chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: in.GetStreamId()}
 
+	// A workflow consuming the stream recorded ranges its replay will ask for.
+	// Deleting under it succeeds now and fails that workflow later, so the
+	// caller has to say it means it. Checked and then deleted rather than in
+	// one transition, which leaves a window for a subscription that lands in
+	// between; that consumer finds out at its next task, with a cause.
+	if !in.GetForce() {
+		state, err := chasm.ReadComponent(ctx, refFor(key.NamespaceID, key.BusinessID),
+			(*stream.Stream).Snapshot, struct{}{})
+		if err != nil {
+			return nil, err
+		}
+		for id, consumer := range state.GetConsumers() {
+			if consumer.GetActive() {
+				return nil, serviceerror.NewFailedPreconditionf(
+					"stream %q is consumed by workflow %q (%s); set force to delete it anyway",
+					key.BusinessID, consumer.GetWorkflowId(), id)
+			}
+		}
+	}
+
 	// The payload is component state, so deleting the execution takes it too.
 	if err := chasm.DeleteExecution[*stream.Stream](ctx, key, chasm.DeleteExecutionRequest{}); err != nil {
 		return nil, err

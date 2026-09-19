@@ -11,8 +11,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	chasmstream "go.temporal.io/server/chasm/lib/stream"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -74,17 +78,23 @@ func TestTruncationRefusesToDropWhatAConsumerNeedsToReplay(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Delivered and recorded, which is what makes these three messages part of
-	// the workflow's recovery rather than spare capacity.
+	// The floor is where the subscription started. It holds from the moment of
+	// subscribing, before anything has been delivered, because the first range
+	// the workflow will record begins there.
+	truncate := func() error {
+		_, err := s.client.TruncateStream(s.ctx(), &streamlib.TruncateStreamRequest{
+			FrontendRequest: &streamlib.TruncateStreamInput{
+				Namespace: s.ns, StreamId: streamID, NewBaseOffset: 2,
+			},
+		})
+		return err
+	}
+	require.ErrorContains(t, truncate(), "still depends on offset 0")
+
+	// Delivering and recording the range does not move the floor either.
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
-
-	_, err = s.client.TruncateStream(s.ctx(), &streamlib.TruncateStreamRequest{
-		FrontendRequest: &streamlib.TruncateStreamInput{
-			Namespace: s.ns, StreamId: streamID, NewBaseOffset: 2,
-		},
-	})
-	require.ErrorContains(t, err, "still depends on offset 0")
+	require.ErrorContains(t, truncate(), "still depends on offset 0")
 
 	desc, err := s.client.DescribeStream(s.ctx(), &streamlib.DescribeStreamRequest{
 		FrontendRequest: &streamlib.DescribeStreamInput{Namespace: s.ns, StreamId: streamID},
@@ -130,4 +140,122 @@ func TestTruncationStillWorksWithNoConsumer(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), desc.GetFrontendResponse().GetState().GetBaseOffset())
+}
+
+// A closed stream past its retention is still held by a consumer that is
+// running: its History depends on the ranges it consumed. Deletion waits and
+// asks again, and goes through once the consumer is gone.
+func TestRetentionWaitsForAnActiveConsumer(t *testing.T) {
+	env := testcore.NewEnv(t,
+		testcore.WithDynamicConfig(chasmstream.RetentionRecheckIntervalSetting, time.Second),
+	)
+	s := newStreamTestEnvFrom(t, env)
+
+	streamID := "retained-until-read-" + uuid.NewString()
+	_, err := s.client.CreateStream(s.ctx(), &streamlib.CreateStreamRequest{
+		FrontendRequest: &streamlib.CreateStreamInput{
+			Namespace: s.ns, StreamId: streamID,
+			Lifecycle: &streamlib.StreamLifecycle{Retention: durationpb.New(time.Second)},
+		},
+	})
+	require.NoError(t, err)
+
+	execution, tq := startConsumer(t, s, "stream-wf-retained-")
+	task := 0
+	//nolint:staticcheck // SA1019: consistent with the other stream tests.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			task++
+			if task == 2 {
+				return completeWorkflowCommand(), nil
+			}
+			return nil, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	_, err = s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(), StreamId: streamID, StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = s.client.CloseStream(s.ctx(), &streamlib.CloseStreamRequest{
+		FrontendRequest: &streamlib.CloseStreamInput{Namespace: s.ns, StreamId: streamID},
+	})
+	require.NoError(t, err)
+
+	// Well past retention, and the stream is still there because the consumer
+	// is still running.
+	time.Sleep(3 * time.Second)
+	state := describeStream(t, s, streamID)
+	require.True(t, state.GetClosed())
+	require.Len(t, state.GetConsumers(), 1)
+
+	signalWorkflow(t, s, execution.GetWorkflowId(), execution.GetRunId())
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	// The next recheck finds the consumer gone and lets retention through.
+	await.RequireTrue(t, func() bool {
+		_, err := s.client.DescribeStream(s.ctx(), &streamlib.DescribeStreamRequest{
+			FrontendRequest: &streamlib.DescribeStreamInput{Namespace: s.ns, StreamId: streamID},
+		})
+		return err != nil
+	}, 20*time.Second, 200*time.Millisecond)
+}
+
+// Deleting a stream a running workflow consumes succeeds now and fails that
+// workflow at its next replay, so the caller has to say it means it.
+func TestDeleteStreamRefusesWhileAConsumerIsActive(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	streamID := "guarded-stream-" + uuid.NewString()
+	s.create(s.ctx(), t, streamID)
+	execution, tq := startConsumer(t, s, "stream-wf-guarded-")
+	//nolint:staticcheck // SA1019: consistent with the other stream tests.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+			return nil, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	_, err := poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	_, err = s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(), StreamId: streamID, StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = s.client.DeleteStream(s.ctx(), &streamlib.DeleteStreamRequest{
+		FrontendRequest: &streamlib.DeleteStreamInput{Namespace: s.ns, StreamId: streamID},
+	})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.ErrorContains(t, err, execution.GetWorkflowId(), "the refusal names the consumer")
+
+	_, err = s.client.DeleteStream(s.ctx(), &streamlib.DeleteStreamRequest{
+		FrontendRequest: &streamlib.DeleteStreamInput{Namespace: s.ns, StreamId: streamID, Force: true},
+	})
+	require.NoError(t, err)
+	await.RequireTrue(t, func() bool {
+		_, err := s.client.DescribeStream(s.ctx(), &streamlib.DescribeStreamRequest{
+			FrontendRequest: &streamlib.DescribeStreamInput{Namespace: s.ns, StreamId: streamID},
+		})
+		return err != nil
+	}, 20*time.Second, 100*time.Millisecond)
 }

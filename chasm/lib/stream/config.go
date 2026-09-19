@@ -144,10 +144,17 @@ under limit.mutableStateSize.error, which would otherwise terminate the workflow
 		OwnedStreamMaxItems,
 		`Message budget of a stream a workflow owns. Appends past it are refused.`,
 	)
+	RetentionRecheckIntervalSetting = dynamicconfig.NewGlobalDurationSetting(
+		"stream.retentionRecheckInterval",
+		time.Minute,
+		`How long a closed stream past its retention waits before asking again whether the
+consumers holding it are still running.`,
+	)
 )
 
-// Config holds the namespace-scoped limits as live property functions.
+// Config holds the settings as live property functions.
 type Config struct {
+	RetentionRecheckInterval   dynamicconfig.DurationPropertyFn
 	MaxConsumeItemsPerTask     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxConsumeBytesPerTask     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxProducersPerStream      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -161,6 +168,7 @@ type Config struct {
 
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
+		RetentionRecheckInterval:   RetentionRecheckIntervalSetting.Get(dc),
 		MaxConsumeItemsPerTask:     MaxConsumeItemsPerTaskSetting.Get(dc),
 		MaxConsumeBytesPerTask:     MaxConsumeBytesPerTaskSetting.Get(dc),
 		MaxProducersPerStream:      MaxProducersPerStreamSetting.Get(dc),

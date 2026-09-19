@@ -189,6 +189,10 @@ message TruncateStreamOutput {}
 message DeleteStreamInput {
   string namespace = 1;
   string stream_id = 2;
+  // Delete even while a workflow consumer is active. Without it the call is
+  // refused, because the consumer's History depends on ranges the deletion
+  // takes with it.
+  bool force = 3;
 }
 
 message DeleteStreamOutput {}

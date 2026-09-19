@@ -191,7 +191,9 @@ func workflowTaskFailedWith(
 func deleteStreamAndWait(t *testing.T, s *streamTestEnv, streamID string) {
 	t.Helper()
 	_, err := s.client.DeleteStream(s.ctx(), &streamlib.DeleteStreamRequest{
-		FrontendRequest: &streamlib.DeleteStreamInput{Namespace: s.ns, StreamId: streamID},
+		FrontendRequest: &streamlib.DeleteStreamInput{
+			Namespace: s.ns, StreamId: streamID, Force: true,
+		},
 	})
 	require.NoError(t, err)
 	await.RequireTrue(t, func() bool {
