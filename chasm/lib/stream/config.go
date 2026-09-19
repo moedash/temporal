@@ -154,6 +154,9 @@ consumers holding it are still running.`,
 
 // Config holds the settings as live property functions.
 type Config struct {
+	// The id length limit shared with workflow ids. A stream id becomes an
+	// execution's business id, and a stream name a key in mutable state.
+	MaxIDLength                dynamicconfig.IntPropertyFn
 	RetentionRecheckInterval   dynamicconfig.DurationPropertyFn
 	MaxConsumeItemsPerTask     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxConsumeBytesPerTask     dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -168,6 +171,7 @@ type Config struct {
 
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
+		MaxIDLength:                dynamicconfig.MaxIDLengthLimit.Get(dc),
 		RetentionRecheckInterval:   RetentionRecheckIntervalSetting.Get(dc),
 		MaxConsumeItemsPerTask:     MaxConsumeItemsPerTaskSetting.Get(dc),
 		MaxConsumeBytesPerTask:     MaxConsumeBytesPerTaskSetting.Get(dc),

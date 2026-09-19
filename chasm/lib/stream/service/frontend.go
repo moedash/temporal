@@ -13,25 +13,35 @@ import (
 )
 
 // FrontendHandler serves StreamService on the frontend. It resolves the
-// namespace name to an ID and forwards to the history shard that owns the
-// stream; the layered client does the routing from the business ID.
+// namespace name to an ID, checks what can be checked without the stream, and
+// forwards to the history shard that owns the stream; the layered client does
+// the routing from the business ID.
+//
+// The checks are the ones the workflow handler makes for its own ids. A stream
+// id becomes an execution's business id and a stream name a key in mutable
+// state, so neither may be longer than an id is allowed to be, and an offset
+// or page size that history would only clamp or refuse later is refused here
+// before the request is routed.
 type FrontendHandler struct {
 	streampb.UnimplementedStreamServiceServer
 
 	client            streampb.StreamServiceClient
 	namespaceRegistry namespace.Registry
 	logger            log.Logger
+	config            *stream.Config
 }
 
 func NewFrontendHandler(
 	client streampb.StreamServiceClient,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	config *stream.Config,
 ) *FrontendHandler {
 	return &FrontendHandler{
 		client:            client,
 		namespaceRegistry: namespaceRegistry,
 		logger:            logger,
+		config:            config,
 	}
 }
 
@@ -46,147 +56,239 @@ func (h *FrontendHandler) namespaceID(name string) (string, error) {
 	return id.String(), nil
 }
 
+// checkID refuses an id or name longer than the namespace's id limit. Empty is
+// allowed here: some fields mean the default when empty and the ones that do
+// not are checked by their handler.
+func (h *FrontendHandler) checkID(field, value string) error {
+	if len(value) > h.config.MaxIDLength() {
+		return serviceerror.NewInvalidArgumentf(
+			"%s is %d characters, over the %d limit", field, len(value), h.config.MaxIDLength())
+	}
+	return nil
+}
+
+func checkOffset(field string, value int64) error {
+	if value < 0 {
+		return serviceerror.NewInvalidArgumentf("%s cannot be negative, got %d", field, value)
+	}
+	return nil
+}
+
+// clampMaxMessages bounds a page the way the history side does, so a caller
+// asking for more sees the same page size it would have been given anyway.
+func clampMaxMessages(requested int32) int32 {
+	if requested <= 0 || requested > stream.DefaultMaxMessagesPerPoll {
+		return stream.DefaultMaxMessagesPerPoll
+	}
+	return requested
+}
+
 func (h *FrontendHandler) CreateStream(
 	ctx context.Context, req *streampb.CreateStreamRequest,
 ) (*streampb.CreateStreamResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if in.GetStreamId() == "" {
+		return nil, serviceerror.NewInvalidArgument("stream id is required")
+	}
+	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
+		return nil, err
+	}
 	return h.client.CreateStream(ctx, &streampb.CreateStreamRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) AddMessages(
 	ctx context.Context, req *streampb.AddMessagesRequest,
 ) (*streampb.AddMessagesResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
+		return nil, err
+	}
 	return h.client.AddMessages(ctx, &streampb.AddMessagesRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) FinishWriting(
 	ctx context.Context, req *streampb.FinishWritingRequest,
 ) (*streampb.FinishWritingResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
+		return nil, err
+	}
 	return h.client.FinishWriting(ctx, &streampb.FinishWritingRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) SubscribeWorkflow(
 	ctx context.Context, req *streampb.SubscribeWorkflowRequest,
 ) (*streampb.SubscribeWorkflowResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
+		return nil, err
+	}
+	if err := h.checkID("stream name", in.GetStreamName()); err != nil {
+		return nil, err
+	}
 	return h.client.SubscribeWorkflow(ctx, &streampb.SubscribeWorkflowRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) PollMessages(
 	ctx context.Context, req *streampb.PollMessagesRequest,
 ) (*streampb.PollMessagesResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
+		return nil, err
+	}
+	if err := checkOffset("from offset", in.GetFromOffset()); err != nil {
+		return nil, err
+	}
+	in.MaxMessages = clampMaxMessages(in.GetMaxMessages())
 	return h.client.PollMessages(ctx, &streampb.PollMessagesRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) PollWorkflowMessages(
 	ctx context.Context, req *streampb.PollWorkflowMessagesRequest,
 ) (*streampb.PollWorkflowMessagesResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if err := h.checkID("stream name", in.GetStreamName()); err != nil {
+		return nil, err
+	}
+	if err := checkOffset("from offset", in.GetFromOffset()); err != nil {
+		return nil, err
+	}
+	in.MaxMessages = clampMaxMessages(in.GetMaxMessages())
 	return h.client.PollWorkflowMessages(ctx, &streampb.PollWorkflowMessagesRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) DescribeWorkflowStream(
 	ctx context.Context, req *streampb.DescribeWorkflowStreamRequest,
 ) (*streampb.DescribeWorkflowStreamResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if err := h.checkID("stream name", in.GetStreamName()); err != nil {
+		return nil, err
+	}
 	return h.client.DescribeWorkflowStream(ctx, &streampb.DescribeWorkflowStreamRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) AddWorkflowMessages(
 	ctx context.Context, req *streampb.AddWorkflowMessagesRequest,
 ) (*streampb.AddWorkflowMessagesResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if err := h.checkID("stream name", in.GetStreamName()); err != nil {
+		return nil, err
+	}
 	return h.client.AddWorkflowMessages(ctx, &streampb.AddWorkflowMessagesRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) DescribeStream(
 	ctx context.Context, req *streampb.DescribeStreamRequest,
 ) (*streampb.DescribeStreamResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
+		return nil, err
+	}
 	return h.client.DescribeStream(ctx, &streampb.DescribeStreamRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) CloseStream(
 	ctx context.Context, req *streampb.CloseStreamRequest,
 ) (*streampb.CloseStreamResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
+		return nil, err
+	}
 	return h.client.CloseStream(ctx, &streampb.CloseStreamRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) TruncateStream(
 	ctx context.Context, req *streampb.TruncateStreamRequest,
 ) (*streampb.TruncateStreamResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
+		return nil, err
+	}
+	if err := checkOffset("new base offset", in.GetNewBaseOffset()); err != nil {
+		return nil, err
+	}
 	return h.client.TruncateStream(ctx, &streampb.TruncateStreamRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) DeleteStream(
 	ctx context.Context, req *streampb.DeleteStreamRequest,
 ) (*streampb.DeleteStreamResponse, error) {
-	id, err := h.namespaceID(req.GetFrontendRequest().GetNamespace())
+	in := req.GetFrontendRequest()
+	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
+	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
+		return nil, err
+	}
 	return h.client.DeleteStream(ctx, &streampb.DeleteStreamRequest{
-		NamespaceId: id, FrontendRequest: req.GetFrontendRequest(),
+		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
