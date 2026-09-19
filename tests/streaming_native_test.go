@@ -230,7 +230,8 @@ func TestStreamingComparison(t *testing.T) {
 
 	t.Log("Workflow Streams (Signals in, polling Update out) versus native streams")
 	t.Log("")
-	t.Log("| scenario | design | msgs | delivered | rejected | wf hist bytes/msg | persist ops/msg | p50 | p99 |")
+	t.Log("| scenario | design | msgs | delivered | rejected | wf hist bytes/msg " +
+		"| persist ops/msg | p50 | p99 |")
 	t.Log("|---|---|---|---|---|---|---|---|---|")
 	for i := range baseline {
 		logComparisonRow(t, "signals+update", baseline[i])

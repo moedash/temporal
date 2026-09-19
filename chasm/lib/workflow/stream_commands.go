@@ -198,12 +198,14 @@ func (w *Workflow) ReserveStreamSubscribedEvent(
 	streamID string,
 	workflowTaskCompletedEventID int64,
 ) *historypb.HistoryEvent {
-	return w.AddHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED, func(e *historypb.HistoryEvent) {
+	eventType := enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED
+	return w.AddHistoryEvent(eventType, func(e *historypb.HistoryEvent) {
+		attrs := &historypb.WorkflowStreamSubscribedEventAttributes{
+			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
+			StreamId:                     streamID,
+		}
 		e.Attributes = &historypb.HistoryEvent_WorkflowStreamSubscribedEventAttributes{
-			WorkflowStreamSubscribedEventAttributes: &historypb.WorkflowStreamSubscribedEventAttributes{
-				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
-				StreamId:                     streamID,
-			},
+			WorkflowStreamSubscribedEventAttributes: attrs,
 		}
 	})
 }
@@ -234,7 +236,9 @@ func (streamMessagesAddedEvent) IsWorkflowTaskTrigger() bool { return false }
 
 // The frontier it describes is CHASM state, persisted and rebuilt with the
 // execution, so there is nothing here to reconstruct.
-func (streamMessagesAddedEvent) Apply(chasm.MutableContext, *Workflow, *historypb.HistoryEvent) error {
+func (streamMessagesAddedEvent) Apply(
+	chasm.MutableContext, *Workflow, *historypb.HistoryEvent,
+) error {
 	return nil
 }
 
@@ -256,14 +260,16 @@ func (w *Workflow) RecordStreamMessagesAdded(
 	count int64,
 	workflowTaskCompletedEventID int64,
 ) {
-	w.AddHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED, func(e *historypb.HistoryEvent) {
+	eventType := enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED
+	w.AddHistoryEvent(eventType, func(e *historypb.HistoryEvent) {
+		attrs := &historypb.WorkflowStreamMessagesAddedEventAttributes{
+			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
+			StreamId:                     streamID,
+			FirstOffset:                  firstOffset,
+			MessageCount:                 count,
+		}
 		e.Attributes = &historypb.HistoryEvent_WorkflowStreamMessagesAddedEventAttributes{
-			WorkflowStreamMessagesAddedEventAttributes: &historypb.WorkflowStreamMessagesAddedEventAttributes{
-				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
-				StreamId:                     streamID,
-				FirstOffset:                  firstOffset,
-				MessageCount:                 count,
-			},
+			WorkflowStreamMessagesAddedEventAttributes: attrs,
 		}
 	})
 }

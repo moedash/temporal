@@ -44,16 +44,19 @@ func TestTruncationRefusesToDropWhatAConsumerNeedsToReplay(t *testing.T) {
 
 	id := "stream-retention-wf-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	_, err = env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	_, err = env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	//nolint:staticcheck // SA1019: consistent with the other stream tests.
@@ -62,7 +65,9 @@ func TestTruncationRefusesToDropWhatAConsumerNeedsToReplay(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			_ *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			return nil, nil
 		},
 		Logger: env.Logger,
@@ -168,7 +173,9 @@ func TestRetentionWaitsForAnActiveConsumer(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			task++
 			if task == 2 {
 				return completeWorkflowCommand(), nil
@@ -227,7 +234,9 @@ func TestDeleteStreamRefusesWhileAConsumerIsActive(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			return nil, nil
 		},
 		Logger: env.Logger,

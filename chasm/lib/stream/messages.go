@@ -78,9 +78,9 @@ func ToAPIMessages(in []*streamlib.StreamMessage) []*streampb.StreamMessage {
 // the offset just past the last one kept.
 //
 // It always keeps the first message, however large. Dropping it would leave the
-// cursor unable to advance, and since an unconsumed range now schedules a
-// workflow task, a stream holding one oversized message would wake the workflow
-// forever without ever delivering anything.
+// cursor unable to advance, and since an unconsumed range schedules a workflow
+// task, a stream holding one oversized message would wake the workflow forever
+// without ever delivering anything.
 func CapByBytes(
 	messages []*streamlib.StreamMessage,
 	from int64,

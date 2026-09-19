@@ -18,10 +18,11 @@ import (
 )
 
 func completeWorkflowCommand() []*commandpb.Command {
+	attrs := &commandpb.CompleteWorkflowExecutionCommandAttributes{}
 	return []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-			CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+			CompleteWorkflowExecutionCommandAttributes: attrs,
 		},
 	}}
 }
@@ -49,7 +50,9 @@ func subscribeConsumeAndComplete(
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			task++
 			if task == 3 {
 				return completeWorkflowCommand(), nil
@@ -103,7 +106,8 @@ func TestACompletedConsumerReleasesItsFloor(t *testing.T) {
 			Namespace: s.ns, StreamId: streamID, NewBaseOffset: 2,
 		},
 	})
-	require.ErrorContains(t, err, "still depends on offset 0", "the pin holds until the stream finds out")
+	require.ErrorContains(t, err, "still depends on offset 0",
+		"the pin holds until the stream finds out")
 
 	// The append is what makes the stream go and ask.
 	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
@@ -136,16 +140,19 @@ func TestANewRunSubscribesFreshAfterThePreviousCompleted(t *testing.T) {
 	first := subscribeConsumeAndComplete(t, s, streamID, "stream-wf-rerun-")
 
 	// The same workflow id, started again after the first run completed.
-	second, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          first.GetWorkflowId(),
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: first.GetWorkflowId() + "-tq2"},
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	second, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          first.GetWorkflowId(),
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: first.GetWorkflowId() + "-tq2"},
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 	require.NotEqual(t, first.GetRunId(), second.GetRunId())
 
@@ -159,7 +166,8 @@ func TestANewRunSubscribesFreshAfterThePreviousCompleted(t *testing.T) {
 		"the new run starts where it asked, not where the old run did")
 
 	state := describeStream(t, s, streamID)
-	require.Len(t, state.GetConsumers(), 1, "the old run's pin is replaced, not kept beside the new one")
+	require.Len(t, state.GetConsumers(), 1,
+		"the old run's pin is replaced, not kept beside the new one")
 	for _, consumer := range state.GetConsumers() {
 		require.Equal(t, second.GetRunId(), consumer.GetRunId())
 		require.Equal(t, int64(2), consumer.GetReplayFloor())

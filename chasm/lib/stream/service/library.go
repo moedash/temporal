@@ -24,7 +24,11 @@ type library struct {
 	notifyConsumers *notifyConsumersTaskHandler
 }
 
-func newLibrary(h *handler, retention *retentionTaskHandler, notifyConsumers *notifyConsumersTaskHandler) *library {
+func newLibrary(
+	h *handler,
+	retention *retentionTaskHandler,
+	notifyConsumers *notifyConsumersTaskHandler,
+) *library {
 	return &library{handler: h, retention: retention, notifyConsumers: notifyConsumers}
 }
 

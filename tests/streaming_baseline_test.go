@@ -137,8 +137,14 @@ func TestStreamingBaseline(t *testing.T) {
 
 func shortStreamBaselineMatrix() []streamBaselineParams {
 	return []streamBaselineParams{
-		{name: "flush2s_sub1", flushInterval: 2 * time.Second, subscribers: 1, messageRate: 40, duration: 6 * time.Second},
-		{name: "flush100ms_sub1", flushInterval: 100 * time.Millisecond, subscribers: 1, messageRate: 40, duration: 6 * time.Second},
+		{
+			name: "flush2s_sub1", flushInterval: 2 * time.Second, subscribers: 1,
+			messageRate: 40, duration: 6 * time.Second,
+		},
+		{
+			name: "flush100ms_sub1", flushInterval: 100 * time.Millisecond, subscribers: 1,
+			messageRate: 40, duration: 6 * time.Second,
+		},
 	}
 }
 
@@ -201,7 +207,8 @@ func runStreamBaseline(t *testing.T, p streamBaselineParams) streamBaselineResul
 		consumers.Add(1)
 		go func(idx int) {
 			defer consumers.Done()
-			lat, n := runStreamConsumer(consumerCtx, env, wfID, run.GetRunID(), sentAt, &receivedTotal, &pollRejections)
+			lat, n := runStreamConsumer(
+				consumerCtx, env, wfID, run.GetRunID(), sentAt, &receivedTotal, &pollRejections)
 			consumerLatencies[idx] = lat
 			consumerCounts[idx] = n
 		}(i)
@@ -223,7 +230,8 @@ func runStreamBaseline(t *testing.T, p streamBaselineParams) streamBaselineResul
 	}
 	stopConsumers()
 	consumers.Wait()
-	require.NoError(t, env.SdkClient().SignalWorkflow(ctx, wfID, run.GetRunID(), streamDoneSignal, nil))
+	require.NoError(t,
+		env.SdkClient().SignalWorkflow(ctx, wfID, run.GetRunID(), streamDoneSignal, nil))
 	if err := run.Get(ctx, nil); err != nil {
 		t.Logf("workflow did not complete cleanly: %v", err)
 	}
@@ -237,10 +245,13 @@ func runStreamBaseline(t *testing.T, p streamBaselineParams) streamBaselineResul
 	res.latencyP50 = percentile(all, 0.50)
 	res.latencyP99 = percentile(all, 0.99)
 
-	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: env.Namespace().String(),
-		Execution: env.Tv().WithWorkflowID(wfID).WorkflowExecution(),
-	})
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(
+		ctx,
+		&workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: env.Tv().WithWorkflowID(wfID).WorkflowExecution(),
+		},
+	)
 	if err == nil {
 		res.historyBytes = desc.GetWorkflowExecutionInfo().GetHistorySizeBytes()
 		res.historyEvents = desc.GetWorkflowExecutionInfo().GetHistoryLength()
@@ -423,7 +434,8 @@ func reportStreamBaseline(t *testing.T, results []streamBaselineResult) {
 	// without being retyped, which is how transcription errors get in.
 	t.Log("Workflow Streams baseline: Signals in, polling Update out")
 	t.Log("")
-	t.Log("| scenario | msgs | delivered | rejected polls | hist events/msg | hist bytes/msg | persist ops/msg | p50 | p99 |")
+	t.Log("| scenario | msgs | delivered | rejected polls | hist events/msg | hist bytes/msg " +
+		"| persist ops/msg | p50 | p99 |")
 	t.Log("|---|---|---|---|---|---|---|---|---|")
 	for _, r := range results {
 		perMsg := func(v int64) string {

@@ -603,7 +603,8 @@ func eventsOfResponse(
 
 	raw := resp.GetRawHistoryBytes()
 	if len(raw) == 0 {
-		raw = resp.GetRawHistory() //nolint:staticcheck // SA1019: still populated while the newer field rolls out.
+		//nolint:staticcheck // SA1019: still populated while the newer field rolls out.
+		raw = resp.GetRawHistory()
 	}
 	blobs := make([]*commonpb.DataBlob, 0, len(raw))
 	for _, batch := range raw {

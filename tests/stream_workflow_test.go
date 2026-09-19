@@ -38,16 +38,19 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 	id := "stream-wf-publish-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	we, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-publisher"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	we, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-publisher"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	published := false
@@ -59,14 +62,11 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			if published {
-				return []*commandpb.Command{{
-					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
-					},
-				}}, nil
+				return completeWorkflowCommand(), nil
 			}
 			published = true
 			return []*commandpb.Command{{
@@ -120,7 +120,8 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"planning", "calling tool"}, bodies(poll.GetFrontendResponse().GetMessages()))
+	require.Equal(t, []string{"planning", "calling tool"},
+		bodies(poll.GetFrontendResponse().GetMessages()))
 	require.Equal(t, []int64{0, 1}, offsets(poll.GetFrontendResponse().GetMessages()),
 		"each message carries where it sits in the log, so a reader can resume between them")
 	require.Equal(t, int64(2), poll.GetFrontendResponse().GetNextOffset())
@@ -182,16 +183,19 @@ func TestStreamWorkflowLongPollWakesOnPublish(t *testing.T) {
 	id := "stream-wf-longpoll-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-publisher"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	_, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-publisher"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	type result struct {
@@ -214,7 +218,9 @@ func TestStreamWorkflowLongPollWakesOnPublish(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
 				Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
@@ -252,16 +258,19 @@ func TestStreamWorkflowTakesAppendsFromOutsideToo(t *testing.T) {
 	id := "stream-wf-mixed-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-publisher"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	_, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-publisher"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	appendOutside := func(body string) *streamlib.AddMessagesOutput {
@@ -289,7 +298,9 @@ func TestStreamWorkflowTakesAppendsFromOutsideToo(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
 				Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
@@ -344,16 +355,19 @@ func TestStreamWorkflowStreamClosesWithItsWorkflow(t *testing.T) {
 	id := "stream-wf-close-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-publisher"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	_, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-publisher"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	describe := func() *streamlib.StreamState {
@@ -373,7 +387,9 @@ func TestStreamWorkflowStreamClosesWithItsWorkflow(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			return []*commandpb.Command{
 				{
 					CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
@@ -385,12 +401,7 @@ func TestStreamWorkflowStreamClosesWithItsWorkflow(t *testing.T) {
 						},
 					},
 				},
-				{
-					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
-					},
-				},
+				completeWorkflowCommand()[0],
 			}, nil
 		},
 		Logger: env.Logger,
@@ -431,7 +442,9 @@ func TestOutsideAppendsRaceTheWorkflowPublishWithoutFailing(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			return publishCommand("from-workflow"), nil
 		},
 		Logger: env.Logger,
@@ -500,7 +513,9 @@ func TestOwnedStreamRefusesAppendsPastItsBudget(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			task++
 			if task == 1 {
 				return publishCommand("one", "two"), nil

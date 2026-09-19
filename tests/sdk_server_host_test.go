@@ -14,7 +14,15 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
+// TestSDKValidationServerHost is not a test. It keeps a dedicated cluster up so
+// an SDK's own test suite can run against a server built from this tree, and
+// tears it down when the caller writes the shutdown file. Opt-in like the
+// other measurement tooling; nothing in a normal run should start a cluster
+// and hold it for hours.
 func TestSDKValidationServerHost(t *testing.T) {
+	if os.Getenv("TEMPORAL_STREAM_BENCH") != "1" {
+		t.Skip("set TEMPORAL_STREAM_BENCH=1 to run")
+	}
 	readyPath := os.Getenv("AI198_SDK_SERVER_READY_FILE")
 	stopPath := os.Getenv("AI198_SDK_SERVER_STOP_FILE")
 	if readyPath == "" || stopPath == "" {
@@ -25,15 +33,21 @@ func TestSDKValidationServerHost(t *testing.T) {
 	env := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	_, err = env.RegisterNamespace(ctx, namespace.Name("default"), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	_, err = env.RegisterNamespace(
+		ctx, namespace.Name("default"), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	require.NoError(t, err)
 	config := env.GetTestClusterConfig()
 	metadata := map[string]any{
 		"status": "running", "pid": os.Getpid(), "target": env.FrontendGRPCAddress(),
-		"namespace": "default", "persistence": "SQLite", "history_hosts": config.HistoryConfig.NumHistoryHosts,
-		"history_shards": config.HistoryConfig.NumHistoryShards, "started_utc": time.Now().UTC().Format(time.RFC3339),
-		"shutdown_file": stopPath, "source_provenance": "../server-source-provenance.json",
-		"configuration": "tests/testcore dedicated test-cluster defaults; namespace default added for SDK clients",
+		"namespace":         "default",
+		"persistence":       "SQLite",
+		"history_hosts":     config.HistoryConfig.NumHistoryHosts,
+		"history_shards":    config.HistoryConfig.NumHistoryShards,
+		"started_utc":       time.Now().UTC().Format(time.RFC3339),
+		"shutdown_file":     stopPath,
+		"source_provenance": "../server-source-provenance.json",
+		"configuration": "tests/testcore dedicated test-cluster defaults; " +
+			"namespace default added for SDK clients",
 	}
 	writeMetadata := func() {
 		data, marshalErr := json.MarshalIndent(metadata, "", "  ")
@@ -41,7 +55,8 @@ func TestSDKValidationServerHost(t *testing.T) {
 		require.NoError(t, os.WriteFile(readyPath, append(data, '\n'), 0o644))
 	}
 	writeMetadata()
-	t.Logf("SDK validation server ready at %s in namespace default; shutdown file %s", env.FrontendGRPCAddress(), stopPath)
+	t.Logf("SDK validation server ready at %s in namespace default; shutdown file %s",
+		env.FrontendGRPCAddress(), stopPath)
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	deadline := time.NewTimer(2 * time.Hour)

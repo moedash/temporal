@@ -107,7 +107,9 @@ func rekeyConsumer(
 		External:   true,
 	}
 	_, _, err := chasm.UpdateComponent(ctx, ref,
-		func(s *stream.Stream, mctx chasm.MutableContext, reg stream.ConsumerRegistration) (struct{}, error) {
+		func(
+			s *stream.Stream, mctx chasm.MutableContext, reg stream.ConsumerRegistration,
+		) (struct{}, error) {
 			// Registering the successor drops the predecessor's entry, since
 			// they share a workflow id and differ in run.
 			_, err := s.RegisterConsumer(mctx, reg)

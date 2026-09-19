@@ -35,7 +35,9 @@ func TestOverLimitPublishFailsTheWorkflowTask(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			task++
 			if task == 1 {
 				return publishCommand(tooMany...), nil
@@ -95,7 +97,9 @@ func TestSubscribeToAMissingStreamFailsTheWorkflowTask(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			if len(delivered) == 1 {
 				return subscribeCommand(missing), nil
@@ -145,7 +149,9 @@ func TestPublishOnAFailedTaskLeavesNoTrace(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			task++
 			if task == 1 {
 				return append(publishCommand("lost-with-the-task"), invalidTrailer), nil

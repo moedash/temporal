@@ -120,6 +120,7 @@ func (h *handler) CreateStream(
 	req *streampb.CreateStreamRequest,
 ) (*streampb.CreateStreamResponse, error) {
 	in := req.GetFrontendRequest()
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	if in.GetStreamId() == "" {
 		return nil, serviceerror.NewInvalidArgument("stream id is required")
 	}
@@ -237,6 +238,7 @@ func (h *handler) FinishWriting(
 	req *streampb.FinishWritingRequest,
 ) (*streampb.FinishWritingResponse, error) {
 	in := req.GetFrontendRequest()
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
@@ -488,7 +490,8 @@ func (h *handler) AdvanceConsumerHead(
 			out.ConsumerClosed = true
 			return &streampb.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
 		}
-		if err := h.pushHead(ctx, namespaceID, workflowID, pinned.runID, streamID, in.GetHeadOffset()); err != nil {
+		err := h.pushHead(ctx, namespaceID, workflowID, pinned.runID, streamID, in.GetHeadOffset())
+		if err != nil {
 			return nil, err
 		}
 		return &streampb.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
@@ -504,7 +507,8 @@ func (h *handler) AdvanceConsumerHead(
 		out.ConsumerClosed = true
 		return &streampb.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
 	}
-	if err := h.pushHead(ctx, namespaceID, workflowID, current.runID, streamID, in.GetHeadOffset()); err != nil {
+	err = h.pushHead(ctx, namespaceID, workflowID, current.runID, streamID, in.GetHeadOffset())
+	if err != nil {
 		return nil, err
 	}
 	out.SuccessorRunId = current.runID
@@ -575,7 +579,8 @@ func (h *handler) PollWorkflowMessages(
 	}
 
 	wreq := stream.WindowRequest{From: from, MaxMessages: in.GetMaxMessages(), Topics: in.GetTopics()}
-	w, err := chasm.ReadComponent(ctx, ref, readOwnedWindow, ownedWindowRequest{Name: name, Window: wreq})
+	w, err := chasm.ReadComponent(ctx, ref, readOwnedWindow,
+		ownedWindowRequest{Name: name, Window: wreq})
 	if err != nil {
 		return nil, err
 	}
@@ -636,7 +641,10 @@ func readOwnedWindow(
 	if s == nil {
 		// Nothing published yet, which reads as an empty stream so a reader can
 		// attach before the first append.
-		return stream.Window{State: &streampb.StreamState{Closed: !cctx.ExecutionInfo().CloseTime.IsZero()}, To: req.Window.From}, nil
+		return stream.Window{
+			State: &streampb.StreamState{Closed: !cctx.ExecutionInfo().CloseTime.IsZero()},
+			To:    req.Window.From,
+		}, nil
 	}
 	w, err := s.ReadWindow(cctx, req.Window)
 	if err != nil {
@@ -697,7 +705,8 @@ func (h *handler) waitForMessages(
 	from int64,
 	current *streampb.StreamState,
 ) (*streampb.StreamState, error) {
-	pollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, stream.LongPollTimeout, stream.LongPollBuffer)
+	pollCtx, cancel := contextutil.WithDeadlineBuffer(
+		ctx, stream.LongPollTimeout, stream.LongPollBuffer)
 	defer cancel()
 
 	state, _, err := chasm.PollComponent(pollCtx, ref,
@@ -722,11 +731,14 @@ func (h *handler) waitForOwnedMessages(
 	from int64,
 	current *streampb.StreamState,
 ) (*streampb.StreamState, error) {
-	pollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, stream.LongPollTimeout, stream.LongPollBuffer)
+	pollCtx, cancel := contextutil.WithDeadlineBuffer(
+		ctx, stream.LongPollTimeout, stream.LongPollBuffer)
 	defer cancel()
 
 	state, _, err := chasm.PollComponent(pollCtx, ref,
-		func(wf *chasmworkflow.Workflow, cctx chasm.Context, offset int64) (*streampb.StreamState, bool, error) {
+		func(
+			wf *chasmworkflow.Workflow, cctx chasm.Context, offset int64,
+		) (*streampb.StreamState, bool, error) {
 			owned, err := readOwnedStream(wf, cctx, name)
 			if err != nil {
 				return nil, false, err
@@ -774,6 +786,7 @@ func (h *handler) DescribeStream(
 	req *streampb.DescribeStreamRequest,
 ) (*streampb.DescribeStreamResponse, error) {
 	in := req.GetFrontendRequest()
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	state, err := chasm.ReadComponent(ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()), (*stream.Stream).Snapshot, struct{}{})
 	if err != nil {
@@ -810,6 +823,7 @@ func (h *handler) CloseStream(
 	req *streampb.CloseStreamRequest,
 ) (*streampb.CloseStreamResponse, error) {
 	in := req.GetFrontendRequest()
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
@@ -829,6 +843,7 @@ func (h *handler) TruncateStream(
 	req *streampb.TruncateStreamRequest,
 ) (*streampb.TruncateStreamResponse, error) {
 	in := req.GetFrontendRequest()
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
 	if _, _, err := chasm.UpdateComponent(
 		ctx,
@@ -851,6 +866,7 @@ func (h *handler) DeleteStream(
 	req *streampb.DeleteStreamRequest,
 ) (*streampb.DeleteStreamResponse, error) {
 	in := req.GetFrontendRequest()
+	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	key := chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: in.GetStreamId()}
 
 	// A workflow consuming the stream recorded ranges its replay will ask for.
@@ -874,7 +890,8 @@ func (h *handler) DeleteStream(
 	}
 
 	// The payload is component state, so deleting the execution takes it too.
-	if err := chasm.DeleteExecution[*stream.Stream](ctx, key, chasm.DeleteExecutionRequest{}); err != nil {
+	err := chasm.DeleteExecution[*stream.Stream](ctx, key, chasm.DeleteExecutionRequest{})
+	if err != nil {
 		return nil, err
 	}
 	return &streampb.DeleteStreamResponse{FrontendResponse: &streampb.DeleteStreamOutput{}}, nil

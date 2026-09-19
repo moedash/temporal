@@ -31,16 +31,19 @@ func TestStreamWorkflowConsumesWithoutHistoryPayloads(t *testing.T) {
 	id := "stream-wf-consume-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	we, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	we, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	// What each task was handed, in the order the tasks ran.
@@ -53,7 +56,9 @@ func TestStreamWorkflowConsumesWithoutHistoryPayloads(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			task++
 			if task > 1 {
@@ -162,13 +167,16 @@ func recordedCursors(events []*historypb.HistoryEvent) []*streampb.StreamCursor 
 
 func signalWorkflow(t *testing.T, s *streamTestEnv, workflowID, runID string) {
 	t.Helper()
-	_, err := s.env.FrontendClient().SignalWorkflowExecution(s.ctx(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
-		SignalName:        "wake",
-		Identity:          "tester",
-		RequestId:         uuid.NewString(),
-	})
+	_, err := s.env.FrontendClient().SignalWorkflowExecution(
+		s.ctx(),
+		&workflowservice.SignalWorkflowExecutionRequest{
+			Namespace:         s.ns,
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+			SignalName:        "wake",
+			Identity:          "tester",
+			RequestId:         uuid.NewString(),
+		},
+	)
 	require.NoError(t, err)
 }
 
@@ -182,16 +190,19 @@ func TestStreamSubscriptionSchedulesItsOwnWorkflowTask(t *testing.T) {
 	id := "stream-wf-wake-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	_, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	publish := func(bodies ...string) []*commandpb.Command {
@@ -202,7 +213,9 @@ func TestStreamSubscriptionSchedulesItsOwnWorkflowTask(t *testing.T) {
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
 			Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-				AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{Messages: messages},
+				AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
+					Messages: messages,
+				},
 			},
 		}}
 	}
@@ -216,7 +229,9 @@ func TestStreamSubscriptionSchedulesItsOwnWorkflowTask(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			task++
 			switch task {
@@ -250,7 +265,8 @@ func TestStreamSubscriptionSchedulesItsOwnWorkflowTask(t *testing.T) {
 	signalWorkflow(t, s, id, "")
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
-	require.Equal(t, int64(1), currentSlice(t, delivered[1]).GetToOffset(), "nothing new at the tail yet")
+	require.Equal(t, int64(1), currentSlice(t, delivered[1]).GetToOffset(),
+		"nothing new at the tail yet")
 
 	// No signal this time. The subscription owes two offsets, so completing the
 	// previous task has to have scheduled this one.
@@ -267,11 +283,14 @@ func TestStreamSubscriptionSchedulesItsOwnWorkflowTask(t *testing.T) {
 	// workflow on empty tasks forever.
 	pollCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	idle, err := env.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.ns,
-		TaskQueue: tq,
-		Identity:  "tester",
-	})
+	idle, err := env.FrontendClient().PollWorkflowTaskQueue(
+		pollCtx,
+		&workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.ns,
+			TaskQueue: tq,
+			Identity:  "tester",
+		},
+	)
 	if err == nil {
 		require.Empty(t, idle.GetTaskToken(),
 			"a caught-up subscription must not keep scheduling tasks")
@@ -287,16 +306,19 @@ func TestSubscribingToABacklogSchedulesAWorkflowTask(t *testing.T) {
 	id := "stream-wf-backlog-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	_, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	var delivered [][]*streampb.StreamSlice
@@ -308,7 +330,9 @@ func TestSubscribingToABacklogSchedulesAWorkflowTask(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			task++
 			if task > 1 {
@@ -364,16 +388,19 @@ func TestReplayGetsTheConsumedRangesBackFromTheStream(t *testing.T) {
 	id := "stream-wf-replay-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	we, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	we, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	var delivered [][]*streampb.StreamSlice
@@ -385,7 +412,9 @@ func TestReplayGetsTheConsumedRangesBackFromTheStream(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			task++
 			if task > 1 {
@@ -435,7 +464,8 @@ func TestReplayGetsTheConsumedRangesBackFromTheStream(t *testing.T) {
 	require.NoError(t, err)
 
 	replayed := sliceForEvent(delivered[2], consumedAt)
-	require.NotNil(t, replayed, "the replayed task must carry the range recorded at event %d", consumedAt)
+	require.NotNil(t, replayed,
+		"the replayed task must carry the range recorded at event %d", consumedAt)
 	require.Equal(t, int64(0), replayed.GetFromOffset())
 	require.Equal(t, int64(2), replayed.GetToOffset())
 	require.Len(t, replayed.GetMessages(), 2, "the payloads have to come back from the stream")
@@ -500,16 +530,19 @@ func TestWorkflowConsumesAStreamItDoesNotOwn(t *testing.T) {
 	id := "stream-wf-external-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	we, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	we, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	var delivered [][]*streampb.StreamSlice
@@ -520,7 +553,9 @@ func TestWorkflowConsumesAStreamItDoesNotOwn(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			return nil, nil
 		},
@@ -557,8 +592,14 @@ func TestWorkflowConsumesAStreamItDoesNotOwn(t *testing.T) {
 		FrontendRequest: &streamlib.AddMessagesInput{
 			Namespace: s.ns, StreamId: streamID,
 			Messages: []*streamlib.StreamMessage{
-				{Body: &commonpb.Payload{Data: []byte("from-outside-1")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
-				{Body: &commonpb.Payload{Data: []byte("from-outside-2")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+				{
+					Body: &commonpb.Payload{Data: []byte("from-outside-1")},
+					Kind: streamlib.STREAM_MESSAGE_KIND_DATA,
+				},
+				{
+					Body: &commonpb.Payload{Data: []byte("from-outside-2")},
+					Kind: streamlib.STREAM_MESSAGE_KIND_DATA,
+				},
 			},
 		},
 	})
@@ -602,16 +643,19 @@ func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
 	id := "stream-wf-can-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	_, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	var delivered [][]*streampb.StreamSlice
@@ -623,7 +667,9 @@ func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			task++
 			if task == 2 {
@@ -631,7 +677,8 @@ func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
 				return []*commandpb.Command{{
 					CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 					Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
-						ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.
+							ContinueAsNewWorkflowExecutionCommandAttributes{
 							WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
 							TaskQueue:           tq,
 							WorkflowRunTimeout:  durationpb.New(100 * time.Second),
@@ -694,7 +741,8 @@ func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
 	require.NoError(t, err)
 
 	afterCAN := currentSlice(t, delivered[len(delivered)-1])
-	require.Equal(t, int64(1), afterCAN.GetFromOffset(), "the successor resumes where its predecessor stopped")
+	require.Equal(t, int64(1), afterCAN.GetFromOffset(),
+		"the successor resumes where its predecessor stopped")
 	require.Equal(t, int64(2), afterCAN.GetToOffset())
 	require.Len(t, afterCAN.GetMessages(), 1)
 	require.Equal(t, "after-can", string(afterCAN.GetMessages()[0].GetBody().GetData()))
@@ -732,16 +780,19 @@ func TestWorkflowSubscribesToAStreamItself(t *testing.T) {
 	id := "stream-wf-selfsub-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	_, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	var delivered [][]*streampb.StreamSlice
@@ -753,7 +804,9 @@ func TestWorkflowSubscribesToAStreamItself(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			task++
 			if task > 1 {
@@ -820,7 +873,9 @@ func TestWorkflowSubscribesToAStreamItself(t *testing.T) {
 	require.Equal(t, "self-1", string(got.GetMessages()[0].GetBody().GetData()))
 }
 
-func subscribedEvents(events []*historypb.HistoryEvent) []*historypb.WorkflowStreamSubscribedEventAttributes {
+func subscribedEvents(
+	events []*historypb.HistoryEvent,
+) []*historypb.WorkflowStreamSubscribedEventAttributes {
 	var out []*historypb.WorkflowStreamSubscribedEventAttributes
 	for _, e := range events {
 		if attrs := e.GetWorkflowStreamSubscribedEventAttributes(); attrs != nil {
@@ -844,16 +899,19 @@ func TestResubscribingStillWritesItsEvent(t *testing.T) {
 	id := "stream-wf-resub-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	we, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	we, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	subscribe := []*commandpb.Command{{
@@ -872,7 +930,9 @@ func TestResubscribingStillWritesItsEvent(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			task++
 			if task > 2 {
 				return nil, nil
@@ -886,13 +946,16 @@ func TestResubscribingStillWritesItsEvent(t *testing.T) {
 	// Two tasks, each issuing the same subscribe. The second registers nothing.
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
-	_, err = env.FrontendClient().SignalWorkflowExecution(s.ctx(), &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         s.ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id},
-		SignalName:        "wake",
-		Identity:          "tester",
-		RequestId:         uuid.NewString(),
-	})
+	_, err = env.FrontendClient().SignalWorkflowExecution(
+		s.ctx(),
+		&workflowservice.SignalWorkflowExecutionRequest{
+			Namespace:         s.ns,
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id},
+			SignalName:        "wake",
+			Identity:          "tester",
+			RequestId:         uuid.NewString(),
+		},
+	)
 	require.NoError(t, err)
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
@@ -913,11 +976,8 @@ func TestResubscribingStillWritesItsEvent(t *testing.T) {
 
 // A subscribe followed by another command in the same Workflow Task. Every SDK
 // matches issued commands against the events they produced by position, so the
-// subscription's event has to sit where its command did.
-//
-// It used to be written in the flush, which runs after every command, so it
-// landed behind the events of commands issued later and the first replay of
-// any workflow that subscribed before doing anything else would fail.
+// subscription's event has to sit where its command did, even though its start
+// offset is only resolved after every command has run.
 func TestStreamSubscribeEventKeepsCommandOrder(t *testing.T) {
 	env := testcore.NewEnv(t)
 	s := newStreamTestEnvFrom(t, env)
@@ -928,16 +988,19 @@ func TestStreamSubscribeEventKeepsCommandOrder(t *testing.T) {
 	id := "stream-order-" + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	_, err := env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-order"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	_, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-order"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	//nolint:staticcheck // SA1019: deprecated poller is the only one that can emit the command.
@@ -946,7 +1009,9 @@ func TestStreamSubscribeEventKeepsCommandOrder(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			// Subscribe first, then publish. The publish event must come second.
 			return []*commandpb.Command{
 				{
@@ -1009,7 +1074,9 @@ func TestMessagesAppendedWithoutAKindReachTheWorkflow(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			return nil, nil
 		},

@@ -19,14 +19,12 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// What a history event per publish would cost.
+// What the history event per publish costs.
 //
-// Publishing from workflow code is the one stream command with no history
-// event, which is why no SDK can reach it: sdk-core matches commands to events
-// positionally, so a command that produces none desynchronises replay. Giving
-// it an event fixes that, and the objection is that unlike subscribing, which
-// happens once, publishing happens per batch. This measures the per-batch
-// price so the trade is decided on a number.
+// Every SDK matches commands to events positionally, so the publish command
+// has to produce one. The objection is that unlike subscribing, which happens
+// once, publishing happens per batch. This measures the per-batch price so the
+// trade is decided on a number.
 //
 // The method is a marginal one. Each arm runs a workflow whose single workflow
 // task carries N publish commands and then completes, so history holds the
@@ -93,7 +91,10 @@ func TestStreamPublishHistoryCost(t *testing.T) {
 
 		// What the same traffic costs through Signals today.
 		{name: "signal-b100-s20", batches: 100, messagesPerBatch: 1, messageSize: 20, viaSignal: true},
-		{name: "signal-b100-s2000", batches: 100, messagesPerBatch: 1, messageSize: 2000, viaSignal: true},
+		{
+			name: "signal-b100-s2000", batches: 100, messagesPerBatch: 1, messageSize: 2000,
+			viaSignal: true,
+		},
 	}
 
 	results := make([]publishCostResult, 0, len(arms))
@@ -156,16 +157,19 @@ func runPublishCostArm(t *testing.T, arm publishCostArm) publishCostResult {
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	ctx := testcore.NewContext()
 
-	_, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           env.Namespace().String(),
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "publish-cost"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(60 * time.Second),
-		Identity:            "tester",
-	})
+	_, err := env.FrontendClient().StartWorkflowExecution(
+		ctx,
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           env.Namespace().String(),
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "publish-cost"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(60 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 
 	body := []byte(strings.Repeat("x", arm.messageSize))
@@ -178,14 +182,17 @@ func runPublishCostArm(t *testing.T, arm publishCostArm) publishCostResult {
 			for range arm.messagesPerBatch {
 				payloads = append(payloads, &commonpb.Payload{Data: body})
 			}
-			_, err := env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-				Namespace:         env.Namespace().String(),
-				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id},
-				SignalName:        "stream-item",
-				Input:             &commonpb.Payloads{Payloads: payloads},
-				Identity:          "tester",
-				RequestId:         uuid.NewString(),
-			})
+			_, err := env.FrontendClient().SignalWorkflowExecution(
+				ctx,
+				&workflowservice.SignalWorkflowExecutionRequest{
+					Namespace:         env.Namespace().String(),
+					WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id},
+					SignalName:        "stream-item",
+					Input:             &commonpb.Payloads{Payloads: payloads},
+					Identity:          "tester",
+					RequestId:         uuid.NewString(),
+				},
+			)
 			require.NoError(t, err)
 		}
 	}
@@ -196,7 +203,9 @@ func runPublishCostArm(t *testing.T, arm publishCostArm) publishCostResult {
 		Namespace: env.Namespace().String(),
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			commands := make([]*commandpb.Command, 0, arm.batches+1)
 			if !arm.viaSignal {
 				for range arm.batches {
@@ -217,12 +226,7 @@ func runPublishCostArm(t *testing.T, arm publishCostArm) publishCostResult {
 					})
 				}
 			}
-			return append(commands, &commandpb.Command{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
-				},
-			}), nil
+			return append(commands, completeWorkflowCommand()...), nil
 		},
 		Logger: env.Logger,
 		T:      t,
@@ -231,10 +235,13 @@ func runPublishCostArm(t *testing.T, arm publishCostArm) publishCostResult {
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
 
-	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: env.Namespace().String(),
-		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
-	})
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(
+		ctx,
+		&workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+		},
+	)
 	require.NoError(t, err)
 
 	return publishCostResult{
@@ -255,7 +262,8 @@ func reportPublishCost(t *testing.T, results []publishCostResult) {
 	t.Log("Cost of one history event per publish, measured by differencing against an empty run.")
 	t.Logf("Control: %d events, %d bytes.", control.historyEvents, control.historyBytes)
 	t.Log("")
-	t.Log("| arm | batches | msgs | msg size | events | bytes | events/batch | bytes/batch | bytes/msg |")
+	t.Log("| arm | batches | msgs | msg size | events | bytes " +
+		"| events/batch | bytes/batch | bytes/msg |")
 	t.Log("|---|---|---|---|---|---|---|---|---|")
 	for _, r := range results {
 		if r.arm.batches == 0 {

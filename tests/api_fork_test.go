@@ -32,7 +32,8 @@ func TestApiForkCarriesStreamShapes(t *testing.T) {
 	var back commandpb.Command
 	require.NoError(t, proto.Unmarshal(b, &back))
 	require.Equal(t, "s1", back.GetAddStreamMessagesCommandAttributes().GetStreamId())
-	require.Equal(t, "tokens", back.GetAddStreamMessagesCommandAttributes().GetMessages()[0].GetTopic())
+	require.Equal(t, "tokens",
+		back.GetAddStreamMessagesCommandAttributes().GetMessages()[0].GetTopic())
 
 	resp := &workflowservice.PollWorkflowTaskQueueResponse{
 		StreamSlices: []*streampb.StreamSlice{{StreamId: "s1", FromOffset: 4, ToOffset: 7}},
@@ -53,5 +54,6 @@ func TestApiForkCarriesStreamShapes(t *testing.T) {
 	// An empty range has to survive the round trip: it is the fact that a
 	// subscription observed nothing, which replay must reproduce.
 	require.Len(t, aback.GetStreamCursors(), 1)
-	require.Equal(t, aback.GetStreamCursors()[0].GetFromOffset(), aback.GetStreamCursors()[0].GetToOffset())
+	require.Equal(t,
+		aback.GetStreamCursors()[0].GetFromOffset(), aback.GetStreamCursors()[0].GetToOffset())
 }

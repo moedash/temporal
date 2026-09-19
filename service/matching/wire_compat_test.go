@@ -99,7 +99,8 @@ func wireCompatDiff(
 			if aField.MapKey().Kind() != bField.MapKey().Kind() {
 				report("field %d (%s) has a different map key type on each side", number, aField.Name())
 			}
-			if problem := valueTypeDiff(aField.MapValue(), bField.MapValue(), number, aField.Name()); problem != "" {
+			problem := valueTypeDiff(aField.MapValue(), bField.MapValue(), number, aField.Name())
+			if problem != "" {
 				report("%s", problem)
 			}
 			continue
@@ -117,7 +118,8 @@ func wireCompatDiff(
 
 	for _, number := range sortedFieldNumbers(bFields) {
 		if _, ok := aFields[number]; !ok {
-			report("field %d (%s) is on %s but missing from %s", number, bFields[number].Name(), bName, aName)
+			report("field %d (%s) is on %s but missing from %s",
+				number, bFields[number].Name(), bName, aName)
 		}
 	}
 
@@ -131,7 +133,8 @@ func valueTypeDiff(
 	name protoreflect.Name,
 ) string {
 	if a.Kind() != b.Kind() {
-		return fmt.Sprintf("field %d (%s) is %s on one side and %s on the other", number, name, a.Kind(), b.Kind())
+		return fmt.Sprintf("field %d (%s) is %s on one side and %s on the other",
+			number, name, a.Kind(), b.Kind())
 	}
 
 	switch a.Kind() {
@@ -163,7 +166,9 @@ func fieldsByNumber(m proto.Message) map[protoreflect.FieldNumber]protoreflect.F
 
 // Field order drives the order of reported problems, which keeps a failure
 // message stable between runs.
-func sortedFieldNumbers(fields map[protoreflect.FieldNumber]protoreflect.FieldDescriptor) []protoreflect.FieldNumber {
+func sortedFieldNumbers(
+	fields map[protoreflect.FieldNumber]protoreflect.FieldDescriptor,
+) []protoreflect.FieldNumber {
 	numbers := make([]protoreflect.FieldNumber, 0, len(fields))
 	for number := range fields {
 		numbers = append(numbers, number)

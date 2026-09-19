@@ -94,15 +94,18 @@ func TestStreamRoutedCrossHostDeliveryAndReplay(t *testing.T) {
 			require.NoError(t, err)
 
 			tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-			started, err := frontend.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-				RequestId:           uuid.NewString(),
-				Namespace:           topo.ns,
-				WorkflowId:          id,
-				WorkflowType:        &commonpb.WorkflowType{Name: "cross-host-consumer"},
-				TaskQueue:           tq,
-				WorkflowRunTimeout:  durationpb.New(2 * time.Minute),
-				WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-			})
+			started, err := frontend.StartWorkflowExecution(
+				ctx,
+				&workflowservice.StartWorkflowExecutionRequest{
+					RequestId:           uuid.NewString(),
+					Namespace:           topo.ns,
+					WorkflowId:          id,
+					WorkflowType:        &commonpb.WorkflowType{Name: "cross-host-consumer"},
+					TaskQueue:           tq,
+					WorkflowRunTimeout:  durationpb.New(2 * time.Minute),
+					WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+				},
+			)
 			require.NoError(t, err)
 			execution := &commonpb.WorkflowExecution{WorkflowId: id, RunId: started.GetRunId()}
 
@@ -189,15 +192,18 @@ func TestStreamRoutedCrossHostDeliveryAndReplay(t *testing.T) {
 				RequestId:         uuid.NewString(),
 			})
 			require.NoError(t, err)
-			response, err := owner.RecordWorkflowTaskStarted(ctx, &historyservice.RecordWorkflowTaskStartedRequest{
-				NamespaceId:       topo.nsID,
-				WorkflowExecution: execution,
-				ScheduledEventId:  latestScheduled(),
-				RequestId:         uuid.NewString(),
-				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-					Namespace: topo.ns, TaskQueue: tq, Identity: "cross-host-validation",
+			response, err := owner.RecordWorkflowTaskStarted(
+				ctx,
+				&historyservice.RecordWorkflowTaskStartedRequest{
+					NamespaceId:       topo.nsID,
+					WorkflowExecution: execution,
+					ScheduledEventId:  latestScheduled(),
+					RequestId:         uuid.NewString(),
+					PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+						Namespace: topo.ns, TaskQueue: tq, Identity: "cross-host-validation",
+					},
 				},
-			})
+			)
 			require.NoError(t, err)
 			artifacts.writeProto(tc.name+"-cold-response", response)
 
@@ -313,10 +319,13 @@ func (topo *crossHostTopology) requireOwner(
 	ctx context.Context, t *testing.T, businessID string, host string,
 ) {
 	t.Helper()
-	desc, err := topo.cluster.AdminClient().DescribeHistoryHost(ctx, &adminservice.DescribeHistoryHostRequest{
-		Namespace:         topo.ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: businessID},
-	})
+	desc, err := topo.cluster.AdminClient().DescribeHistoryHost(
+		ctx,
+		&adminservice.DescribeHistoryHostRequest{
+			Namespace:         topo.ns,
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: businessID},
+		},
+	)
 	require.NoError(t, err)
 	require.Equal(t, host, desc.GetAddress())
 }

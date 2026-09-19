@@ -251,7 +251,8 @@ func (s *Stream) notifyConsumers(mctx chasm.MutableContext) {
 	for _, consumer := range s.State.Consumers {
 		if consumer.GetExternal() && consumer.GetActive() && consumer.GetOffset() < s.State.HeadOffset {
 			s.State.NotifyPending = true
-			mctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: mctx.Now(s)}, &streampb.StreamNotifyConsumersTask{})
+			mctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: mctx.Now(s)},
+				&streampb.StreamNotifyConsumersTask{})
 			return
 		}
 	}
@@ -261,7 +262,9 @@ func (s *Stream) notifyConsumers(mctx chasm.MutableContext) {
 // pending flag in the same transition that reads the head is what makes the
 // coalescing safe: any append that commits after this one sees the flag down
 // and schedules its own task.
-func (s *Stream) TakeNotifySnapshot(_ chasm.MutableContext, _ struct{}) (*streampb.StreamState, error) {
+func (s *Stream) TakeNotifySnapshot(
+	_ chasm.MutableContext, _ struct{},
+) (*streampb.StreamState, error) {
 	s.State.NotifyPending = false
 	return common.CloneProto(s.State), nil
 }
@@ -747,7 +750,8 @@ func marshalBatch(messages []*streampb.StreamMessage) (*commonpb.DataBlob, error
 	// protobuf map iteration order is not stable. A record carrying payload or
 	// message metadata would otherwise hash differently on a retry and be
 	// refused as a conflicting duplicate of itself.
-	data, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&streampb.StreamMessageBatch{Messages: messages})
+	data, err := (proto.MarshalOptions{Deterministic: true}).Marshal(
+		&streampb.StreamMessageBatch{Messages: messages})
 	if err != nil {
 		return nil, err
 	}

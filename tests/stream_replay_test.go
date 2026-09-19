@@ -30,16 +30,19 @@ func startConsumer(
 	t.Helper()
 	id := prefix + uuid.NewString()
 	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	we, err := s.env.FrontendClient().StartWorkflowExecution(s.ctx(), &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           s.ns,
-		WorkflowId:          id,
-		WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
-		TaskQueue:           tq,
-		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            "tester",
-	})
+	we, err := s.env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
 	require.NoError(t, err)
 	return &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()}, tq
 }
@@ -98,7 +101,9 @@ func TestReplayFollowsHistoryPastTheFirstPage(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			if len(delivered) == 1 {
 				return publishCommand("page-1", "page-2"), nil
@@ -132,7 +137,8 @@ func TestReplayFollowsHistoryPastTheFirstPage(t *testing.T) {
 	recordedAt := completedEventsWithCursors(events)
 	require.Len(t, recordedAt, 4, "every task since the subscription recorded a range")
 	consumedAt := completedEventWithCursors(t, events)
-	require.Greater(t, len(events), 8, "the history has to span more than one page for this to mean anything")
+	require.Greater(t, len(events), 8,
+		"the history has to span more than one page for this to mean anything")
 
 	env.CloseShard(env.NamespaceID().String(), execution.GetWorkflowId())
 	signalWorkflow(t, s, execution.GetWorkflowId(), execution.GetRunId())
@@ -154,7 +160,9 @@ func TestReplayFollowsHistoryPastTheFirstPage(t *testing.T) {
 // pollInBackground keeps a poller on the queue until the returned stop
 // function is called. Used where a task is expected never to reach the worker,
 // because matching only asks history to start a task while someone polls.
-func pollInBackground(t *testing.T, env *testcore.TestEnv, ns string, tq *taskqueuepb.TaskQueue) func() {
+func pollInBackground(
+	t *testing.T, env *testcore.TestEnv, ns string, tq *taskqueuepb.TaskQueue,
+) func() {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -162,9 +170,12 @@ func pollInBackground(t *testing.T, env *testcore.TestEnv, ns string, tq *taskqu
 		defer close(done)
 		for ctx.Err() == nil {
 			pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
-			_, _ = env.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
-				Namespace: ns, TaskQueue: tq, Identity: "tester",
-			})
+			_, _ = env.FrontendClient().PollWorkflowTaskQueue(
+				pollCtx,
+				&workflowservice.PollWorkflowTaskQueueRequest{
+					Namespace: ns, TaskQueue: tq, Identity: "tester",
+				},
+			)
 			pollCancel()
 		}
 	}()
@@ -221,7 +232,9 @@ func TestConsumerOfADeletedStreamFailsItsTaskLoudly(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(*workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			return nil, nil
 		},
 		Logger: env.Logger,
@@ -287,7 +300,9 @@ func TestReplayOfADeletedStreamFailsTheTaskLoudly(t *testing.T) {
 		Namespace: s.ns,
 		TaskQueue: tq,
 		Identity:  "tester",
-		WorkflowTaskHandler: func(resp *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			return nil, nil
 		},

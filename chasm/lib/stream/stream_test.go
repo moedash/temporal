@@ -616,7 +616,8 @@ func TestRegisterConsumerReplacesAnEntryFromAnotherRun(t *testing.T) {
 
 	// A different workflow id is not the same consumer and keeps its pin.
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:other/run-9", WorkflowID: "other", RunID: "run-9", Offset: 3, External: true,
+		ConsumerID: "workflow:other/run-9", WorkflowID: "other", RunID: "run-9",
+		Offset: 3, External: true,
 	})
 	require.NoError(t, err)
 	require.Len(t, s.State.Consumers, 2)
@@ -645,7 +646,8 @@ func TestNotifyCoalescesIntoOneOutstandingTask(t *testing.T) {
 	// The task's read lowers the flag, so the next append owes a new task.
 	state, err := s.TakeNotifySnapshot(mctx, struct{}{})
 	require.NoError(t, err)
-	require.Equal(t, int64(2), state.GetHeadOffset(), "the task sees every append that landed before it")
+	require.Equal(t, int64(2), state.GetHeadOffset(),
+		"the task sees every append that landed before it")
 	_, err = s.AddMessages(mctx, AddMessagesRequest{Messages: msgs("c")})
 	require.NoError(t, err)
 	require.Len(t, mctx.Tasks, 2)

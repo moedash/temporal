@@ -307,12 +307,15 @@ func (h *FrontendHandler) ListStreams(
 		pageSize = stream.MaxListPageSize
 	}
 
-	resp, err := chasm.ListExecutions[*stream.Stream, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
-		NamespaceName: in.GetNamespace(),
-		PageSize:      pageSize,
-		NextPageToken: in.GetNextPageToken(),
-		Query:         in.GetQuery(),
-	})
+	resp, err := chasm.ListExecutions[*stream.Stream, *emptypb.Empty](
+		ctx,
+		&chasm.ListExecutionsRequest{
+			NamespaceName: in.GetNamespace(),
+			PageSize:      pageSize,
+			NextPageToken: in.GetNextPageToken(),
+			Query:         in.GetQuery(),
+		},
+	)
 	if err != nil {
 		return nil, err
 	}

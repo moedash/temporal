@@ -43,7 +43,9 @@ func newStreamTestEnvFrom(t *testing.T, env *testcore.TestEnv) *streamTestEnv {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
 
-	env2 := &streamTestEnv{env: env, client: streampb.NewStreamServiceClient(conn), ns: env.Namespace().String()}
+	env2 := &streamTestEnv{
+		env: env, client: streampb.NewStreamServiceClient(conn), ns: env.Namespace().String(),
+	}
 	t.Cleanup(func() {
 		for _, c := range env2.cleanup {
 			c()
@@ -125,7 +127,8 @@ func TestStreamAppendAndRead(t *testing.T) {
 	const id = "stream-append-read"
 	s.create(ctx, t, id)
 
-	first, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "a", "b", "c")})
+	first, err := s.add(ctx, t, id,
+		&streampb.AddMessagesInput{Messages: streamMsgs("", "a", "b", "c")})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), first.GetFirstOffset())
 	require.Equal(t, int64(3), first.GetNextOffset())
@@ -413,7 +416,8 @@ func TestStreamLongPollReturnsEmptyOnTimeout(t *testing.T) {
 	require.Empty(t, out.GetMessages())
 	require.Equal(t, int64(0), out.GetNextOffset())
 	require.False(t, out.GetClosed())
-	require.Greater(t, time.Since(start), 5*time.Second, "the poll should have parked, not returned immediately")
+	require.Greater(t, time.Since(start), 5*time.Second,
+		"the poll should have parked, not returned immediately")
 }
 
 func TestStreamLongPollReturnsImmediatelyWhenBehind(t *testing.T) {
@@ -606,7 +610,8 @@ func TestStreamFilteredReadReportsRealOffsets(t *testing.T) {
 }
 
 func (s *streamTestEnv) pollMaxTopics(
-	ctx context.Context, t *testing.T, streamID string, from int64, maxMessages int32, topics ...string,
+	ctx context.Context, t *testing.T, streamID string, from int64, maxMessages int32,
+	topics ...string,
 ) *streampb.PollMessagesOutput {
 	t.Helper()
 	resp, err := s.client.PollMessages(ctx, &streampb.PollMessagesRequest{

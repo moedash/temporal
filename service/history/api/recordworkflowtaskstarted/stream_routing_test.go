@@ -32,7 +32,9 @@ func TestExternalStreamLiveAndReplayUseRoutedPayloadRead(t *testing.T) {
 	for _, replay := range []bool{false, true} {
 		t.Run(map[bool]string{false: "live", true: "replay"}[replay], func(t *testing.T) {
 			calls := 0
-			client := &routedStreamClient{poll: func(ctx context.Context, req *streamlib.PollMessagesRequest) (*streamlib.PollMessagesResponse, error) {
+			client := &routedStreamClient{poll: func(
+				ctx context.Context, req *streamlib.PollMessagesRequest,
+			) (*streamlib.PollMessagesResponse, error) {
 				calls++
 				require.Equal(t, "namespace-id", req.GetNamespaceId())
 				require.Equal(t, "remote-source", req.GetFrontendRequest().GetStreamId())
@@ -43,13 +45,21 @@ func TestExternalStreamLiveAndReplayUseRoutedPayloadRead(t *testing.T) {
 				return &streamlib.PollMessagesResponse{FrontendResponse: &streamlib.PollMessagesOutput{
 					NextOffset: 6, HeadOffset: 9,
 					Messages: []*streamlib.StreamMessage{
-						{Offset: 4, Kind: streamlib.STREAM_MESSAGE_KIND_DATA, Body: &commonpb.Payload{Data: []byte("a")}},
-						{Offset: 5, Kind: streamlib.STREAM_MESSAGE_KIND_DATA, Body: &commonpb.Payload{Data: []byte("b")}},
+						{
+							Offset: 4,
+							Kind:   streamlib.STREAM_MESSAGE_KIND_DATA,
+							Body:   &commonpb.Payload{Data: []byte("a")},
+						},
+						{
+							Offset: 5,
+							Kind:   streamlib.STREAM_MESSAGE_KIND_DATA,
+							Body:   &commonpb.Payload{Data: []byte("b")},
+						},
 					},
 				}}, nil
 			}}
-			// No local engine is installed. Reverting to the old local-controller
-			// path cannot accidentally satisfy this test's remote source.
+			// No local engine is installed, so a read that resolved the source
+			// through the local controller instead of the routed client fails.
 			ctx := WithStreamClient(context.Background(), client)
 			var window stream.Window
 			var err error
@@ -62,7 +72,8 @@ func TestExternalStreamLiveAndReplayUseRoutedPayloadRead(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, 1, calls)
-			messages, next, err := stream.CollectMessages(window.Blobs, window.Starts, 4, window.To, window.Limit, nil)
+			messages, next, err := stream.CollectMessages(
+				window.Blobs, window.Starts, 4, window.To, window.Limit, nil)
 			require.NoError(t, err)
 			require.EqualValues(t, 6, next)
 			require.Len(t, messages, 2)
@@ -74,18 +85,33 @@ func TestExternalStreamLiveAndReplayUseRoutedPayloadRead(t *testing.T) {
 
 func TestExternalStreamRoutedReadRejectsCorruptOrExpandedRange(t *testing.T) {
 	cases := map[string]*streamlib.PollMessagesOutput{
-		"missing-response":        nil,
-		"skipped-offset":          {NextOffset: 6, HeadOffset: 9, Messages: []*streamlib.StreamMessage{{Offset: 4}, {Offset: 6}}},
-		"short-count":             {NextOffset: 6, HeadOffset: 9, Messages: []*streamlib.StreamMessage{{Offset: 4}}},
-		"past-requested-frontier": {NextOffset: 7, HeadOffset: 9, Messages: []*streamlib.StreamMessage{{Offset: 4}, {Offset: 5}, {Offset: 6}}},
-		"past-committed-head":     {NextOffset: 6, HeadOffset: 5, Messages: []*streamlib.StreamMessage{{Offset: 4}, {Offset: 5}}},
+		"missing-response": nil,
+		"skipped-offset": {
+			NextOffset: 6, HeadOffset: 9,
+			Messages: []*streamlib.StreamMessage{{Offset: 4}, {Offset: 6}},
+		},
+		"short-count": {
+			NextOffset: 6, HeadOffset: 9,
+			Messages: []*streamlib.StreamMessage{{Offset: 4}},
+		},
+		"past-requested-frontier": {
+			NextOffset: 7, HeadOffset: 9,
+			Messages: []*streamlib.StreamMessage{{Offset: 4}, {Offset: 5}, {Offset: 6}},
+		},
+		"past-committed-head": {
+			NextOffset: 6, HeadOffset: 5,
+			Messages: []*streamlib.StreamMessage{{Offset: 4}, {Offset: 5}},
+		},
 	}
 	for name, response := range cases {
 		t.Run(name, func(t *testing.T) {
-			client := &routedStreamClient{poll: func(context.Context, *streamlib.PollMessagesRequest) (*streamlib.PollMessagesResponse, error) {
+			client := &routedStreamClient{poll: func(
+				context.Context, *streamlib.PollMessagesRequest,
+			) (*streamlib.PollMessagesResponse, error) {
 				return &streamlib.PollMessagesResponse{FrontendResponse: response}, nil
 			}}
-			_, err := readExternalWindow(WithStreamClient(context.Background(), client), "ns", "source", 4, 6)
+			ctx := WithStreamClient(context.Background(), client)
+			_, err := readExternalWindow(ctx, "ns", "source", 4, 6)
 			var integrity *serviceerror.DataLoss
 			require.ErrorAs(t, err, &integrity)
 		})
@@ -94,7 +120,9 @@ func TestExternalStreamRoutedReadRejectsCorruptOrExpandedRange(t *testing.T) {
 
 func TestExternalStreamRoutedReadPropagatesSourceFailure(t *testing.T) {
 	want := errors.New("source shard unavailable")
-	client := &routedStreamClient{poll: func(context.Context, *streamlib.PollMessagesRequest) (*streamlib.PollMessagesResponse, error) {
+	client := &routedStreamClient{poll: func(
+		context.Context, *streamlib.PollMessagesRequest,
+	) (*streamlib.PollMessagesResponse, error) {
 		return nil, want
 	}}
 	_, err := readExternalWindow(WithStreamClient(context.Background(), client), "ns", "source", 4, 6)
@@ -102,7 +130,9 @@ func TestExternalStreamRoutedReadPropagatesSourceFailure(t *testing.T) {
 }
 
 func TestOwnedLiveStreamNeverReentersThroughRoutedClient(t *testing.T) {
-	client := &routedStreamClient{poll: func(context.Context, *streamlib.PollMessagesRequest) (*streamlib.PollMessagesResponse, error) {
+	client := &routedStreamClient{poll: func(
+		context.Context, *streamlib.PollMessagesRequest,
+	) (*streamlib.PollMessagesResponse, error) {
 		t.Fatal("owned stream read re-entered the consumer through an RPC")
 		return nil, nil
 	}}
@@ -115,7 +145,12 @@ func TestOwnedLiveStreamNeverReentersThroughRoutedClient(t *testing.T) {
 func TestOwnedReplayPinsConsumerRun(t *testing.T) {
 	engine := chasm.NewMockEngine(gomock.NewController(t))
 	engine.EXPECT().ReadComponent(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, ref chasm.ComponentRef, _ func(chasm.Context, chasm.Component) error, _ ...chasm.TransitionOption) error {
+		func(
+			_ context.Context,
+			ref chasm.ComponentRef,
+			_ func(chasm.Context, chasm.Component) error,
+			_ ...chasm.TransitionOption,
+		) error {
 			require.Equal(t, "consumer-run", ref.RunID)
 			require.Equal(t, "consumer", ref.BusinessID)
 			return nil
