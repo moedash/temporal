@@ -200,8 +200,9 @@ func TestRetentionWaitsForAnActiveConsumer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Well past retention, and the stream is still there because the consumer
-	// is still running.
-	time.Sleep(3 * time.Second)
+	// is still running. The assertion is that nothing happens, which only the
+	// deadline passing can show.
+	time.Sleep(3 * time.Second) //nolint:forbidigo // waiting for retention to elapse is the test.
 	state := describeStream(t, s, streamID)
 	require.True(t, state.GetClosed())
 	require.Len(t, state.GetConsumers(), 1)

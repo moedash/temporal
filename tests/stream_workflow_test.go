@@ -454,9 +454,7 @@ func TestOutsideAppendsRaceTheWorkflowPublishWithoutFailing(t *testing.T) {
 	errs := make(chan error, producers*perProducer)
 	var wg sync.WaitGroup
 	for p := range producers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range perProducer {
 				_, err := s.client.AddWorkflowMessages(s.ctx(), &streamlib.AddWorkflowMessagesRequest{
 					FrontendRequest: &streamlib.AddWorkflowMessagesInput{
@@ -468,7 +466,7 @@ func TestOutsideAppendsRaceTheWorkflowPublishWithoutFailing(t *testing.T) {
 				})
 				errs <- err
 			}
-		}()
+		})
 	}
 	for range workflowTasks {
 		_, err := poller.PollAndProcessWorkflowTask()

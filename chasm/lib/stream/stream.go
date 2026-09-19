@@ -307,17 +307,17 @@ func (s *Stream) checkBudget(count int64, size int64) error {
 	if budget == nil {
 		return nil
 	}
-	if max := budget.GetMaxItems(); max > 0 && s.State.HeadOffset+count > max {
+	if limit := budget.GetMaxItems(); limit > 0 && s.State.HeadOffset+count > limit {
 		return serviceerror.NewResourceExhaustedf(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT,
 			"stream holds %d of its budget of %d messages; the append of %d does not fit",
-			s.State.HeadOffset, max, count)
+			s.State.HeadOffset, limit, count)
 	}
-	if max := budget.GetMaxBytes(); max > 0 && s.State.AppendedBytes+size > max {
+	if limit := budget.GetMaxBytes(); limit > 0 && s.State.AppendedBytes+size > limit {
 		return serviceerror.NewResourceExhaustedf(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT,
 			"stream holds %d of its budget of %d bytes; the append of %d does not fit",
-			s.State.AppendedBytes, max, size)
+			s.State.AppendedBytes, limit, size)
 	}
 	return nil
 }
