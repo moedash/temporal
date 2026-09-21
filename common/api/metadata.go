@@ -223,21 +223,34 @@ var (
 	// table does not make. The two internal calls History makes on itself are
 	// admin so that no namespace-level role can reach them through a frontend.
 	streamServiceMetadata = map[string]MethodMetadata{
-		"CreateStream":           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"AddMessages":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"FinishWriting":          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"SubscribeWorkflow":      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"PollMessages":           {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable},
-		"DescribeStream":         {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"PollWorkflowMessages":   {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable},
-		"DescribeWorkflowStream": {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"AddWorkflowMessages":    {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"RegisterStreamConsumer": {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
-		"AdvanceConsumerHead":    {Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone},
-		"CloseStream":            {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"TruncateStream":         {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"ListStreams":            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
-		"DeleteStream":           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"CreateStream":           namespaceWrite,
+		"AddMessages":            namespaceWrite,
+		"FinishWriting":          namespaceWrite,
+		"SubscribeWorkflow":      namespaceWrite,
+		"PollMessages":           namespaceReadPoll,
+		"DescribeStream":         namespaceRead,
+		"PollWorkflowMessages":   namespaceReadPoll,
+		"DescribeWorkflowStream": namespaceRead,
+		"AddWorkflowMessages":    namespaceWrite,
+		"RegisterStreamConsumer": namespaceAdmin,
+		"AdvanceConsumerHead":    namespaceAdmin,
+		"CloseStream":            namespaceWrite,
+		"TruncateStream":         namespaceWrite,
+		"ListStreams":            namespaceRead,
+		"DeleteStream":           namespaceWrite,
+	}
+
+	namespaceRead = MethodMetadata{
+		Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone,
+	}
+	namespaceReadPoll = MethodMetadata{
+		Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable,
+	}
+	namespaceWrite = MethodMetadata{
+		Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone,
+	}
+	namespaceAdmin = MethodMetadata{
+		Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone,
 	}
 )
 
