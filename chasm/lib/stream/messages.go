@@ -8,31 +8,31 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// CollectMessages decodes the batches covering a range and trims to the
+// CollectRecords decodes the batches covering a range and trims to the
 // requested window. Decoding happens only here and only on the batches a read
 // actually touches; the store never interprets them, and user payloads stay
 // opaque because the codec runs in the SDK.
-func CollectMessages(
+func CollectRecords(
 	blobs []*commonpb.DataBlob,
 	startOffsets []int64,
 	from int64,
 	head int64,
 	maxMessages int,
 	topics []string,
-) ([]*streamlib.StreamMessage, int64, error) {
+) ([]*streamlib.StreamRecord, int64, error) {
 	wanted := make(map[string]struct{}, len(topics))
 	for _, t := range topics {
 		wanted[t] = struct{}{}
 	}
 
-	var out []*streamlib.StreamMessage
+	var out []*streamlib.StreamRecord
 	next := from
 	for i, blob := range blobs {
-		var batch streamlib.StreamMessageBatch
+		var batch streamlib.StreamRecordBatch
 		if err := proto.Unmarshal(blob.GetData(), &batch); err != nil {
 			return nil, 0, err
 		}
-		for j, msg := range batch.GetMessages() {
+		for j, msg := range batch.GetRecords() {
 			offset := startOffsets[i] + int64(j)
 			if offset < from || offset >= head {
 				continue
@@ -55,65 +55,66 @@ func CollectMessages(
 	return out, next, nil
 }
 
-// ToAPIMessages converts stored messages to the shape carried on a Workflow
-// Task. Control messages are dropped: they steer the log itself and mean
-// nothing to a consumer.
-func ToAPIMessages(in []*streamlib.StreamMessage) []*streampb.StreamMessage {
-	out := make([]*streampb.StreamMessage, 0, len(in))
+// ToAPIRecords converts stored records to the shape carried on a Workflow
+// Task. Every stored field crosses over except the offset, which the slice
+// carries as a range, so a reader in any language sees the record the producer
+// wrote, kind and identity included.
+func ToAPIRecords(in []*streamlib.StreamRecord) []*streampb.StreamRecord {
+	out := make([]*streampb.StreamRecord, 0, len(in))
 	for _, m := range in {
-		if m.GetKind() != streamlib.STREAM_MESSAGE_KIND_DATA {
-			continue
-		}
-		out = append(out, &streampb.StreamMessage{
-			Body:          m.GetBody(),
-			Metadata:      m.GetMetadata(),
-			Topic:         m.GetTopic(),
-			TopicSequence: m.GetTopicSequence(),
+		out = append(out, &streampb.StreamRecord{
+			Body:       m.GetBody(),
+			Metadata:   m.GetMetadata(),
+			Topic:      m.GetTopic(),
+			Kind:       m.GetKind(),
+			ProducerId: m.GetProducerId(),
+			Attempt:    m.GetAttempt(),
+			Sequence:   m.GetSequence(),
 		})
 	}
 	return out
 }
 
-// CapByBytes trims a contiguous run of messages to a byte budget and returns
+// CapByBytes trims a contiguous run of records to a byte budget and returns
 // the offset just past the last one kept.
 //
-// It always keeps the first message, however large. Dropping it would leave the
+// It always keeps the first record, however large. Dropping it would leave the
 // cursor unable to advance, and since an unconsumed range schedules a workflow
-// task, a stream holding one oversized message would wake the workflow forever
+// task, a stream holding one oversized record would wake the workflow forever
 // without ever delivering anything.
 func CapByBytes(
-	messages []*streamlib.StreamMessage,
+	records []*streamlib.StreamRecord,
 	from int64,
 	maxBytes int,
-) ([]*streamlib.StreamMessage, int64) {
-	if len(messages) == 0 {
-		return messages, from
+) ([]*streamlib.StreamRecord, int64) {
+	if len(records) == 0 {
+		return records, from
 	}
 
 	total := 0
-	for i, m := range messages {
+	for i, m := range records {
 		total += proto.Size(m)
 		if total > maxBytes && i > 0 {
-			return messages[:i], from + int64(i)
+			return records[:i], from + int64(i)
 		}
 	}
-	return messages, from + int64(len(messages))
+	return records, from + int64(len(records))
 }
 
 // checkBatchBytes rejects an append that is too large to store or too large to
 // ever hand back.
 //
-// The per-message bound matters on its own: a message is never split, so one
+// The per-record bound matters on its own: a record is never split, so one
 // that exceeds a consumer's byte budget can never be delivered, and CapByBytes
 // would hand it over alone forever rather than reject it. The batch bound is
 // the storage side, since a batch is written as a single node.
-func checkBatchBytes(messages []*streamlib.StreamMessage, limits Limits) error {
+func checkBatchBytes(records []*streamlib.StreamRecord, limits Limits) error {
 	total := 0
-	for i, m := range messages {
+	for i, m := range records {
 		size := proto.Size(m)
 		if size > limits.MaxMessageBytes {
 			return serviceerror.NewInvalidArgumentf(
-				"message %d is %d bytes, over the %d byte limit", i, size, limits.MaxMessageBytes)
+				"record %d is %d bytes, over the %d byte limit", i, size, limits.MaxMessageBytes)
 		}
 		total += size
 	}

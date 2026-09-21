@@ -209,18 +209,18 @@ func runPublishCostArm(t *testing.T, arm publishCostArm) publishCostResult {
 			commands := make([]*commandpb.Command, 0, arm.batches+1)
 			if !arm.viaSignal {
 				for range arm.batches {
-					messages := make([]*streampb.StreamMessage, 0, arm.messagesPerBatch)
+					messages := make([]*streampb.StreamRecord, 0, arm.messagesPerBatch)
 					for range arm.messagesPerBatch {
-						messages = append(messages, &streampb.StreamMessage{
+						messages = append(messages, &streampb.StreamRecord{
 							Body:  &commonpb.Payload{Data: body},
 							Topic: "progress",
 						})
 					}
 					commands = append(commands, &commandpb.Command{
-						CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-						Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-							AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-								Messages: messages,
+						CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+						Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+							AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+								Records: messages,
 							},
 						},
 					})

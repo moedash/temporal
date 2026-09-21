@@ -3,37 +3,40 @@ syntax = "proto3";
 package temporal.server.chasm.lib.stream.proto.v1;
 
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/stream/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
 
-enum StreamMessageKind {
-  STREAM_MESSAGE_KIND_UNSPECIFIED = 0;
-  STREAM_MESSAGE_KIND_DATA = 1;
-  // Producer signalling a delivery boundary. Carries no body and consumes an
-  // offset like any other message. A consumer uses it to end a turn without
-  // waiting out an idle timeout.
-  STREAM_MESSAGE_KIND_FLUSH = 2;
-}
-
-message StreamMessage {
+// The stored shape of temporal.api.stream.v1.StreamRecord plus the offset a
+// read assigns. Field for field the public record, so one crosses the frontend
+// in either direction without translation.
+message StreamRecord {
   temporal.api.common.v1.Payload body = 1;
-  // Producer-supplied provenance. The server does not populate this today.
+  // Producer-supplied provenance, stored as sent.
   map<string, temporal.api.common.v1.Payload> metadata = 2;
   string topic = 3;
-  // Position within this topic. The global offset orders the whole stream;
-  // this lets a consumer reason about one topic without decoding the rest.
-  int64 topic_sequence = 4;
-  StreamMessageKind kind = 5;
+  // The producer's position within its attempt, or -1 when unnumbered. Stored
+  // as sent; the global offset is what orders the stream.
+  int64 sequence = 4;
+  // Settled to DATA on append when left unspecified, so a retry hashes the
+  // same bytes and a reader never sees the zero value.
+  temporal.api.stream.v1.StreamRecordKind kind = 5;
 
   // Position in the whole stream, set on read and never stored. A consumer
-  // that resumes at message granularity needs it, and a topic-filtered read
+  // that resumes at record granularity needs it, and a topic-filtered read
   // leaves gaps that make it underivable from the response alone.
   int64 offset = 6;
+  // Who wrote the record. Empty when the owning Workflow did: its publish
+  // command clears the field, whatever the worker sent.
+  string producer_id = 7;
+  // The producer's attempt, stored as sent. Readers treat a later attempt by
+  // the same producer as superseding what the earlier one wrote.
+  int64 attempt = 8;
 }
 
 // One append is one batch, and one batch is one data node. The server stores
 // this serialized and opaque; it decodes only to trim a partial first page or
 // to apply a topic filter.
-message StreamMessageBatch {
-  repeated StreamMessage messages = 1;
+message StreamRecordBatch {
+  repeated StreamRecord records = 1;
 }

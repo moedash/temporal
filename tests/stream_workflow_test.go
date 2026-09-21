@@ -70,10 +70,10 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 			}
 			published = true
 			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-				Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-					AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-						Messages: []*streampb.StreamMessage{
+				CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+				Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+					AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+						Records: []*streampb.StreamRecord{
 							{Body: &commonpb.Payload{Data: []byte("planning")}, Topic: "progress"},
 							{Body: &commonpb.Payload{Data: []byte("calling tool")}, Topic: "progress"},
 						},
@@ -91,15 +91,15 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 	// One event for the batch, holding the range and none of the payload. Two
 	// messages were published, so it has to name both of them and stop there.
 	events := env.GetHistory(s.ns, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
-	var added []*historypb.WorkflowStreamMessagesAddedEventAttributes
+	var added []*historypb.WorkflowStreamRecordsAppendedEventAttributes
 	for _, e := range events {
-		if a := e.GetWorkflowStreamMessagesAddedEventAttributes(); a != nil {
+		if a := e.GetWorkflowStreamRecordsAppendedEventAttributes(); a != nil {
 			added = append(added, a)
 		}
 	}
 	require.Len(t, added, 1, "one publish command writes one event")
 	require.Equal(t, int64(0), added[0].GetFirstOffset())
-	require.Equal(t, int64(2), added[0].GetMessageCount())
+	require.Equal(t, int64(2), added[0].GetRecordCount())
 	require.Equal(t, chasmworkflow.DefaultStreamName, added[0].GetStreamId(),
 		"an unnamed stream resolves to the default before it is recorded")
 
@@ -121,8 +121,8 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"planning", "calling tool"},
-		bodies(poll.GetFrontendResponse().GetMessages()))
-	require.Equal(t, []int64{0, 1}, offsets(poll.GetFrontendResponse().GetMessages()),
+		bodies(poll.GetFrontendResponse().GetRecords()))
+	require.Equal(t, []int64{0, 1}, offsets(poll.GetFrontendResponse().GetRecords()),
 		"each message carries where it sits in the log, so a reader can resume between them")
 	require.Equal(t, int64(2), poll.GetFrontendResponse().GetNextOffset())
 	require.Equal(t, int64(2), poll.GetFrontendResponse().GetHeadOffset())
@@ -135,7 +135,7 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Empty(t, filtered.GetFrontendResponse().GetMessages())
+	require.Empty(t, filtered.GetFrontendResponse().GetRecords())
 	require.Equal(t, int64(2), filtered.GetFrontendResponse().GetNextOffset(),
 		"a filtered page still advances the reader")
 
@@ -147,7 +147,7 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Empty(t, unwritten.GetFrontendResponse().GetMessages())
+	require.Empty(t, unwritten.GetFrontendResponse().GetRecords())
 	require.Equal(t, int64(0), unwritten.GetFrontendResponse().GetHeadOffset())
 	require.False(t, unwritten.GetFrontendResponse().GetClosed())
 
@@ -222,10 +222,10 @@ func TestStreamWorkflowLongPollWakesOnPublish(t *testing.T) {
 			*workflowservice.PollWorkflowTaskQueueResponse,
 		) ([]*commandpb.Command, error) {
 			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-				Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-					AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-						Messages: []*streampb.StreamMessage{
+				CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+				Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+					AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+						Records: []*streampb.StreamRecord{
 							{Body: &commonpb.Payload{Data: []byte("first token")}},
 						},
 					},
@@ -241,7 +241,7 @@ func TestStreamWorkflowLongPollWakesOnPublish(t *testing.T) {
 	select {
 	case r := <-done:
 		require.NoError(t, r.err)
-		require.Equal(t, []string{"first token"}, bodies(r.out.GetMessages()))
+		require.Equal(t, []string{"first token"}, bodies(r.out.GetRecords()))
 		require.Equal(t, int64(1), r.out.GetNextOffset())
 	case <-time.After(25 * time.Second):
 		t.Fatal("the parked reader did not wake when the workflow published")
@@ -278,9 +278,9 @@ func TestStreamWorkflowTakesAppendsFromOutsideToo(t *testing.T) {
 		resp, err := s.client.AddWorkflowMessages(s.ctx(), &streamlib.AddWorkflowMessagesRequest{
 			FrontendRequest: &streamlib.AddWorkflowMessagesInput{
 				Namespace: s.ns, WorkflowId: id,
-				Messages: []*streamlib.StreamMessage{{
+				Records: []*streamlib.StreamRecord{{
 					Body: &commonpb.Payload{Data: []byte(body)},
-					Kind: streamlib.STREAM_MESSAGE_KIND_DATA,
+					Kind: streampb.STREAM_RECORD_KIND_DATA,
 				}},
 			},
 		})
@@ -302,10 +302,10 @@ func TestStreamWorkflowTakesAppendsFromOutsideToo(t *testing.T) {
 			*workflowservice.PollWorkflowTaskQueueResponse,
 		) ([]*commandpb.Command, error) {
 			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-				Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-					AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-						Messages: []*streampb.StreamMessage{
+				CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+				Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+					AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+						Records: []*streampb.StreamRecord{
 							{Body: &commonpb.Payload{Data: []byte("turn ended")}},
 						},
 					},
@@ -329,15 +329,15 @@ func TestStreamWorkflowTakesAppendsFromOutsideToo(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"token one", "turn ended", "token two"},
-		bodies(poll.GetFrontendResponse().GetMessages()),
+		bodies(poll.GetFrontendResponse().GetRecords()),
 		"both producers write one ordered log")
 
 	// The event names the offset the workflow's own publish landed at, which
 	// only holds if the workflow saw the outside writer's message first.
 	events := env.GetHistory(s.ns, &commonpb.WorkflowExecution{WorkflowId: id})
-	var added []*historypb.WorkflowStreamMessagesAddedEventAttributes
+	var added []*historypb.WorkflowStreamRecordsAppendedEventAttributes
 	for _, e := range events {
-		if a := e.GetWorkflowStreamMessagesAddedEventAttributes(); a != nil {
+		if a := e.GetWorkflowStreamRecordsAppendedEventAttributes(); a != nil {
 			added = append(added, a)
 		}
 	}
@@ -392,10 +392,10 @@ func TestStreamWorkflowStreamClosesWithItsWorkflow(t *testing.T) {
 		) ([]*commandpb.Command, error) {
 			return []*commandpb.Command{
 				{
-					CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-					Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-						AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-							Messages: []*streampb.StreamMessage{
+					CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+					Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+						AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+							Records: []*streampb.StreamRecord{
 								{Body: &commonpb.Payload{Data: []byte("last word")}},
 							},
 						},
@@ -420,7 +420,7 @@ func TestStreamWorkflowStreamClosesWithItsWorkflow(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"last word"}, bodies(poll.GetFrontendResponse().GetMessages()))
+	require.Equal(t, []string{"last word"}, bodies(poll.GetFrontendResponse().GetRecords()))
 	require.True(t, poll.GetFrontendResponse().GetClosed())
 }
 
@@ -459,7 +459,7 @@ func TestOutsideAppendsRaceTheWorkflowPublishWithoutFailing(t *testing.T) {
 				_, err := s.client.AddWorkflowMessages(s.ctx(), &streamlib.AddWorkflowMessagesRequest{
 					FrontendRequest: &streamlib.AddWorkflowMessagesInput{
 						Namespace: s.ns, WorkflowId: execution.GetWorkflowId(),
-						Messages: []*streamlib.StreamMessage{{
+						Records: []*streamlib.StreamRecord{{
 							Body: &commonpb.Payload{Data: []byte(fmt.Sprintf("outside-%d-%d", p, i))},
 						}},
 					},
@@ -488,7 +488,7 @@ func TestOutsideAppendsRaceTheWorkflowPublishWithoutFailing(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(total), poll.GetFrontendResponse().GetHeadOffset())
 	seen := make(map[string]int, total)
-	for _, body := range bodies(poll.GetFrontendResponse().GetMessages()) {
+	for _, body := range bodies(poll.GetFrontendResponse().GetRecords()) {
 		seen[body]++
 	}
 	require.Len(t, seen, producers*perProducer+1, "every outside message appears exactly once")
@@ -530,18 +530,18 @@ func TestOwnedStreamRefusesAppendsPastItsBudget(t *testing.T) {
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.Error(t, err, "two more do not fit in a budget of three")
 	failed := workflowTaskFailedWith(env.GetHistory(s.ns, execution),
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_ADD_STREAM_MESSAGES_ATTRIBUTES)
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_APPEND_STREAM_RECORDS_ATTRIBUTES)
 	require.NotNil(t, failed)
 	require.Contains(t, failed.GetFailure().GetMessage(), "budget")
 
 	appendOutside := func(bodies ...string) error {
-		messages := make([]*streamlib.StreamMessage, len(bodies))
+		messages := make([]*streamlib.StreamRecord, len(bodies))
 		for i, b := range bodies {
-			messages[i] = &streamlib.StreamMessage{Body: &commonpb.Payload{Data: []byte(b)}}
+			messages[i] = &streamlib.StreamRecord{Body: &commonpb.Payload{Data: []byte(b)}}
 		}
 		_, err := s.client.AddWorkflowMessages(s.ctx(), &streamlib.AddWorkflowMessagesRequest{
 			FrontendRequest: &streamlib.AddWorkflowMessagesInput{
-				Namespace: s.ns, WorkflowId: execution.GetWorkflowId(), Messages: messages,
+				Namespace: s.ns, WorkflowId: execution.GetWorkflowId(), Records: messages,
 			},
 		})
 		return err

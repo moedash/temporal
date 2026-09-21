@@ -67,10 +67,10 @@ func TestStreamWorkflowConsumesWithoutHistoryPayloads(t *testing.T) {
 			// First task publishes; nothing is subscribed yet, so it consumes
 			// nothing.
 			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-				Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-					AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-						Messages: []*streampb.StreamMessage{
+				CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+				Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+					AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+						Records: []*streampb.StreamRecord{
 							{Body: &commonpb.Payload{Data: []byte("first-token")}, Topic: "tokens"},
 							{Body: &commonpb.Payload{Data: []byte("second-token")}, Topic: "tokens"},
 							{Body: &commonpb.Payload{Data: []byte("third-token")}, Topic: "tokens"},
@@ -119,9 +119,9 @@ func TestStreamWorkflowConsumesWithoutHistoryPayloads(t *testing.T) {
 	slice := currentSlice(t, delivered[1])
 	require.Equal(t, int64(0), slice.GetFromOffset())
 	require.Equal(t, int64(3), slice.GetToOffset())
-	require.Len(t, slice.GetMessages(), 3)
-	require.Equal(t, "first-token", string(slice.GetMessages()[0].GetBody().GetData()))
-	require.Equal(t, "third-token", string(slice.GetMessages()[2].GetBody().GetData()))
+	require.Len(t, slice.GetRecords(), 3)
+	require.Equal(t, "first-token", string(slice.GetRecords()[0].GetBody().GetData()))
+	require.Equal(t, "third-token", string(slice.GetRecords()[2].GetBody().GetData()))
 
 	// Third task: the cursor is caught up, so the range is empty. An empty
 	// range is still delivered and still recorded, because a task that saw
@@ -133,7 +133,7 @@ func TestStreamWorkflowConsumesWithoutHistoryPayloads(t *testing.T) {
 	idleSlice := currentSlice(t, delivered[2])
 	require.Equal(t, int64(3), idleSlice.GetFromOffset(), "a caught-up subscription is still attached")
 	require.Equal(t, int64(3), idleSlice.GetToOffset())
-	require.Empty(t, idleSlice.GetMessages())
+	require.Empty(t, idleSlice.GetRecords())
 
 	events := env.GetHistory(s.ns, &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
 	recorded := recordedCursors(events)
@@ -156,11 +156,11 @@ func TestStreamWorkflowConsumesWithoutHistoryPayloads(t *testing.T) {
 	}
 }
 
-func recordedCursors(events []*historypb.HistoryEvent) []*streampb.StreamCursor {
-	var out []*streampb.StreamCursor
+func recordedCursors(events []*historypb.HistoryEvent) []*streampb.StreamRange {
+	var out []*streampb.StreamRange
 	for _, e := range events {
 		attrs := e.GetWorkflowTaskCompletedEventAttributes()
-		out = append(out, attrs.GetStreamCursors()...)
+		out = append(out, attrs.GetConsumedStreamRanges()...)
 	}
 	return out
 }
@@ -206,15 +206,15 @@ func TestStreamSubscriptionSchedulesItsOwnWorkflowTask(t *testing.T) {
 	require.NoError(t, err)
 
 	publish := func(bodies ...string) []*commandpb.Command {
-		messages := make([]*streampb.StreamMessage, len(bodies))
+		messages := make([]*streampb.StreamRecord, len(bodies))
 		for i, b := range bodies {
-			messages[i] = &streampb.StreamMessage{Body: &commonpb.Payload{Data: []byte(b)}, Topic: "tokens"}
+			messages[i] = &streampb.StreamRecord{Body: &commonpb.Payload{Data: []byte(b)}, Topic: "tokens"}
 		}
 		return []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-			Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-				AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-					Messages: messages,
+			CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+			Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+				AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+					Records: messages,
 				},
 			},
 		}}
@@ -276,8 +276,8 @@ func TestStreamSubscriptionSchedulesItsOwnWorkflowTask(t *testing.T) {
 	woken := currentSlice(t, delivered[2])
 	require.Equal(t, int64(1), woken.GetFromOffset())
 	require.Equal(t, int64(3), woken.GetToOffset())
-	require.Len(t, woken.GetMessages(), 2)
-	require.Equal(t, "alpha", string(woken.GetMessages()[0].GetBody().GetData()))
+	require.Len(t, woken.GetRecords(), 2)
+	require.Equal(t, "alpha", string(woken.GetRecords()[0].GetBody().GetData()))
 
 	// And it has to stop. A wake condition that stayed true would spin the
 	// workflow on empty tasks forever.
@@ -339,10 +339,10 @@ func TestSubscribingToABacklogSchedulesAWorkflowTask(t *testing.T) {
 				return nil, nil
 			}
 			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-				Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-					AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-						Messages: []*streampb.StreamMessage{
+				CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+				Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+					AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+						Records: []*streampb.StreamRecord{
 							{Body: &commonpb.Payload{Data: []byte("backlog-1")}, Topic: "tokens"},
 							{Body: &commonpb.Payload{Data: []byte("backlog-2")}, Topic: "tokens"},
 						},
@@ -421,10 +421,10 @@ func TestReplayGetsTheConsumedRangesBackFromTheStream(t *testing.T) {
 				return nil, nil
 			}
 			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-				Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-					AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-						Messages: []*streampb.StreamMessage{
+				CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+				Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+					AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+						Records: []*streampb.StreamRecord{
 							{Body: &commonpb.Payload{Data: []byte("replay-me-1")}, Topic: "tokens"},
 							{Body: &commonpb.Payload{Data: []byte("replay-me-2")}, Topic: "tokens"},
 						},
@@ -450,7 +450,7 @@ func TestReplayGetsTheConsumedRangesBackFromTheStream(t *testing.T) {
 	// Consume the range. This is the task replay will have to reproduce.
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
-	require.Len(t, currentSlice(t, delivered[1]).GetMessages(), 2)
+	require.Len(t, currentSlice(t, delivered[1]).GetRecords(), 2)
 
 	consumedAt := completedEventWithCursors(t, env.GetHistory(s.ns,
 		&commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()}))
@@ -468,9 +468,9 @@ func TestReplayGetsTheConsumedRangesBackFromTheStream(t *testing.T) {
 		"the replayed task must carry the range recorded at event %d", consumedAt)
 	require.Equal(t, int64(0), replayed.GetFromOffset())
 	require.Equal(t, int64(2), replayed.GetToOffset())
-	require.Len(t, replayed.GetMessages(), 2, "the payloads have to come back from the stream")
-	require.Equal(t, "replay-me-1", string(replayed.GetMessages()[0].GetBody().GetData()))
-	require.Equal(t, "replay-me-2", string(replayed.GetMessages()[1].GetBody().GetData()))
+	require.Len(t, replayed.GetRecords(), 2, "the payloads have to come back from the stream")
+	require.Equal(t, "replay-me-1", string(replayed.GetRecords()[0].GetBody().GetData()))
+	require.Equal(t, "replay-me-2", string(replayed.GetRecords()[1].GetBody().GetData()))
 }
 
 // completedEventWithCursors returns the id of the first WorkflowTaskCompleted
@@ -478,7 +478,7 @@ func TestReplayGetsTheConsumedRangesBackFromTheStream(t *testing.T) {
 func completedEventWithCursors(t *testing.T, events []*historypb.HistoryEvent) int64 {
 	t.Helper()
 	for _, e := range events {
-		for _, c := range e.GetWorkflowTaskCompletedEventAttributes().GetStreamCursors() {
+		for _, c := range e.GetWorkflowTaskCompletedEventAttributes().GetConsumedStreamRanges() {
 			if c.GetToOffset() > c.GetFromOffset() {
 				return e.GetEventId()
 			}
@@ -591,14 +591,14 @@ func TestWorkflowConsumesAStreamItDoesNotOwn(t *testing.T) {
 	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
 			Namespace: s.ns, StreamId: streamID,
-			Messages: []*streamlib.StreamMessage{
+			Records: []*streamlib.StreamRecord{
 				{
 					Body: &commonpb.Payload{Data: []byte("from-outside-1")},
-					Kind: streamlib.STREAM_MESSAGE_KIND_DATA,
+					Kind: streampb.STREAM_RECORD_KIND_DATA,
 				},
 				{
 					Body: &commonpb.Payload{Data: []byte("from-outside-2")},
-					Kind: streamlib.STREAM_MESSAGE_KIND_DATA,
+					Kind: streampb.STREAM_RECORD_KIND_DATA,
 				},
 			},
 		},
@@ -625,8 +625,8 @@ func TestWorkflowConsumesAStreamItDoesNotOwn(t *testing.T) {
 	require.Equal(t, streamID, got.GetStreamId())
 	require.Equal(t, int64(0), got.GetFromOffset())
 	require.Equal(t, int64(2), got.GetToOffset())
-	require.Len(t, got.GetMessages(), 2)
-	require.Equal(t, "from-outside-1", string(got.GetMessages()[0].GetBody().GetData()))
+	require.Len(t, got.GetRecords(), 2)
+	require.Equal(t, "from-outside-1", string(got.GetRecords()[0].GetBody().GetData()))
 }
 
 // A cursor is workflow state, so a continue-as-new has to carry it. Without
@@ -707,8 +707,8 @@ func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
 	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
 			Namespace: s.ns, StreamId: streamID,
-			Messages: []*streamlib.StreamMessage{
-				{Body: &commonpb.Payload{Data: []byte("before-can")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+			Records: []*streamlib.StreamRecord{
+				{Body: &commonpb.Payload{Data: []byte("before-can")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
 			},
 		},
 	})
@@ -719,7 +719,7 @@ func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
 	require.NoError(t, err)
 	consumed := currentSlice(t, delivered[1])
 	require.Equal(t, int64(1), consumed.GetToOffset())
-	require.Len(t, consumed.GetMessages(), 1)
+	require.Len(t, consumed.GetRecords(), 1)
 
 	// Drain the successor's first task, which carries nothing new.
 	_, err = poller.PollAndProcessWorkflowTask()
@@ -730,8 +730,8 @@ func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
 	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
 			Namespace: s.ns, StreamId: streamID,
-			Messages: []*streamlib.StreamMessage{
-				{Body: &commonpb.Payload{Data: []byte("after-can")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+			Records: []*streamlib.StreamRecord{
+				{Body: &commonpb.Payload{Data: []byte("after-can")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
 			},
 		},
 	})
@@ -744,8 +744,8 @@ func TestSubscriptionSurvivesContinueAsNew(t *testing.T) {
 	require.Equal(t, int64(1), afterCAN.GetFromOffset(),
 		"the successor resumes where its predecessor stopped")
 	require.Equal(t, int64(2), afterCAN.GetToOffset())
-	require.Len(t, afterCAN.GetMessages(), 1)
-	require.Equal(t, "after-can", string(afterCAN.GetMessages()[0].GetBody().GetData()))
+	require.Len(t, afterCAN.GetRecords(), 1)
+	require.Equal(t, "after-can", string(afterCAN.GetRecords()[0].GetBody().GetData()))
 
 	// The pin followed the subscription to the new run, with the floor where
 	// that run's cursor began. The predecessor's ranges are in a closed history
@@ -854,9 +854,9 @@ func TestWorkflowSubscribesToAStreamItself(t *testing.T) {
 	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
 			Namespace: s.ns, StreamId: streamID,
-			Messages: []*streamlib.StreamMessage{
-				{Body: &commonpb.Payload{Data: []byte("self-1")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
-				{Body: &commonpb.Payload{Data: []byte("self-2")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+			Records: []*streamlib.StreamRecord{
+				{Body: &commonpb.Payload{Data: []byte("self-1")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
+				{Body: &commonpb.Payload{Data: []byte("self-2")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
 			},
 		},
 	})
@@ -869,8 +869,8 @@ func TestWorkflowSubscribesToAStreamItself(t *testing.T) {
 	require.Equal(t, streamID, got.GetStreamId())
 	require.Equal(t, int64(0), got.GetFromOffset())
 	require.Equal(t, int64(2), got.GetToOffset())
-	require.Len(t, got.GetMessages(), 2)
-	require.Equal(t, "self-1", string(got.GetMessages()[0].GetBody().GetData()))
+	require.Len(t, got.GetRecords(), 2)
+	require.Equal(t, "self-1", string(got.GetRecords()[0].GetBody().GetData()))
 }
 
 func subscribedEvents(
@@ -1023,10 +1023,10 @@ func TestStreamSubscribeEventKeepsCommandOrder(t *testing.T) {
 					},
 				},
 				{
-					CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-					Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-						AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-							Messages: []*streampb.StreamMessage{
+					CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+					Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+						AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+							Records: []*streampb.StreamRecord{
 								{Body: &commonpb.Payload{Data: []byte("after subscribe")}},
 							},
 						},
@@ -1044,7 +1044,7 @@ func TestStreamSubscribeEventKeepsCommandOrder(t *testing.T) {
 	for _, e := range env.GetHistory(s.ns, &commonpb.WorkflowExecution{WorkflowId: id}) {
 		switch e.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED,
-			enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED:
+			enumspb.EVENT_TYPE_WORKFLOW_STREAM_RECORDS_APPENDED:
 			order = append(order, e.GetEventType())
 		default:
 			// Every other event is noise for this assertion.
@@ -1052,7 +1052,7 @@ func TestStreamSubscribeEventKeepsCommandOrder(t *testing.T) {
 	}
 	require.Equal(t, []enumspb.EventType{
 		enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED,
-		enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED,
+		enumspb.EVENT_TYPE_WORKFLOW_STREAM_RECORDS_APPENDED,
 	}, order, "the events must be in the order their commands were issued")
 }
 
@@ -1096,7 +1096,7 @@ func TestMessagesAppendedWithoutAKindReachTheWorkflow(t *testing.T) {
 	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
 			Namespace: s.ns, StreamId: streamID,
-			Messages: []*streamlib.StreamMessage{
+			Records: []*streamlib.StreamRecord{
 				{Body: &commonpb.Payload{Data: []byte("no-kind-1")}},
 				{Body: &commonpb.Payload{Data: []byte("no-kind-2")}},
 			},
@@ -1108,6 +1108,6 @@ func TestMessagesAppendedWithoutAKindReachTheWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	got := currentSlice(t, delivered[1])
 	require.Equal(t, int64(2), got.GetToOffset())
-	require.Equal(t, []string{"no-kind-1", "no-kind-2"}, apiBodies(got.GetMessages()),
+	require.Equal(t, []string{"no-kind-1", "no-kind-2"}, apiBodies(got.GetRecords()),
 		"the slice must carry the messages, not just advance past them")
 }

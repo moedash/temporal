@@ -9,12 +9,12 @@ import (
 // DefaultMaxMessagesPerPoll bounds a read page when the caller does not.
 const DefaultMaxMessagesPerPoll = 1000
 
-// MaxMessagesPerBatch bounds one append. It is not only an admission limit: a
+// MaxRecordsPerBatch bounds one append. It is not only an admission limit: a
 // batch is keyed by its first offset, so to serve a read starting inside a
 // batch the reader has to find the batch that contains it. Bounding the batch
 // bounds how far back it has to look, which turns an unbounded scan into a
 // fixed overread.
-const MaxMessagesPerBatch = 1000
+const MaxRecordsPerBatch = 1000
 
 // LongPollTimeout matches the convention used by the history long polls: on
 // expiry the caller gets an empty response and polls again, rather than an
@@ -44,14 +44,14 @@ const MaxStreamNameLength = 255
 // back on.
 const (
 	// MaxConsumeItemsPerTask bounds one Workflow Task's slice. A byte cap alone
-	// is not enough: a burst of tiny messages stays under it while still making
+	// is not enough: a burst of tiny records stays under it while still making
 	// one task's drain arbitrarily long. Whichever bound binds first, the rest
 	// is delivered on the following task.
 	MaxConsumeItemsPerTask = 1000
 
 	// MaxConsumeBytesPerTask bounds one Workflow Task's slice by size. Paired
 	// with MaxConsumeItemsPerTask because neither bound alone is enough: a
-	// burst of tiny messages slips under the byte budget, and a few large ones
+	// burst of tiny records slips under the byte budget, and a few large ones
 	// slip under the item count.
 	MaxConsumeBytesPerTask = 2 << 20
 
@@ -101,12 +101,12 @@ var (
 	MaxConsumeItemsPerTaskSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.maxConsumeItemsPerTask",
 		MaxConsumeItemsPerTask,
-		`Most stream messages one workflow task carries per subscription.`,
+		`Most stream records one workflow task carries per subscription.`,
 	)
 	MaxConsumeBytesPerTaskSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.maxConsumeBytesPerTask",
 		MaxConsumeBytesPerTask,
-		`Most stream message bytes one workflow task carries per subscription.`,
+		`Most stream record bytes one workflow task carries per subscription.`,
 	)
 	MaxProducersPerStreamSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.maxProducersPerStream",
@@ -121,12 +121,12 @@ var (
 	MaxMessageBytesSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.maxMessageBytes",
 		MaxMessageBytes,
-		`Largest single stream message accepted.`,
+		`Largest single stream record accepted.`,
 	)
 	MaxBatchBytesSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.maxBatchBytes",
 		MaxBatchBytes,
-		`Largest stream append accepted, summed over its messages.`,
+		`Largest stream append accepted, summed over its records.`,
 	)
 	MaxOwnedStreamsPerWorkflowSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.maxOwnedStreamsPerWorkflow",

@@ -48,21 +48,21 @@ func startConsumer(
 }
 
 func publishCommand(bodies ...string) []*commandpb.Command {
-	messages := make([]*streampb.StreamMessage, len(bodies))
+	messages := make([]*streampb.StreamRecord, len(bodies))
 	for i, b := range bodies {
-		messages[i] = &streampb.StreamMessage{Body: &commonpb.Payload{Data: []byte(b)}, Topic: "tokens"}
+		messages[i] = &streampb.StreamRecord{Body: &commonpb.Payload{Data: []byte(b)}, Topic: "tokens"}
 	}
 	return []*commandpb.Command{{
-		CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-		Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-			AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-				Messages: messages,
+		CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+		Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+			AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+				Records: messages,
 			},
 		},
 	}}
 }
 
-func apiBodies(msgs []*streampb.StreamMessage) []string {
+func apiBodies(msgs []*streampb.StreamRecord) []string {
 	out := make([]string, len(msgs))
 	for i, m := range msgs {
 		out[i] = string(m.GetBody().GetData())
@@ -75,7 +75,7 @@ func apiBodies(msgs []*streampb.StreamMessage) []string {
 func completedEventsWithCursors(events []*historypb.HistoryEvent) []int64 {
 	var out []int64
 	for _, e := range events {
-		if len(e.GetWorkflowTaskCompletedEventAttributes().GetStreamCursors()) > 0 {
+		if len(e.GetWorkflowTaskCompletedEventAttributes().GetConsumedStreamRanges()) > 0 {
 			out = append(out, e.GetEventId())
 		}
 	}
@@ -131,7 +131,7 @@ func TestReplayFollowsHistoryPastTheFirstPage(t *testing.T) {
 		_, err = poller.PollAndProcessWorkflowTask()
 		require.NoError(t, err)
 	}
-	require.Len(t, currentSlice(t, delivered[1]).GetMessages(), 2)
+	require.Len(t, currentSlice(t, delivered[1]).GetRecords(), 2)
 
 	events := env.GetHistory(s.ns, execution)
 	recordedAt := completedEventsWithCursors(events)
@@ -148,7 +148,7 @@ func TestReplayFollowsHistoryPastTheFirstPage(t *testing.T) {
 	replay := delivered[len(delivered)-1]
 	replayed := sliceForEvent(replay, consumedAt)
 	require.NotNil(t, replayed, "the range recorded on a later page must be re-supplied")
-	require.Equal(t, []string{"page-1", "page-2"}, apiBodies(replayed.GetMessages()))
+	require.Equal(t, []string{"page-1", "page-2"}, apiBodies(replayed.GetRecords()))
 	require.Equal(t, execution.GetRunId(), replayed.GetRunId(),
 		"an owned stream's slice names the run that holds it")
 	for _, eventID := range recordedAt {
@@ -253,7 +253,7 @@ func TestConsumerOfADeletedStreamFailsItsTaskLoudly(t *testing.T) {
 	// The append schedules the task that is owed the range.
 	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
-			Namespace: s.ns, StreamId: streamID, Messages: streamMsgs("tokens", "never-delivered"),
+			Namespace: s.ns, StreamId: streamID, Records: streamMsgs("tokens", "never-delivered"),
 		},
 	})
 	require.NoError(t, err)
@@ -320,7 +320,7 @@ func TestReplayOfADeletedStreamFailsTheTaskLoudly(t *testing.T) {
 	require.NoError(t, err)
 	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
-			Namespace: s.ns, StreamId: streamID, Messages: streamMsgs("tokens", "consumed-once"),
+			Namespace: s.ns, StreamId: streamID, Records: streamMsgs("tokens", "consumed-once"),
 		},
 	})
 	require.NoError(t, err)
@@ -328,7 +328,7 @@ func TestReplayOfADeletedStreamFailsTheTaskLoudly(t *testing.T) {
 	// Consumed and recorded, which is what a replay will have to reproduce.
 	_, err = poller.PollAndProcessWorkflowTask()
 	require.NoError(t, err)
-	require.Len(t, currentSlice(t, delivered[1]).GetMessages(), 1)
+	require.Len(t, currentSlice(t, delivered[1]).GetRecords(), 1)
 
 	deleteStreamAndWait(t, s, streamID)
 

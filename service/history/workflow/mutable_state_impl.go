@@ -678,7 +678,7 @@ func (ms *MutableStateImpl) mustInitHSM() {
 // the event carrying the range are in one transaction: split apart, a crash
 // between them would either redeliver a range or skip it with nothing in
 // History to say so.
-func (ms *MutableStateImpl) commitStreamCursors() ([]*streampb.StreamCursor, error) {
+func (ms *MutableStateImpl) commitStreamCursors() ([]*streampb.StreamRange, error) {
 	if !ms.HasChasmWorkflowComponent() {
 		return nil, nil
 	}

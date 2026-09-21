@@ -24,7 +24,7 @@ func TestOverLimitPublishFailsTheWorkflowTask(t *testing.T) {
 	s := newStreamTestEnvFrom(t, env)
 	execution, tq := startConsumer(t, s, "stream-wf-reject-publish-")
 
-	tooMany := make([]string, chasmstream.MaxMessagesPerBatch+1)
+	tooMany := make([]string, chasmstream.MaxRecordsPerBatch+1)
 	for i := range tooMany {
 		tooMany[i] = "x"
 	}
@@ -54,7 +54,7 @@ func TestOverLimitPublishFailsTheWorkflowTask(t *testing.T) {
 
 	events := env.GetHistory(s.ns, execution)
 	failed := workflowTaskFailedWith(events,
-		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_ADD_STREAM_MESSAGES_ATTRIBUTES)
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_APPEND_STREAM_RECORDS_ATTRIBUTES)
 	require.NotNil(t, failed, "the refusal is a workflow task failure with its own cause")
 	require.ErrorContains(t, err, failed.GetFailure().GetMessage())
 
@@ -77,8 +77,8 @@ func TestOverLimitPublishFailsTheWorkflowTask(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"fits"}, bodies(poll.GetFrontendResponse().GetMessages()))
-	require.Equal(t, []int64{0}, offsets(poll.GetFrontendResponse().GetMessages()))
+	require.Equal(t, []string{"fits"}, bodies(poll.GetFrontendResponse().GetRecords()))
+	require.Equal(t, []int64{0}, offsets(poll.GetFrontendResponse().GetRecords()))
 }
 
 // A subscribe naming a stream that does not exist is refused where the stream
@@ -169,7 +169,7 @@ func TestPublishOnAFailedTaskLeavesNoTrace(t *testing.T) {
 	require.NotNil(t, workflowTaskFailedWith(events,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES))
 	for _, e := range events {
-		require.Nil(t, e.GetWorkflowStreamMessagesAddedEventAttributes(),
+		require.Nil(t, e.GetWorkflowStreamRecordsAppendedEventAttributes(),
 			"a publish on a failed task leaves no event")
 	}
 	desc, err := s.client.DescribeWorkflowStream(s.ctx(), &streamlib.DescribeWorkflowStreamRequest{
@@ -185,7 +185,7 @@ func TestPublishOnAFailedTaskLeavesNoTrace(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Empty(t, poll.GetFrontendResponse().GetMessages())
+	require.Empty(t, poll.GetFrontendResponse().GetRecords())
 
 	// The retry's publish is the first thing the stream ever holds.
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithExpectedAttemptCount(2))
@@ -196,6 +196,6 @@ func TestPublishOnAFailedTaskLeavesNoTrace(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"first-to-land"}, bodies(poll.GetFrontendResponse().GetMessages()))
-	require.Equal(t, []int64{0}, offsets(poll.GetFrontendResponse().GetMessages()))
+	require.Equal(t, []string{"first-to-land"}, bodies(poll.GetFrontendResponse().GetRecords()))
+	require.Equal(t, []int64{0}, offsets(poll.GetFrontendResponse().GetRecords()))
 }

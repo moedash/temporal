@@ -163,7 +163,7 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 	deploymentName string,
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
-	streamCursors []*streampb.StreamCursor,
+	streamCursors []*streampb.StreamRange,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
@@ -180,7 +180,7 @@ func (b *EventFactory) CreateWorkflowTaskCompletedEvent(
 			VersioningBehavior:   behavior,
 			// Offsets only. The payloads the task consumed rode the task
 			// response, so History grows with tasks rather than with messages.
-			StreamCursors: streamCursors,
+			ConsumedStreamRanges: streamCursors,
 		},
 	}
 

@@ -240,4 +240,4 @@ require (
 
 tool golang.org/x/perf/cmd/benchstat
 
-replace go.temporal.io/api => github.com/moedash/api-go v1.63.6-0.20260918232949-bc9a4a97be0b
+replace go.temporal.io/api => github.com/moedash/api-go v1.63.6-0.20260921082525-9a6aa5f95be8

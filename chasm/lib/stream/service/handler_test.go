@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	apistreampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"google.golang.org/protobuf/proto"
@@ -13,15 +14,15 @@ import (
 
 func batchBlob(t *testing.T, topic string, bodies ...string) *commonpb.DataBlob {
 	t.Helper()
-	messages := make([]*streampb.StreamMessage, len(bodies))
+	messages := make([]*streampb.StreamRecord, len(bodies))
 	for i, b := range bodies {
-		messages[i] = &streampb.StreamMessage{
+		messages[i] = &streampb.StreamRecord{
 			Body:  &commonpb.Payload{Data: []byte(b)},
 			Topic: topic,
-			Kind:  streampb.STREAM_MESSAGE_KIND_DATA,
+			Kind:  apistreampb.STREAM_RECORD_KIND_DATA,
 		}
 	}
-	data, err := proto.Marshal(&streampb.StreamMessageBatch{Messages: messages})
+	data, err := proto.Marshal(&streampb.StreamRecordBatch{Records: messages})
 	require.NoError(t, err)
 	return &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}
 }
@@ -40,7 +41,7 @@ func TestFormatWindowAdvancesOnlyOverExaminedOffsets(t *testing.T) {
 	}
 	out, err := formatWindow(w, stream.WindowRequest{From: 0, Topics: []string{"nothing"}})
 	require.NoError(t, err)
-	require.Empty(t, out.GetMessages())
+	require.Empty(t, out.GetRecords())
 	require.Equal(t, int64(3), out.GetNextOffset(),
 		"offsets 3 and 4 were never read, so the reader must not be moved past them")
 
@@ -49,6 +50,6 @@ func TestFormatWindowAdvancesOnlyOverExaminedOffsets(t *testing.T) {
 	w.Blobs = []*commonpb.DataBlob{batchBlob(t, "a", "m0", "m1", "m2", "m3", "m4")}
 	out, err = formatWindow(w, stream.WindowRequest{From: 0, Topics: []string{"nothing"}})
 	require.NoError(t, err)
-	require.Empty(t, out.GetMessages())
+	require.Empty(t, out.GetRecords())
 	require.Equal(t, int64(5), out.GetNextOffset())
 }

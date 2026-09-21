@@ -29,7 +29,7 @@ message AddMessagesInput {
   // Optional. Supplying it skips resolving the stream's current run, which is
   // a persistence lookup on every call. CreateStream returns it.
   string run_id = 9;
-  repeated StreamMessage messages = 3;
+  repeated StreamRecord records = 3;
 
   // Idempotency, all optional. Supply a producer identity and sequence, or an
   // expected offset, or neither and accept at-least-once.
@@ -92,7 +92,7 @@ message PollMessagesInput {
   int64 from_offset = 3;
   int32 max_messages = 4;
   // Filters by exact topic. Offsets are assigned over the unfiltered stream, so
-  // next_offset advances past filtered-out messages too.
+  // next_offset advances past filtered-out records too.
   repeated string topics = 5;
 
   // When set and the reader is caught up, block until something arrives, the
@@ -102,7 +102,7 @@ message PollMessagesInput {
 }
 
 message PollMessagesOutput {
-  repeated StreamMessage messages = 1;
+  repeated StreamRecord records = 1;
   int64 next_offset = 2;
   int64 head_offset = 3;
   bool closed = 4;
@@ -160,7 +160,7 @@ message AddWorkflowMessagesInput {
 
   // Empty means the workflow's default output stream.
   string stream_name = 3;
-  repeated StreamMessage messages = 4;
+  repeated StreamRecord records = 4;
   // Optional idempotency, as on AddMessagesInput.
   string producer_id = 5;
   int64 sequence = 6;

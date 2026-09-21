@@ -5,15 +5,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	apistreampb "go.temporal.io/api/stream/v1"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 )
 
-func sized(n int, bytes int) []*streampb.StreamMessage {
-	out := make([]*streampb.StreamMessage, n)
+func sized(n int, bytes int) []*streampb.StreamRecord {
+	out := make([]*streampb.StreamRecord, n)
 	for i := range out {
-		out[i] = &streampb.StreamMessage{
+		out[i] = &streampb.StreamRecord{
 			Body: &commonpb.Payload{Data: make([]byte, bytes)},
-			Kind: streampb.STREAM_MESSAGE_KIND_DATA,
+			Kind: apistreampb.STREAM_RECORD_KIND_DATA,
 		}
 	}
 	return out
@@ -44,4 +45,47 @@ func TestCapByBytesOnAnEmptyRun(t *testing.T) {
 	messages, next := CapByBytes(nil, 9, 100)
 	require.Empty(t, messages)
 	require.Equal(t, int64(9), next)
+}
+
+// A reader in any language decodes the record the producer wrote, so every
+// field the store holds has to come back on the Workflow Task, the kind and the
+// producer identity included. A FINISH record is a record like any other to the
+// consumer that reads it.
+func TestToAPIRecordsCarriesTheRecordAsWritten(t *testing.T) {
+	stored := []*streampb.StreamRecord{
+		{
+			Body:       &commonpb.Payload{Data: []byte("token")},
+			Metadata:   map[string]*commonpb.Payload{"model": {Data: []byte("m1")}},
+			Topic:      "tokens",
+			Kind:       apistreampb.STREAM_RECORD_KIND_DATA,
+			ProducerId: "model-call",
+			Attempt:    2,
+			Sequence:   7,
+			Offset:     41,
+		},
+		{
+			Topic:      "tokens",
+			Kind:       apistreampb.STREAM_RECORD_KIND_FINISH,
+			ProducerId: "model-call",
+			Attempt:    2,
+			Sequence:   -1,
+			Offset:     42,
+		},
+	}
+
+	got := ToAPIRecords(stored)
+	require.Len(t, got, 2)
+
+	require.Equal(t, "token", string(got[0].GetBody().GetData()))
+	require.Equal(t, "m1", string(got[0].GetMetadata()["model"].GetData()))
+	require.Equal(t, "tokens", got[0].GetTopic())
+	require.Equal(t, apistreampb.STREAM_RECORD_KIND_DATA, got[0].GetKind())
+	require.Equal(t, "model-call", got[0].GetProducerId())
+	require.Equal(t, int64(2), got[0].GetAttempt())
+	require.Equal(t, int64(7), got[0].GetSequence())
+
+	require.Equal(t, apistreampb.STREAM_RECORD_KIND_FINISH, got[1].GetKind())
+	require.Nil(t, got[1].GetBody())
+	require.Equal(t, "model-call", got[1].GetProducerId())
+	require.Equal(t, int64(-1), got[1].GetSequence())
 }

@@ -2,40 +2,38 @@
 package streampb
 
 import (
-	"fmt"
-
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type StreamMessage to the protobuf v3 wire format
-func (val *StreamMessage) Marshal() ([]byte, error) {
+// Marshal an object of type StreamRecord to the protobuf v3 wire format
+func (val *StreamRecord) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type StreamMessage from the protobuf v3 wire format
-func (val *StreamMessage) Unmarshal(buf []byte) error {
+// Unmarshal an object of type StreamRecord from the protobuf v3 wire format
+func (val *StreamRecord) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *StreamMessage) Size() int {
+func (val *StreamRecord) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two StreamMessage values are equivalent by recursively
+// Equal returns whether two StreamRecord values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *StreamMessage) Equal(that interface{}) bool {
+func (this *StreamRecord) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *StreamMessage
+	var that1 *StreamRecord
 	switch t := that.(type) {
-	case *StreamMessage:
+	case *StreamRecord:
 		that1 = t
-	case StreamMessage:
+	case StreamRecord:
 		that1 = &t
 	default:
 		return false
@@ -44,58 +42,39 @@ func (this *StreamMessage) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type StreamMessageBatch to the protobuf v3 wire format
-func (val *StreamMessageBatch) Marshal() ([]byte, error) {
+// Marshal an object of type StreamRecordBatch to the protobuf v3 wire format
+func (val *StreamRecordBatch) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type StreamMessageBatch from the protobuf v3 wire format
-func (val *StreamMessageBatch) Unmarshal(buf []byte) error {
+// Unmarshal an object of type StreamRecordBatch from the protobuf v3 wire format
+func (val *StreamRecordBatch) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *StreamMessageBatch) Size() int {
+func (val *StreamRecordBatch) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two StreamMessageBatch values are equivalent by recursively
+// Equal returns whether two StreamRecordBatch values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *StreamMessageBatch) Equal(that interface{}) bool {
+func (this *StreamRecordBatch) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *StreamMessageBatch
+	var that1 *StreamRecordBatch
 	switch t := that.(type) {
-	case *StreamMessageBatch:
+	case *StreamRecordBatch:
 		that1 = t
-	case StreamMessageBatch:
+	case StreamRecordBatch:
 		that1 = &t
 	default:
 		return false
 	}
 
 	return proto.Equal(this, that1)
-}
-
-var (
-	StreamMessageKind_shorthandValue = map[string]int32{
-		"Unspecified": 0,
-		"Data":        1,
-		"Flush":       2,
-	}
-)
-
-// StreamMessageKindFromString parses a StreamMessageKind value from  either the protojson
-// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to StreamMessageKind
-func StreamMessageKindFromString(s string) (StreamMessageKind, error) {
-	if v, ok := StreamMessageKind_value[s]; ok {
-		return StreamMessageKind(v), nil
-	} else if v, ok := StreamMessageKind_shorthandValue[s]; ok {
-		return StreamMessageKind(v), nil
-	}
-	return StreamMessageKind(0), fmt.Errorf("%s is not a valid StreamMessageKind", s)
 }

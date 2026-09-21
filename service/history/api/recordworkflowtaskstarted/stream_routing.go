@@ -69,11 +69,11 @@ func readExternalWindow(
 	out := response.GetFrontendResponse()
 	if out == nil || out.GetNextOffset() < from || out.GetNextOffset() > to ||
 		out.GetNextOffset() > out.GetHeadOffset() ||
-		int64(len(out.GetMessages())) != out.GetNextOffset()-from {
+		int64(len(out.GetRecords())) != out.GetNextOffset()-from {
 		return stream.Window{}, serviceerror.NewDataLoss(
 			"stream read returned an invalid contiguous range")
 	}
-	for index, message := range out.GetMessages() {
+	for index, message := range out.GetRecords() {
 		if message == nil || message.GetOffset() != from+int64(index) {
 			return stream.Window{}, serviceerror.NewDataLoss(
 				"stream read returned a missing or reordered offset")
@@ -89,10 +89,10 @@ func readExternalWindow(
 		Limit: int(limit),
 		RunID: out.GetRunId(),
 	}
-	if len(out.GetMessages()) == 0 {
+	if len(out.GetRecords()) == 0 {
 		return w, nil
 	}
-	data, err := proto.Marshal(&streamlib.StreamMessageBatch{Messages: out.GetMessages()})
+	data, err := proto.Marshal(&streamlib.StreamRecordBatch{Records: out.GetRecords()})
 	if err != nil {
 		return stream.Window{}, err
 	}

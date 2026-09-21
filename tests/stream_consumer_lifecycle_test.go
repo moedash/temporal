@@ -73,7 +73,7 @@ func subscribeConsumeAndComplete(
 	require.NoError(t, err)
 	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
-			Namespace: s.ns, StreamId: streamID, Messages: streamMsgs("tokens", "one", "two"),
+			Namespace: s.ns, StreamId: streamID, Records: streamMsgs("tokens", "one", "two"),
 		},
 	})
 	require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestACompletedConsumerReleasesItsFloor(t *testing.T) {
 	// The append is what makes the stream go and ask.
 	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
-			Namespace: s.ns, StreamId: streamID, Messages: streamMsgs("tokens", "three"),
+			Namespace: s.ns, StreamId: streamID, Records: streamMsgs("tokens", "three"),
 		},
 	})
 	require.NoError(t, err)

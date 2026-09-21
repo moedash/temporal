@@ -146,8 +146,8 @@ func (h *handler) AddMessages(
 	req *streampb.AddMessagesRequest,
 ) (*streampb.AddMessagesResponse, error) {
 	in := req.GetFrontendRequest()
-	if len(in.GetMessages()) == 0 {
-		return nil, serviceerror.NewInvalidArgument("no messages to append")
+	if len(in.GetRecords()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("no records to append")
 	}
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
@@ -156,7 +156,7 @@ func (h *handler) AddMessages(
 	// whatever offset it lands at. A retried sequence is answered by the
 	// producer table, not by a pin on the head.
 	addReq := stream.AddMessagesRequest{
-		Messages:   in.GetMessages(),
+		Records:    in.GetRecords(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
 		Limits:     h.limitsFor(req.GetNamespaceId()),
@@ -200,14 +200,16 @@ func (h *handler) AddWorkflowMessages(
 	req *streampb.AddWorkflowMessagesRequest,
 ) (*streampb.AddWorkflowMessagesResponse, error) {
 	in := req.GetFrontendRequest()
-	if len(in.GetMessages()) == 0 {
-		return nil, serviceerror.NewInvalidArgument("no messages to append")
+	if len(in.GetRecords()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("no records to append")
 	}
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
+	// The records go in as sent, producer identity included. Who is writing is
+	// the caller's claim to make; the store only answers whether it fits.
 	name := ownedStreamName(in.GetStreamName())
 	addReq := stream.AddMessagesRequest{
-		Messages:   in.GetMessages(),
+		Records:    in.GetRecords(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
 		Limits:     h.limitsFor(req.GetNamespaceId()),
@@ -595,7 +597,7 @@ func (h *handler) PollWorkflowMessages(
 // in the component, so the frontier and the bytes it was served with cannot
 // disagree.
 //
-// The reader is advanced only over offsets that were examined. CollectMessages
+// The reader is advanced only over offsets that were examined. CollectRecords
 // steps past every message it filtered out, so a filtered page that matched
 // nothing still moves the reader; a window whose batches stop short of its end
 // must not be reported as read to the end.
@@ -611,12 +613,12 @@ func formatWindow(w stream.Window, req stream.WindowRequest) (*streampb.PollMess
 		return out, nil
 	}
 
-	messages, next, err := stream.CollectMessages(
+	records, next, err := stream.CollectRecords(
 		w.Blobs, w.Starts, req.From, w.To, w.Limit, req.Topics)
 	if err != nil {
 		return nil, err
 	}
-	out.Messages = messages
+	out.Records = records
 	out.NextOffset = next
 	return out, nil
 }

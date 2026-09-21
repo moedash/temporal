@@ -152,7 +152,7 @@ func TestStreamRoutedCrossHostDeliveryAndReplay(t *testing.T) {
 			_, err = streams.AddMessages(ctx, &streamlib.AddMessagesRequest{
 				FrontendRequest: &streamlib.AddMessagesInput{
 					Namespace: topo.ns, StreamId: source,
-					Messages: streamMsgs("tokens", "retained-input"),
+					Records: streamMsgs("tokens", "retained-input"),
 				},
 			})
 			require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestStreamRoutedCrossHostDeliveryAndReplay(t *testing.T) {
 			_, err = poller.PollAndProcessWorkflowTask()
 			require.NoError(t, err)
 			live := currentSlice(t, delivered[1])
-			require.Equal(t, "retained-input", string(live.GetMessages()[0].GetBody().GetData()))
+			require.Equal(t, "retained-input", string(live.GetRecords()[0].GetBody().GetData()))
 			artifacts.writeProto(tc.name+"-live-slice", live)
 			artifacts.writeProto(tc.name+"-committed-history", &historypb.History{Events: history()})
 			consumedAt := completedEventWithCursors(t, history())
@@ -209,7 +209,7 @@ func TestStreamRoutedCrossHostDeliveryAndReplay(t *testing.T) {
 
 			replayed := sliceForEvent(response.GetStreamSlices(), consumedAt)
 			require.NotNil(t, replayed, "cold replay must re-supply the committed input range")
-			require.Equal(t, "retained-input", string(replayed.GetMessages()[0].GetBody().GetData()))
+			require.Equal(t, "retained-input", string(replayed.GetRecords()[0].GetBody().GetData()))
 		})
 	}
 }

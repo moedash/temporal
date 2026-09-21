@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	apistreampb "go.temporal.io/api/stream/v1"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/tests/testcore"
@@ -122,7 +123,7 @@ func runNativeProducer(
 	deadline := time.Now().Add(p.duration)
 
 	seq := 0
-	var pending []*streampb.StreamMessage
+	var pending []*streampb.StreamRecord
 	sequence := int64(0)
 
 	flush := func() bool {
@@ -134,7 +135,7 @@ func runNativeProducer(
 		sequence++
 		_, err := client.AddMessages(ctx, &streampb.AddMessagesRequest{
 			FrontendRequest: &streampb.AddMessagesInput{
-				Namespace: ns, StreamId: streamID, RunId: runID, Messages: batch,
+				Namespace: ns, StreamId: streamID, RunId: runID, Records: batch,
 				ProducerId: "bench", Sequence: sequence,
 			},
 		})
@@ -152,9 +153,9 @@ func runNativeProducer(
 			return seq
 		case <-genTicker.C:
 			sentAt.Store(seq, time.Now())
-			pending = append(pending, &streampb.StreamMessage{
+			pending = append(pending, &streampb.StreamRecord{
 				Body: &commonpb.Payload{Data: payload},
-				Kind: streampb.STREAM_MESSAGE_KIND_DATA,
+				Kind: apistreampb.STREAM_RECORD_KIND_DATA,
 			})
 			seq++
 		case <-flushTicker.C:
@@ -196,7 +197,7 @@ func runNativeConsumer(
 		}
 		received := time.Now()
 		fr := resp.GetFrontendResponse()
-		for range fr.GetMessages() {
+		for range fr.GetRecords() {
 			if v, ok := sentAt.Load(int(lastSeen)); ok {
 				out = append(out, received.Sub(v.(time.Time)))
 			}

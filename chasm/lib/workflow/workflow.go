@@ -285,7 +285,7 @@ func (w *Workflow) StreamCursorsBehind(ctx chasm.Context) bool {
 // A cursor with nothing staged is skipped, but a cursor staged with an empty
 // range is not: replay has to see that the subscription was live and observed
 // nothing.
-func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*streampb.StreamCursor {
+func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*streampb.StreamRange {
 	if w.StreamCursors == nil {
 		return nil
 	}
@@ -298,7 +298,7 @@ func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*streampb.St
 	// event than the one the original execution wrote.
 	slices.Sort(names)
 
-	var recorded []*streampb.StreamCursor
+	var recorded []*streampb.StreamRange
 	for _, name := range names {
 		cursor := w.StreamCursors[name].Get(mctx)
 		from, to, ok := cursor.Commit(mctx)
@@ -312,7 +312,7 @@ func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*streampb.St
 			field.Get(mctx).AdvanceConsumer(mctx, streamConsumerID(name), to)
 		}
 
-		recorded = append(recorded, &streampb.StreamCursor{
+		recorded = append(recorded, &streampb.StreamRange{
 			StreamId:   cursor.StreamID(),
 			FromOffset: from,
 			ToOffset:   to,

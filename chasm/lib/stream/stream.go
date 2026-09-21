@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	apistreampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common"
@@ -58,7 +59,7 @@ type NewStreamRequest struct {
 }
 
 type AddMessagesRequest struct {
-	Messages []*streampb.StreamMessage
+	Records []*streampb.StreamRecord
 
 	// Optional idempotency. A producer supplies either an identity and
 	// sequence, or an expected offset, or neither and accepts at-least-once.
@@ -142,28 +143,28 @@ func (s *Stream) AddMessages(
 	if s.State.Closed {
 		return AddMessagesResult{}, serviceerror.NewFailedPrecondition("stream is closed")
 	}
-	if len(req.Messages) == 0 {
-		return AddMessagesResult{}, serviceerror.NewInvalidArgument("no messages to append")
+	if len(req.Records) == 0 {
+		return AddMessagesResult{}, serviceerror.NewInvalidArgument("no records to append")
 	}
-	if len(req.Messages) > MaxMessagesPerBatch {
+	if len(req.Records) > MaxRecordsPerBatch {
 		return AddMessagesResult{}, serviceerror.NewInvalidArgumentf(
-			"batch of %d exceeds the limit of %d messages", len(req.Messages), MaxMessagesPerBatch)
+			"batch of %d exceeds the limit of %d records", len(req.Records), MaxRecordsPerBatch)
 	}
 	limits := req.Limits.withDefaults()
-	if err := checkBatchBytes(req.Messages, limits); err != nil {
+	if err := checkBatchBytes(req.Records, limits); err != nil {
 		return AddMessagesResult{}, err
 	}
-	// A message with no kind is data. Delivery to a workflow drops anything
-	// that is not, so a producer leaving the field at its zero value would get
-	// an offset for a message no subscriber ever sees. Settled before the batch
-	// is marshalled, so a retry hashes the same bytes.
-	for _, m := range req.Messages {
-		if m.GetKind() == streampb.STREAM_MESSAGE_KIND_UNSPECIFIED {
-			m.Kind = streampb.STREAM_MESSAGE_KIND_DATA
+	// A record with no kind is data. A producer that never heard of kinds
+	// leaves the field at its zero value, and every reader would otherwise have
+	// to agree on what that means. Settled before the batch is marshalled, so a
+	// retry hashes the same bytes.
+	for _, m := range req.Records {
+		if m.GetKind() == apistreampb.STREAM_RECORD_KIND_UNSPECIFIED {
+			m.Kind = apistreampb.STREAM_RECORD_KIND_DATA
 		}
 	}
 
-	blob, err := marshalBatch(req.Messages)
+	blob, err := marshalBatch(req.Records)
 	if err != nil {
 		return AddMessagesResult{}, err
 	}
@@ -180,7 +181,7 @@ func (s *Stream) AddMessages(
 	if err := s.checkProducerRoom(req.ProducerID, limits.MaxProducersPerStream); err != nil {
 		return AddMessagesResult{}, err
 	}
-	if err := s.checkBudget(int64(len(req.Messages)), int64(len(blob.Data))); err != nil {
+	if err := s.checkBudget(int64(len(req.Records)), int64(len(blob.Data))); err != nil {
 		return AddMessagesResult{}, err
 	}
 
@@ -189,7 +190,7 @@ func (s *Stream) AddMessages(
 	// History still refers to. Refusing the write is the honest half of that
 	// choice: capacity may constrain what is admitted, and may not quietly take
 	// back a workflow's ability to replay a decision it already made.
-	if err := s.checkCapRoom(int64(len(req.Messages))); err != nil {
+	if err := s.checkCapRoom(int64(len(req.Records))); err != nil {
 		return AddMessagesResult{}, err
 	}
 
@@ -199,7 +200,7 @@ func (s *Stream) AddMessages(
 	}
 
 	first := s.State.HeadOffset
-	count := int64(len(req.Messages))
+	count := int64(len(req.Records))
 
 	if s.Batches == nil {
 		s.Batches = make(chasm.Map[int64, *commonpb.DataBlob])
@@ -310,7 +311,7 @@ func (s *Stream) checkBudget(count int64, size int64) error {
 	if limit := budget.GetMaxItems(); limit > 0 && s.State.HeadOffset+count > limit {
 		return serviceerror.NewResourceExhaustedf(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT,
-			"stream holds %d of its budget of %d messages; the append of %d does not fit",
+			"stream holds %d of its budget of %d records; the append of %d does not fit",
 			s.State.HeadOffset, limit, count)
 	}
 	if limit := budget.GetMaxBytes(); limit > 0 && s.State.AppendedBytes+size > limit {
@@ -433,7 +434,7 @@ func (s *Stream) Truncate(_ chasm.MutableContext, newBase int64) error {
 	if floor, holder, pinned := s.replayFloor(); pinned && newBase > floor {
 		return serviceerror.NewFailedPreconditionf(
 			"cannot truncate to %d: consumer %q still depends on offset %d and above "+
-				"to replay; deregister it first if those messages are no longer needed",
+				"to replay; deregister it first if those records are no longer needed",
 			newBase, holder, floor)
 	}
 	s.State.BaseOffset = newBase
@@ -532,8 +533,8 @@ func (s *Stream) ReadWindow(ctx chasm.Context, req WindowRequest) (Window, error
 		return w, nil
 	}
 
-	// Clip to what the caller can actually be given. One offset is one message,
-	// so the bound is exact. Without it a poll for a single message off a long
+	// Clip to what the caller can actually be given. One offset is one record,
+	// so the bound is exact. Without it a poll for a single record off a long
 	// stream materialises every batch to the head before trimming.
 	w.To = min(s.State.HeadOffset, req.From+int64(limit))
 	blobs, starts, err := s.ReadBatches(ctx, req.From, w.To, 0)
@@ -580,7 +581,7 @@ func (s *Stream) ReadBatches(
 	return blobs, starts, nil
 }
 
-// applyCap advances the readable floor when the stream is over its message cap.
+// applyCap advances the readable floor when the stream is over its record cap.
 // Evaluated at the end of a successful append rather than by a sweeper: the
 // append transition is already writing, so folding the check into it costs
 // nothing and keeps the cap tight instead of eventually true.
@@ -597,7 +598,7 @@ func (s *Stream) applyCap() {
 	// Clamped rather than refused, because refusing belongs to admission and
 	// has already happened: checkCapRoom turned away the append that would have
 	// needed this. Reaching the clamp means a consumer registered after the
-	// messages were written, and keeping its bytes is still the right answer.
+	// records were written, and keeping its bytes is still the right answer.
 	if floor, _, pinned := s.replayFloor(); pinned && newBase > floor {
 		newBase = floor
 	}
@@ -611,9 +612,9 @@ func (s *Stream) applyCap() {
 // checkCapRoom refuses an append the cap could only absorb by dropping bytes an
 // active consumer still needs.
 //
-// A capped stream with no consumer behaves as before: the oldest messages go.
+// A capped stream with no consumer behaves as before: the oldest records go.
 // The refusal only arrives when honouring the cap and honouring a recorded
-// consumption are the same messages, and it names the consumer so the operator
+// consumption are the same records, and it names the consumer so the operator
 // knows what to do about it.
 func (s *Stream) checkCapRoom(count int64) error {
 	maxItems := s.State.GetLifecycle().GetMaxItems()
@@ -630,9 +631,9 @@ func (s *Stream) checkCapRoom(count int64) error {
 	}
 	return serviceerror.NewResourceExhaustedf(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED,
-		"stream is at its cap of %d messages and consumer %q still depends on "+
+		"stream is at its cap of %d records and consumer %q still depends on "+
 			"offset %d and above to replay; the append would have to delete those "+
-			"messages to make room",
+			"records to make room",
 		maxItems, holder, floor)
 }
 
@@ -729,7 +730,7 @@ func (s *Stream) AdvanceConsumer(_ chasm.MutableContext, consumerID string, offs
 }
 
 // DeregisterConsumer releases the floor a consumer was holding, so retention
-// and the message cap can reach its messages again. The entry stays, inactive,
+// and the record cap can reach its records again. The entry stays, inactive,
 // so the same consumer coming back is refused if the stream has moved past
 // what its History refers to.
 func (s *Stream) DeregisterConsumer(_ chasm.MutableContext, consumerID string) {
@@ -745,13 +746,13 @@ func (s *Stream) ForgetConsumer(_ chasm.MutableContext, consumerID string) {
 	delete(s.State.Consumers, consumerID)
 }
 
-func marshalBatch(messages []*streampb.StreamMessage) (*commonpb.DataBlob, error) {
+func marshalBatch(records []*streampb.StreamRecord) (*commonpb.DataBlob, error) {
 	// The serialized batch is also the producer's deduplication fingerprint, and
 	// protobuf map iteration order is not stable. A record carrying payload or
-	// message metadata would otherwise hash differently on a retry and be
+	// record metadata would otherwise hash differently on a retry and be
 	// refused as a conflicting duplicate of itself.
 	data, err := (proto.MarshalOptions{Deterministic: true}).Marshal(
-		&streampb.StreamMessageBatch{Messages: messages})
+		&streampb.StreamRecordBatch{Records: records})
 	if err != nil {
 		return nil, err
 	}

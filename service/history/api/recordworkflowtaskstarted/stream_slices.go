@@ -142,7 +142,7 @@ func readDeliverable(
 	cursor *stream.Cursor,
 	from, to int64,
 	limits stream.Limits,
-) ([]*streampb.StreamMessage, int64, string, error) {
+) ([]*streampb.StreamRecord, int64, string, error) {
 	if to <= from {
 		return nil, from, "", nil
 	}
@@ -155,7 +155,7 @@ func readDeliverable(
 	}
 	// The collected run is contiguous from `from`, so the byte cap recomputes
 	// the same end offset the read would have reported.
-	collected, _, err := stream.CollectMessages(
+	collected, _, err := stream.CollectRecords(
 		w.Blobs, w.Starts, from, w.To, limits.MaxConsumeItemsPerTask, nil)
 	if err != nil {
 		return nil, 0, "", err
@@ -163,7 +163,7 @@ func readDeliverable(
 	// Cap before converting: the byte budget applies to the run as stored, and
 	// trimming decides how far the recorded range reaches.
 	collected, readTo := stream.CapByBytes(collected, from, limits.MaxConsumeBytesPerTask)
-	return stream.ToAPIMessages(collected), readTo, w.RunID, nil
+	return stream.ToAPIRecords(collected), readTo, w.RunID, nil
 }
 
 // readWindowFor reads a range from whichever component holds it.
@@ -273,7 +273,7 @@ func deliverStreamSlices(
 			to = min(from+int64(maxItems), head)
 		}
 
-		messages, next, ownerRunID, err := readDeliverable(
+		records, next, ownerRunID, err := readDeliverable(
 			ctx, chasmCtx, wf, consumer.NamespaceID, name, cursor, from, to, limits)
 		if err != nil {
 			return nil, nil, err
@@ -303,7 +303,7 @@ func deliverStreamSlices(
 			RunId:      ownerRunID,
 			FromOffset: from,
 			ToOffset:   next,
-			Messages:   messages,
+			Records:    records,
 		})
 		addresses[cursor.StreamID()] = streamOrigin{
 			external:  cursor.IsExternal(),
@@ -321,8 +321,8 @@ func deliverStreamSlices(
 // task being started. A consumer past these bounds cannot be replayed by this
 // path; its task is failed with a cause that says so rather than retried.
 const (
-	maxReplayMessages = 100_000
-	maxReplayBytes    = 64 << 20
+	maxReplayRecords = 100_000
+	maxReplayBytes   = 64 << 20
 	// Pages of history walked to find the recorded ranges. Empty ranges cost
 	// nothing to attach but each page is a store read under a request deadline.
 	maxReplayPages = 256
@@ -374,8 +374,8 @@ type replaySupply struct {
 	consumer  definition.WorkflowKey
 	addresses map[string]streamOrigin
 
-	messages int
-	bytes    int
+	records int
+	bytes   int
 	// How far the recorded ranges reach, per stream, so the coverage check
 	// can tell a complete re-supply from a short one.
 	reached map[string]int64
@@ -414,7 +414,7 @@ func attachReplaySlices(
 	// A sticky task means the worker still holds the execution, so it has
 	// nothing to replay. Its history begins at the previous task's completion,
 	// and that event carries the range that task already consumed, so
-	// re-supplying it here would hand the workflow the same messages twice.
+	// re-supplying it here would hand the workflow the same records twice.
 	if resp.GetStickyExecutionEnabled() {
 		return nil
 	}
@@ -486,7 +486,7 @@ func attachReplaySlices(
 // collect re-reads every range the events on one page recorded.
 func (s *replaySupply) collect(events []*historypb.HistoryEvent) error {
 	for _, event := range events {
-		for _, recorded := range event.GetWorkflowTaskCompletedEventAttributes().GetStreamCursors() {
+		for _, recorded := range event.GetWorkflowTaskCompletedEventAttributes().GetConsumedStreamRanges() {
 			address, ok := s.addresses[recorded.GetStreamId()]
 			if !ok {
 				// A subscription the workflow has since dropped. The range is
@@ -494,7 +494,7 @@ func (s *replaySupply) collect(events []*historypb.HistoryEvent) error {
 				continue
 			}
 
-			messages, ownerRunID, err := s.messagesFor(address, recorded)
+			records, ownerRunID, err := s.recordsFor(address, recorded)
 			if err != nil {
 				return err
 			}
@@ -510,7 +510,7 @@ func (s *replaySupply) collect(events []*historypb.HistoryEvent) error {
 				RunId:                        ownerRunID,
 				FromOffset:                   recorded.GetFromOffset(),
 				ToOffset:                     recorded.GetToOffset(),
-				Messages:                     messages,
+				Records:                      records,
 				WorkflowTaskCompletedEventId: event.GetEventId(),
 			})
 		}
@@ -518,13 +518,13 @@ func (s *replaySupply) collect(events []*historypb.HistoryEvent) error {
 	return nil
 }
 
-// messagesFor re-reads one recorded range, or returns nothing for a range that
+// recordsFor re-reads one recorded range, or returns nothing for a range that
 // recorded an empty observation. The run id is the execution holding the
 // stream, which for an owned stream is the consumer itself.
-func (s *replaySupply) messagesFor(
+func (s *replaySupply) recordsFor(
 	address streamOrigin,
-	recorded *streampb.StreamCursor,
-) ([]*streampb.StreamMessage, string, error) {
+	recorded *streampb.StreamRange,
+) ([]*streampb.StreamRecord, string, error) {
 	ownerRunID := s.consumer.RunID
 	if recorded.GetToOffset() <= recorded.GetFromOffset() {
 		if address.external {
@@ -548,29 +548,29 @@ func (s *replaySupply) messagesFor(
 	if address.external {
 		ownerRunID = w.RunID
 	}
-	collected, _, err := stream.CollectMessages(
+	collected, _, err := stream.CollectRecords(
 		w.Blobs, w.Starts,
 		recorded.GetFromOffset(), recorded.GetToOffset(),
 		int(recorded.GetToOffset()-recorded.GetFromOffset()), nil)
 	if err != nil {
 		return nil, "", err
 	}
-	messages := stream.ToAPIMessages(collected)
+	records := stream.ToAPIRecords(collected)
 
-	s.messages += len(messages)
-	for _, m := range messages {
+	s.records += len(records)
+	for _, m := range records {
 		s.bytes += proto.Size(m)
 	}
 	// Bounded because every prior task's range is re-read into one response, so
 	// a long-lived consumer's cold replay grows with its whole history. Refused
 	// rather than trimmed: a short re-supply is what replay cannot survive.
-	if s.messages > maxReplayMessages || s.bytes > maxReplayBytes {
+	if s.records > maxReplayRecords || s.bytes > maxReplayBytes {
 		return nil, "", unavailablef(
-			"replaying workflow %q needs more than %d messages or %d bytes of stream history "+
+			"replaying workflow %q needs more than %d records or %d bytes of stream history "+
 				"to re-supply; the consumed ranges cannot be re-delivered in one response",
-			s.consumer.GetWorkflowID(), maxReplayMessages, maxReplayBytes)
+			s.consumer.GetWorkflowID(), maxReplayRecords, maxReplayBytes)
 	}
-	return messages, ownerRunID, nil
+	return records, ownerRunID, nil
 }
 
 // checkCoverage refuses a re-supply that stops short of what the cursor says

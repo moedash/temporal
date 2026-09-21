@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	apistreampb "go.temporal.io/api/stream/v1"
 	chasmstream "go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/testing/await"
@@ -21,7 +22,7 @@ import (
 // path the benchmark will eventually compare against the Signal-and-Update
 // baseline in streaming_baseline_test.go.
 
-const streamMaxBatch = chasmstream.MaxMessagesPerBatch
+const streamMaxBatch = chasmstream.MaxRecordsPerBatch
 
 type streamTestEnv struct {
 	env     *testcore.TestEnv
@@ -95,19 +96,19 @@ func (s *streamTestEnv) poll(
 	return resp.GetFrontendResponse()
 }
 
-func streamMsgs(topic string, bodies ...string) []*streampb.StreamMessage {
-	out := make([]*streampb.StreamMessage, len(bodies))
+func streamMsgs(topic string, bodies ...string) []*streampb.StreamRecord {
+	out := make([]*streampb.StreamRecord, len(bodies))
 	for i, b := range bodies {
-		out[i] = &streampb.StreamMessage{
+		out[i] = &streampb.StreamRecord{
 			Body:  &commonpb.Payload{Data: []byte(b)},
 			Topic: topic,
-			Kind:  streampb.STREAM_MESSAGE_KIND_DATA,
+			Kind:  apistreampb.STREAM_RECORD_KIND_DATA,
 		}
 	}
 	return out
 }
 
-func bodies(msgs []*streampb.StreamMessage) []string {
+func bodies(msgs []*streampb.StreamRecord) []string {
 	out := make([]string, len(msgs))
 	for i, m := range msgs {
 		out[i] = string(m.GetBody().GetData())
@@ -128,28 +129,28 @@ func TestStreamAppendAndRead(t *testing.T) {
 	s.create(ctx, t, id)
 
 	first, err := s.add(ctx, t, id,
-		&streampb.AddMessagesInput{Messages: streamMsgs("", "a", "b", "c")})
+		&streampb.AddMessagesInput{Records: streamMsgs("", "a", "b", "c")})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), first.GetFirstOffset())
 	require.Equal(t, int64(3), first.GetNextOffset())
 
-	second, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "d")})
+	second, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "d")})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), second.GetFirstOffset())
 
 	all := s.poll(ctx, t, id, 0)
-	require.Equal(t, []string{"a", "b", "c", "d"}, bodies(all.GetMessages()))
+	require.Equal(t, []string{"a", "b", "c", "d"}, bodies(all.GetRecords()))
 	require.Equal(t, int64(4), all.GetNextOffset())
 	require.Equal(t, int64(4), all.GetHeadOffset())
 	require.False(t, all.GetClosed())
 
 	// A reader owns its cursor, so resuming mid-stream is just another read.
 	tail := s.poll(ctx, t, id, 2)
-	require.Equal(t, []string{"c", "d"}, bodies(tail.GetMessages()))
+	require.Equal(t, []string{"c", "d"}, bodies(tail.GetRecords()))
 
 	// Caught up returns empty rather than erroring.
 	caughtUp := s.poll(ctx, t, id, 4)
-	require.Empty(t, caughtUp.GetMessages())
+	require.Empty(t, caughtUp.GetRecords())
 	require.Equal(t, int64(4), caughtUp.GetNextOffset())
 }
 
@@ -159,7 +160,7 @@ func TestStreamManyReadersAreIndependent(t *testing.T) {
 	const id = "stream-many-readers"
 	s.create(ctx, t, id)
 
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "a", "b")})
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a", "b")})
 	require.NoError(t, err)
 
 	// No durable per-subscriber state, so reader count is not a state-machine
@@ -167,7 +168,7 @@ func TestStreamManyReadersAreIndependent(t *testing.T) {
 	// Signal-and-Update pattern hits.
 	for range 25 {
 		got := s.poll(ctx, t, id, 0)
-		require.Equal(t, []string{"a", "b"}, bodies(got.GetMessages()))
+		require.Equal(t, []string{"a", "b"}, bodies(got.GetRecords()))
 	}
 }
 
@@ -178,14 +179,14 @@ func TestStreamProducerDedup(t *testing.T) {
 	s.create(ctx, t, id)
 
 	in := &streampb.AddMessagesInput{
-		Messages: streamMsgs("", "a", "b"), ProducerId: "p1", Sequence: 1,
+		Records: streamMsgs("", "a", "b"), ProducerId: "p1", Sequence: 1,
 	}
 	first, err := s.add(ctx, t, id, in)
 	require.NoError(t, err)
 	require.False(t, first.GetDeduplicated())
 
 	retry, err := s.add(ctx, t, id, &streampb.AddMessagesInput{
-		Messages: streamMsgs("", "a", "b"), ProducerId: "p1", Sequence: 1,
+		Records: streamMsgs("", "a", "b"), ProducerId: "p1", Sequence: 1,
 	})
 	require.NoError(t, err)
 	require.True(t, retry.GetDeduplicated())
@@ -193,12 +194,12 @@ func TestStreamProducerDedup(t *testing.T) {
 
 	// The retry must not have appended a second copy.
 	got := s.poll(ctx, t, id, 0)
-	require.Equal(t, []string{"a", "b"}, bodies(got.GetMessages()))
+	require.Equal(t, []string{"a", "b"}, bodies(got.GetRecords()))
 
 	// Same sequence with different content is a client bug. Returning the
 	// recorded offsets would report success while dropping the data.
 	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{
-		Messages: streamMsgs("", "different"), ProducerId: "p1", Sequence: 1,
+		Records: streamMsgs("", "different"), ProducerId: "p1", Sequence: 1,
 	})
 	require.ErrorContains(t, err, "different content")
 }
@@ -209,15 +210,15 @@ func TestStreamTopicFilter(t *testing.T) {
 	const id = "stream-topics"
 	s.create(ctx, t, id)
 
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("tokens", "t1")})
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("tokens", "t1")})
 	require.NoError(t, err)
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("tools", "x1")})
+	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("tools", "x1")})
 	require.NoError(t, err)
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("tokens", "t2")})
+	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("tokens", "t2")})
 	require.NoError(t, err)
 
 	got := s.poll(ctx, t, id, 0, "tokens")
-	require.Equal(t, []string{"t1", "t2"}, bodies(got.GetMessages()))
+	require.Equal(t, []string{"t1", "t2"}, bodies(got.GetRecords()))
 	// Offsets are global, so a filtered read still advances past what it skipped.
 	require.Equal(t, int64(3), got.GetNextOffset())
 }
@@ -236,13 +237,13 @@ func TestStreamFinishWritingIsPerProducer(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{
-		Messages: streamMsgs("", "a"), ProducerId: "p1", Sequence: 1,
+		Records: streamMsgs("", "a"), ProducerId: "p1", Sequence: 1,
 	})
 	require.Error(t, err)
 
 	// Finishing is per-producer, not a close, so others carry on.
 	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{
-		Messages: streamMsgs("", "b"), ProducerId: "p2", Sequence: 1,
+		Records: streamMsgs("", "b"), ProducerId: "p2", Sequence: 1,
 	})
 	require.NoError(t, err)
 }
@@ -253,7 +254,7 @@ func TestStreamCloseAndTruncate(t *testing.T) {
 	const id = "stream-lifecycle"
 	s.create(ctx, t, id)
 
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "a", "b", "c")})
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a", "b", "c")})
 	require.NoError(t, err)
 
 	_, err = s.client.TruncateStream(ctx, &streampb.TruncateStreamRequest{
@@ -275,14 +276,14 @@ func TestStreamCloseAndTruncate(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "d")})
+	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "d")})
 	require.Error(t, err)
 
 	// Closed is a state a reader observes, not an error, and the data stays
 	// readable rather than requiring a shutdown handshake with the producer.
 	got := s.poll(ctx, t, id, 1)
 	require.True(t, got.GetClosed())
-	require.Equal(t, []string{"b", "c"}, bodies(got.GetMessages()))
+	require.Equal(t, []string{"b", "c"}, bodies(got.GetRecords()))
 }
 
 func TestStreamReadStartingInsideABatch(t *testing.T) {
@@ -295,9 +296,9 @@ func TestStreamReadStartingInsideABatch(t *testing.T) {
 	// first offset of its batch, so reading from 2 has to find the node that
 	// contains it rather than the node whose ID equals it. Getting that wrong
 	// silently drops the messages before the boundary.
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "a", "b", "c")})
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a", "b", "c")})
 	require.NoError(t, err)
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "d")})
+	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "d")})
 	require.NoError(t, err)
 
 	for from, want := range map[int64][]string{
@@ -307,7 +308,7 @@ func TestStreamReadStartingInsideABatch(t *testing.T) {
 		3: {"d"},
 	} {
 		got := s.poll(ctx, t, id, from)
-		require.Equal(t, want, bodies(got.GetMessages()), "reading from offset %d", from)
+		require.Equal(t, want, bodies(got.GetRecords()), "reading from offset %d", from)
 		require.Equal(t, int64(4), got.GetNextOffset())
 	}
 }
@@ -324,7 +325,7 @@ func TestStreamBatchSizeIsBounded(t *testing.T) {
 	for i := range tooMany {
 		tooMany[i] = "x"
 	}
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", tooMany...)})
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", tooMany...)})
 	require.ErrorContains(t, err, "exceeds the limit")
 }
 
@@ -359,13 +360,13 @@ func TestStreamLongPollWakesOnAppend(t *testing.T) {
 	}()
 
 	// The poll is parked on an empty stream; the append is what releases it.
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "a")})
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a")})
 	require.NoError(t, err)
 
 	select {
 	case r := <-done:
 		require.NoError(t, r.err)
-		require.Equal(t, []string{"a"}, bodies(r.out.GetMessages()))
+		require.Equal(t, []string{"a"}, bodies(r.out.GetRecords()))
 		require.Equal(t, int64(1), r.out.GetNextOffset())
 	case <-time.After(25 * time.Second):
 		t.Fatal("long poll did not wake on append")
@@ -396,7 +397,7 @@ func TestStreamLongPollWakesOnClose(t *testing.T) {
 	select {
 	case out := <-done:
 		require.True(t, out.GetClosed())
-		require.Empty(t, out.GetMessages())
+		require.Empty(t, out.GetRecords())
 	case <-time.After(25 * time.Second):
 		t.Fatal("long poll did not wake on close")
 	}
@@ -413,7 +414,7 @@ func TestStreamLongPollReturnsEmptyOnTimeout(t *testing.T) {
 	start := time.Now()
 	out, err := s.pollWait(ctx, id, 0)
 	require.NoError(t, err)
-	require.Empty(t, out.GetMessages())
+	require.Empty(t, out.GetRecords())
 	require.Equal(t, int64(0), out.GetNextOffset())
 	require.False(t, out.GetClosed())
 	require.Greater(t, time.Since(start), 5*time.Second,
@@ -426,7 +427,7 @@ func TestStreamLongPollReturnsImmediatelyWhenBehind(t *testing.T) {
 	const id = "stream-longpoll-behind"
 	s.create(ctx, t, id)
 
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "a", "b")})
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a", "b")})
 	require.NoError(t, err)
 
 	// Waiting is only for a reader that is caught up. One that is behind must
@@ -434,7 +435,7 @@ func TestStreamLongPollReturnsImmediatelyWhenBehind(t *testing.T) {
 	start := time.Now()
 	out, err := s.pollWait(ctx, id, 0)
 	require.NoError(t, err)
-	require.Equal(t, []string{"a", "b"}, bodies(out.GetMessages()))
+	require.Equal(t, []string{"a", "b"}, bodies(out.GetRecords()))
 	require.Less(t, time.Since(start), 5*time.Second)
 }
 
@@ -452,7 +453,7 @@ func TestStreamCapTruncatesAndReclaims(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, batch := range [][]string{{"a", "b"}, {"c", "d"}, {"e", "f"}} {
-		_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", batch...)})
+		_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", batch...)})
 		require.NoError(t, err)
 	}
 
@@ -460,7 +461,7 @@ func TestStreamCapTruncatesAndReclaims(t *testing.T) {
 	// asking. Reading from the floor still works and returns exactly what the
 	// cap retained.
 	got := s.poll(ctx, t, id, 2)
-	require.Equal(t, []string{"c", "d", "e", "f"}, bodies(got.GetMessages()))
+	require.Equal(t, []string{"c", "d", "e", "f"}, bodies(got.GetRecords()))
 
 	// Below the floor is a distinguishable error, not silence.
 	_, err = s.client.PollMessages(ctx, &streampb.PollMessagesRequest{
@@ -475,7 +476,7 @@ func TestStreamClosedStaysReadable(t *testing.T) {
 	const id = "stream-closed-readable"
 	s.create(ctx, t, id)
 
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "a", "b")})
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a", "b")})
 	require.NoError(t, err)
 	_, err = s.client.CloseStream(ctx, &streampb.CloseStreamRequest{
 		FrontendRequest: &streampb.CloseStreamInput{Namespace: s.ns, StreamId: id},
@@ -486,7 +487,7 @@ func TestStreamClosedStaysReadable(t *testing.T) {
 	// coordinating a shutdown with the producer, which is the handshake the
 	// signal-based implementation forces today.
 	got := s.poll(ctx, t, id, 0)
-	require.Equal(t, []string{"a", "b"}, bodies(got.GetMessages()))
+	require.Equal(t, []string{"a", "b"}, bodies(got.GetRecords()))
 	require.True(t, got.GetClosed())
 
 	desc, err := s.client.DescribeStream(ctx, &streampb.DescribeStreamRequest{
@@ -538,26 +539,26 @@ func TestStreamPollReadsOnlyWhatItReturns(t *testing.T) {
 
 	for i := range 40 {
 		_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{
-			Messages: streamMsgs("", fmt.Sprintf("m%d", i)),
+			Records: streamMsgs("", fmt.Sprintf("m%d", i)),
 		})
 		require.NoError(t, err)
 	}
 
 	got := s.pollMax(ctx, t, id, 0, 1)
-	require.Equal(t, []string{"m0"}, bodies(got.GetMessages()))
+	require.Equal(t, []string{"m0"}, bodies(got.GetRecords()))
 	require.Equal(t, int64(1), got.GetNextOffset(), "a capped read advances only over what it gave")
 	require.Equal(t, int64(40), got.GetHeadOffset(), "the frontier is still reported in full")
 
 	// Paging from there covers the rest, so the cap trims the read and not the stream.
 	got = s.pollMax(ctx, t, id, got.GetNextOffset(), 10)
 	require.Equal(t, []string{"m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9", "m10"},
-		bodies(got.GetMessages()))
+		bodies(got.GetRecords()))
 	require.Equal(t, int64(11), got.GetNextOffset())
 
 	// A filter finding nothing in the page still has to leave the reader able to
 	// go on, and it must stop at the page rather than scanning to the head.
 	got = s.pollMaxTopics(ctx, t, id, 0, 5, "nothing-matches-this")
-	require.Empty(t, got.GetMessages())
+	require.Empty(t, got.GetRecords())
 	require.Equal(t, int64(5), got.GetNextOffset(),
 		"a filtered page advanced past its own bound, so the read ran to the head")
 }
@@ -570,10 +571,10 @@ func TestStreamPollAfterIdIsReusedServesTheNewStream(t *testing.T) {
 	const id = "stream-reused-id"
 
 	s.create(ctx, t, id)
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "old")})
+	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "old")})
 	require.NoError(t, err)
 	// Read it back so the bytes are certain to be cached before the id is reused.
-	require.Equal(t, []string{"old"}, bodies(s.poll(ctx, t, id, 0).GetMessages()))
+	require.Equal(t, []string{"old"}, bodies(s.poll(ctx, t, id, 0).GetRecords()))
 
 	_, err = s.client.DeleteStream(ctx, &streampb.DeleteStreamRequest{
 		FrontendRequest: &streampb.DeleteStreamInput{Namespace: s.ns, StreamId: id},
@@ -581,11 +582,11 @@ func TestStreamPollAfterIdIsReusedServesTheNewStream(t *testing.T) {
 	require.NoError(t, err)
 
 	s.create(ctx, t, id)
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Messages: streamMsgs("", "new")})
+	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "new")})
 	require.NoError(t, err)
 
 	got := s.poll(ctx, t, id, 0)
-	require.Equal(t, []string{"new"}, bodies(got.GetMessages()),
+	require.Equal(t, []string{"new"}, bodies(got.GetRecords()),
 		"a reused id served bytes from the deleted stream")
 }
 
@@ -599,14 +600,14 @@ func TestStreamFilteredReadReportsRealOffsets(t *testing.T) {
 
 	for i, topic := range []string{"a", "b", "a", "b", "a"} {
 		_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{
-			Messages: streamMsgs(topic, fmt.Sprintf("m%d", i)),
+			Records: streamMsgs(topic, fmt.Sprintf("m%d", i)),
 		})
 		require.NoError(t, err)
 	}
 
 	got := s.pollMaxTopics(ctx, t, id, 0, 0, "a")
-	require.Equal(t, []string{"m0", "m2", "m4"}, bodies(got.GetMessages()))
-	require.Equal(t, []int64{0, 2, 4}, offsets(got.GetMessages()))
+	require.Equal(t, []string{"m0", "m2", "m4"}, bodies(got.GetRecords()))
+	require.Equal(t, []int64{0, 2, 4}, offsets(got.GetRecords()))
 }
 
 func (s *streamTestEnv) pollMaxTopics(
@@ -637,7 +638,7 @@ func (s *streamTestEnv) pollMax(
 	return resp.GetFrontendResponse()
 }
 
-func offsets(msgs []*streampb.StreamMessage) []int64 {
+func offsets(msgs []*streampb.StreamRecord) []int64 {
 	out := make([]int64, len(msgs))
 	for i, m := range msgs {
 		out[i] = m.GetOffset()

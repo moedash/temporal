@@ -8,11 +8,11 @@ package streampb
 
 import (
 	reflect "reflect"
-	"strconv"
 	sync "sync"
 	unsafe "unsafe"
 
 	v1 "go.temporal.io/api/common/v1"
+	v11 "go.temporal.io/api/stream/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -24,100 +24,49 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type StreamMessageKind int32
-
-const (
-	STREAM_MESSAGE_KIND_UNSPECIFIED StreamMessageKind = 0
-	STREAM_MESSAGE_KIND_DATA        StreamMessageKind = 1
-	// Producer signalling a delivery boundary. Carries no body and consumes an
-	// offset like any other message. A consumer uses it to end a turn without
-	// waiting out an idle timeout.
-	STREAM_MESSAGE_KIND_FLUSH StreamMessageKind = 2
-)
-
-// Enum value maps for StreamMessageKind.
-var (
-	StreamMessageKind_name = map[int32]string{
-		0: "STREAM_MESSAGE_KIND_UNSPECIFIED",
-		1: "STREAM_MESSAGE_KIND_DATA",
-		2: "STREAM_MESSAGE_KIND_FLUSH",
-	}
-	StreamMessageKind_value = map[string]int32{
-		"STREAM_MESSAGE_KIND_UNSPECIFIED": 0,
-		"STREAM_MESSAGE_KIND_DATA":        1,
-		"STREAM_MESSAGE_KIND_FLUSH":       2,
-	}
-)
-
-func (x StreamMessageKind) Enum() *StreamMessageKind {
-	p := new(StreamMessageKind)
-	*p = x
-	return p
-}
-
-func (x StreamMessageKind) String() string {
-	switch x {
-	case STREAM_MESSAGE_KIND_UNSPECIFIED:
-		return "Unspecified"
-	case STREAM_MESSAGE_KIND_DATA:
-		return "Data"
-	case STREAM_MESSAGE_KIND_FLUSH:
-		return "Flush"
-	default:
-		return strconv.Itoa(int(x))
-	}
-
-}
-
-func (StreamMessageKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_temporal_server_chasm_lib_stream_proto_v1_message_proto_enumTypes[0].Descriptor()
-}
-
-func (StreamMessageKind) Type() protoreflect.EnumType {
-	return &file_temporal_server_chasm_lib_stream_proto_v1_message_proto_enumTypes[0]
-}
-
-func (x StreamMessageKind) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use StreamMessageKind.Descriptor instead.
-func (StreamMessageKind) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDescGZIP(), []int{0}
-}
-
-type StreamMessage struct {
+// The stored shape of temporal.api.stream.v1.StreamRecord plus the offset a
+// read assigns. Field for field the public record, so one crosses the frontend
+// in either direction without translation.
+type StreamRecord struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Body  *v1.Payload            `protobuf:"bytes,1,opt,name=body,proto3" json:"body,omitempty"`
-	// Producer-supplied provenance. The server does not populate this today.
+	// Producer-supplied provenance, stored as sent.
 	Metadata map[string]*v1.Payload `protobuf:"bytes,2,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Topic    string                 `protobuf:"bytes,3,opt,name=topic,proto3" json:"topic,omitempty"`
-	// Position within this topic. The global offset orders the whole stream;
-	// this lets a consumer reason about one topic without decoding the rest.
-	TopicSequence int64             `protobuf:"varint,4,opt,name=topic_sequence,json=topicSequence,proto3" json:"topic_sequence,omitempty"`
-	Kind          StreamMessageKind `protobuf:"varint,5,opt,name=kind,proto3,enum=temporal.server.chasm.lib.stream.proto.v1.StreamMessageKind" json:"kind,omitempty"`
+	// The producer's position within its attempt, or -1 when unnumbered. Stored
+	// as sent; the global offset is what orders the stream.
+	Sequence int64 `protobuf:"varint,4,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	// Settled to DATA on append when left unspecified, so a retry hashes the
+	// same bytes and a reader never sees the zero value.
+	Kind v11.StreamRecordKind `protobuf:"varint,5,opt,name=kind,proto3,enum=temporal.api.stream.v1.StreamRecordKind" json:"kind,omitempty"`
 	// Position in the whole stream, set on read and never stored. A consumer
-	// that resumes at message granularity needs it, and a topic-filtered read
+	// that resumes at record granularity needs it, and a topic-filtered read
 	// leaves gaps that make it underivable from the response alone.
-	Offset        int64 `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
+	Offset int64 `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Who wrote the record. Empty when the owning Workflow did: its publish
+	// command clears the field, whatever the worker sent.
+	ProducerId string `protobuf:"bytes,7,opt,name=producer_id,json=producerId,proto3" json:"producer_id,omitempty"`
+	// The producer's attempt, stored as sent. Readers treat a later attempt by
+	// the same producer as superseding what the earlier one wrote.
+	Attempt       int64 `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *StreamMessage) Reset() {
-	*x = StreamMessage{}
+func (x *StreamRecord) Reset() {
+	*x = StreamRecord{}
 	mi := &file_temporal_server_chasm_lib_stream_proto_v1_message_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *StreamMessage) String() string {
+func (x *StreamRecord) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*StreamMessage) ProtoMessage() {}
+func (*StreamRecord) ProtoMessage() {}
 
-func (x *StreamMessage) ProtoReflect() protoreflect.Message {
+func (x *StreamRecord) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_stream_proto_v1_message_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -129,49 +78,63 @@ func (x *StreamMessage) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StreamMessage.ProtoReflect.Descriptor instead.
-func (*StreamMessage) Descriptor() ([]byte, []int) {
+// Deprecated: Use StreamRecord.ProtoReflect.Descriptor instead.
+func (*StreamRecord) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *StreamMessage) GetBody() *v1.Payload {
+func (x *StreamRecord) GetBody() *v1.Payload {
 	if x != nil {
 		return x.Body
 	}
 	return nil
 }
 
-func (x *StreamMessage) GetMetadata() map[string]*v1.Payload {
+func (x *StreamRecord) GetMetadata() map[string]*v1.Payload {
 	if x != nil {
 		return x.Metadata
 	}
 	return nil
 }
 
-func (x *StreamMessage) GetTopic() string {
+func (x *StreamRecord) GetTopic() string {
 	if x != nil {
 		return x.Topic
 	}
 	return ""
 }
 
-func (x *StreamMessage) GetTopicSequence() int64 {
+func (x *StreamRecord) GetSequence() int64 {
 	if x != nil {
-		return x.TopicSequence
+		return x.Sequence
 	}
 	return 0
 }
 
-func (x *StreamMessage) GetKind() StreamMessageKind {
+func (x *StreamRecord) GetKind() v11.StreamRecordKind {
 	if x != nil {
 		return x.Kind
 	}
-	return STREAM_MESSAGE_KIND_UNSPECIFIED
+	return v11.StreamRecordKind(0)
 }
 
-func (x *StreamMessage) GetOffset() int64 {
+func (x *StreamRecord) GetOffset() int64 {
 	if x != nil {
 		return x.Offset
+	}
+	return 0
+}
+
+func (x *StreamRecord) GetProducerId() string {
+	if x != nil {
+		return x.ProducerId
+	}
+	return ""
+}
+
+func (x *StreamRecord) GetAttempt() int64 {
+	if x != nil {
+		return x.Attempt
 	}
 	return 0
 }
@@ -179,27 +142,27 @@ func (x *StreamMessage) GetOffset() int64 {
 // One append is one batch, and one batch is one data node. The server stores
 // this serialized and opaque; it decodes only to trim a partial first page or
 // to apply a topic filter.
-type StreamMessageBatch struct {
+type StreamRecordBatch struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Messages      []*StreamMessage       `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	Records       []*StreamRecord        `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *StreamMessageBatch) Reset() {
-	*x = StreamMessageBatch{}
+func (x *StreamRecordBatch) Reset() {
+	*x = StreamRecordBatch{}
 	mi := &file_temporal_server_chasm_lib_stream_proto_v1_message_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *StreamMessageBatch) String() string {
+func (x *StreamRecordBatch) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*StreamMessageBatch) ProtoMessage() {}
+func (*StreamRecordBatch) ProtoMessage() {}
 
-func (x *StreamMessageBatch) ProtoReflect() protoreflect.Message {
+func (x *StreamRecordBatch) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_stream_proto_v1_message_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -211,14 +174,14 @@ func (x *StreamMessageBatch) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StreamMessageBatch.ProtoReflect.Descriptor instead.
-func (*StreamMessageBatch) Descriptor() ([]byte, []int) {
+// Deprecated: Use StreamRecordBatch.ProtoReflect.Descriptor instead.
+func (*StreamRecordBatch) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *StreamMessageBatch) GetMessages() []*StreamMessage {
+func (x *StreamRecordBatch) GetRecords() []*StreamRecord {
 	if x != nil {
-		return x.Messages
+		return x.Records
 	}
 	return nil
 }
@@ -227,23 +190,22 @@ var File_temporal_server_chasm_lib_stream_proto_v1_message_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/stream/proto/v1/message.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a$temporal/api/common/v1/message.proto\"\xad\x03\n" +
-	"\rStreamMessage\x123\n" +
-	"\x04body\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x04body\x12b\n" +
-	"\bmetadata\x18\x02 \x03(\v2F.temporal.server.chasm.lib.stream.proto.v1.StreamMessage.MetadataEntryR\bmetadata\x12\x14\n" +
-	"\x05topic\x18\x03 \x01(\tR\x05topic\x12%\n" +
-	"\x0etopic_sequence\x18\x04 \x01(\x03R\rtopicSequence\x12P\n" +
-	"\x04kind\x18\x05 \x01(\x0e2<.temporal.server.chasm.lib.stream.proto.v1.StreamMessageKindR\x04kind\x12\x16\n" +
-	"\x06offset\x18\x06 \x01(\x03R\x06offset\x1a\\\n" +
+	"7temporal/server/chasm/lib/stream/proto/v1/message.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/stream/v1/message.proto\"\xc7\x03\n" +
+	"\fStreamRecord\x123\n" +
+	"\x04body\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x04body\x12a\n" +
+	"\bmetadata\x18\x02 \x03(\v2E.temporal.server.chasm.lib.stream.proto.v1.StreamRecord.MetadataEntryR\bmetadata\x12\x14\n" +
+	"\x05topic\x18\x03 \x01(\tR\x05topic\x12\x1a\n" +
+	"\bsequence\x18\x04 \x01(\x03R\bsequence\x12<\n" +
+	"\x04kind\x18\x05 \x01(\x0e2(.temporal.api.stream.v1.StreamRecordKindR\x04kind\x12\x16\n" +
+	"\x06offset\x18\x06 \x01(\x03R\x06offset\x12\x1f\n" +
+	"\vproducer_id\x18\a \x01(\tR\n" +
+	"producerId\x12\x18\n" +
+	"\aattempt\x18\b \x01(\x03R\aattempt\x1a\\\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
-	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\"j\n" +
-	"\x12StreamMessageBatch\x12T\n" +
-	"\bmessages\x18\x01 \x03(\v28.temporal.server.chasm.lib.stream.proto.v1.StreamMessageR\bmessages*u\n" +
-	"\x11StreamMessageKind\x12#\n" +
-	"\x1fSTREAM_MESSAGE_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
-	"\x18STREAM_MESSAGE_KIND_DATA\x10\x01\x12\x1d\n" +
-	"\x19STREAM_MESSAGE_KIND_FLUSH\x10\x02B>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
+	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\"f\n" +
+	"\x11StreamRecordBatch\x12Q\n" +
+	"\arecords\x18\x01 \x03(\v27.temporal.server.chasm.lib.stream.proto.v1.StreamRecordR\arecordsB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDescOnce sync.Once
@@ -257,21 +219,20 @@ func file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDescGZIP() 
 	return file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_stream_proto_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_temporal_server_chasm_lib_stream_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_temporal_server_chasm_lib_stream_proto_v1_message_proto_goTypes = []any{
-	(StreamMessageKind)(0),     // 0: temporal.server.chasm.lib.stream.proto.v1.StreamMessageKind
-	(*StreamMessage)(nil),      // 1: temporal.server.chasm.lib.stream.proto.v1.StreamMessage
-	(*StreamMessageBatch)(nil), // 2: temporal.server.chasm.lib.stream.proto.v1.StreamMessageBatch
-	nil,                        // 3: temporal.server.chasm.lib.stream.proto.v1.StreamMessage.MetadataEntry
-	(*v1.Payload)(nil),         // 4: temporal.api.common.v1.Payload
+	(*StreamRecord)(nil),      // 0: temporal.server.chasm.lib.stream.proto.v1.StreamRecord
+	(*StreamRecordBatch)(nil), // 1: temporal.server.chasm.lib.stream.proto.v1.StreamRecordBatch
+	nil,                       // 2: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.MetadataEntry
+	(*v1.Payload)(nil),        // 3: temporal.api.common.v1.Payload
+	(v11.StreamRecordKind)(0), // 4: temporal.api.stream.v1.StreamRecordKind
 }
 var file_temporal_server_chasm_lib_stream_proto_v1_message_proto_depIdxs = []int32{
-	4, // 0: temporal.server.chasm.lib.stream.proto.v1.StreamMessage.body:type_name -> temporal.api.common.v1.Payload
-	3, // 1: temporal.server.chasm.lib.stream.proto.v1.StreamMessage.metadata:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamMessage.MetadataEntry
-	0, // 2: temporal.server.chasm.lib.stream.proto.v1.StreamMessage.kind:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamMessageKind
-	1, // 3: temporal.server.chasm.lib.stream.proto.v1.StreamMessageBatch.messages:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamMessage
-	4, // 4: temporal.server.chasm.lib.stream.proto.v1.StreamMessage.MetadataEntry.value:type_name -> temporal.api.common.v1.Payload
+	3, // 0: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.body:type_name -> temporal.api.common.v1.Payload
+	2, // 1: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.metadata:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord.MetadataEntry
+	4, // 2: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.kind:type_name -> temporal.api.stream.v1.StreamRecordKind
+	0, // 3: temporal.server.chasm.lib.stream.proto.v1.StreamRecordBatch.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
+	3, // 4: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.MetadataEntry.value:type_name -> temporal.api.common.v1.Payload
 	5, // [5:5] is the sub-list for method output_type
 	5, // [5:5] is the sub-list for method input_type
 	5, // [5:5] is the sub-list for extension type_name
@@ -289,14 +250,13 @@ func file_temporal_server_chasm_lib_stream_proto_v1_message_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDesc), len(file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      0,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_temporal_server_chasm_lib_stream_proto_v1_message_proto_goTypes,
 		DependencyIndexes: file_temporal_server_chasm_lib_stream_proto_v1_message_proto_depIdxs,
-		EnumInfos:         file_temporal_server_chasm_lib_stream_proto_v1_message_proto_enumTypes,
 		MessageInfos:      file_temporal_server_chasm_lib_stream_proto_v1_message_proto_msgTypes,
 	}.Build()
 	File_temporal_server_chasm_lib_stream_proto_v1_message_proto = out.File

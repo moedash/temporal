@@ -237,7 +237,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 	deploymentName string,
 	deployment *deploymentpb.Deployment,
 	behavior enumspb.VersioningBehavior,
-	streamCursors []*streampb.StreamCursor,
+	streamCursors []*streampb.StreamRange,
 ) *historypb.HistoryEvent {
 	event := b.CreateWorkflowTaskCompletedEvent(
 		scheduledEventID,

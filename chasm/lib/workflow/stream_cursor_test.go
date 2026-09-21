@@ -40,11 +40,11 @@ func newAttachedStream(t *testing.T, ctx chasm.MutableContext, count int) *strea
 		},
 	}
 
-	messages := make([]*streamlib.StreamMessage, count)
+	messages := make([]*streamlib.StreamRecord, count)
 	for i := range messages {
-		messages[i] = &streamlib.StreamMessage{Kind: streamlib.STREAM_MESSAGE_KIND_DATA}
+		messages[i] = &streamlib.StreamRecord{Kind: streampb.STREAM_RECORD_KIND_DATA}
 	}
-	_, err := s.AddMessages(ctx, stream.AddMessagesRequest{Messages: messages})
+	_, err := s.AddMessages(ctx, stream.AddMessagesRequest{Records: messages})
 	require.NoError(t, err)
 
 	return s
@@ -170,10 +170,10 @@ func TestPublishStagesEachBatchAtItsOwnOffset(t *testing.T) {
 	opts := CommandHandlerOptions{WorkflowTaskCompletedEventID: 10}
 
 	publish := &commandpb.Command{
-		CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-		Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-			AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
-				Messages: []*streampb.StreamMessage{
+		CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+		Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+			AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+				Records: []*streampb.StreamRecord{
 					{Body: &commonpb.Payload{Data: []byte("x")}},
 					{Body: &commonpb.Payload{Data: []byte("y")}},
 				},
@@ -182,8 +182,8 @@ func TestPublishStagesEachBatchAtItsOwnOffset(t *testing.T) {
 	}
 
 	limits := stream.DefaultLimits()
-	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts, limits))
-	require.NoError(t, handleAddStreamMessagesCommand(ctx, w, allowAnySize{}, publish, opts, limits))
+	require.NoError(t, handleAppendStreamRecordsCommand(ctx, w, allowAnySize{}, publish, opts, limits))
+	require.NoError(t, handleAppendStreamRecordsCommand(ctx, w, allowAnySize{}, publish, opts, limits))
 
 	// Both publishes committed with the workflow task, so the batches are on
 	// the component keyed by the offsets they start at.

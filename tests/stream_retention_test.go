@@ -9,6 +9,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	chasmstream "go.temporal.io/server/chasm/lib/stream"
@@ -33,10 +34,10 @@ func TestTruncationRefusesToDropWhatAConsumerNeedsToReplay(t *testing.T) {
 	_, err := s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
 			Namespace: s.ns, StreamId: streamID,
-			Messages: []*streamlib.StreamMessage{
-				{Body: &commonpb.Payload{Data: []byte("one")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
-				{Body: &commonpb.Payload{Data: []byte("two")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
-				{Body: &commonpb.Payload{Data: []byte("three")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+			Records: []*streamlib.StreamRecord{
+				{Body: &commonpb.Payload{Data: []byte("one")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
+				{Body: &commonpb.Payload{Data: []byte("two")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
+				{Body: &commonpb.Payload{Data: []byte("three")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
 			},
 		},
 	})
@@ -125,9 +126,9 @@ func TestTruncationStillWorksWithNoConsumer(t *testing.T) {
 	_, err := s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
 			Namespace: s.ns, StreamId: streamID,
-			Messages: []*streamlib.StreamMessage{
-				{Body: &commonpb.Payload{Data: []byte("one")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
-				{Body: &commonpb.Payload{Data: []byte("two")}, Kind: streamlib.STREAM_MESSAGE_KIND_DATA},
+			Records: []*streamlib.StreamRecord{
+				{Body: &commonpb.Payload{Data: []byte("one")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
+				{Body: &commonpb.Payload{Data: []byte("two")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
 			},
 		},
 	})

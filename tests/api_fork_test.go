@@ -16,14 +16,14 @@ import (
 // compile. A field added without its descriptor would compile and silently
 // drop on marshal.
 func TestApiForkCarriesStreamShapes(t *testing.T) {
-	require.Equal(t, enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES, enumspb.CommandType(19))
+	require.Equal(t, enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS, enumspb.CommandType(19))
 
 	cmd := &commandpb.Command{
-		CommandType: enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES,
-		Attributes: &commandpb.Command_AddStreamMessagesCommandAttributes{
-			AddStreamMessagesCommandAttributes: &commandpb.AddStreamMessagesCommandAttributes{
+		CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+		Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+			AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
 				StreamId: "s1",
-				Messages: []*streampb.StreamMessage{{Topic: "tokens"}},
+				Records:  []*streampb.StreamRecord{{Topic: "tokens"}},
 			},
 		},
 	}
@@ -31,9 +31,9 @@ func TestApiForkCarriesStreamShapes(t *testing.T) {
 	require.NoError(t, err)
 	var back commandpb.Command
 	require.NoError(t, proto.Unmarshal(b, &back))
-	require.Equal(t, "s1", back.GetAddStreamMessagesCommandAttributes().GetStreamId())
+	require.Equal(t, "s1", back.GetAppendStreamRecordsCommandAttributes().GetStreamId())
 	require.Equal(t, "tokens",
-		back.GetAddStreamMessagesCommandAttributes().GetMessages()[0].GetTopic())
+		back.GetAppendStreamRecordsCommandAttributes().GetRecords()[0].GetTopic())
 
 	resp := &workflowservice.PollWorkflowTaskQueueResponse{
 		StreamSlices: []*streampb.StreamSlice{{StreamId: "s1", FromOffset: 4, ToOffset: 7}},
@@ -45,7 +45,7 @@ func TestApiForkCarriesStreamShapes(t *testing.T) {
 	require.Equal(t, int64(7), rback.GetStreamSlices()[0].GetToOffset())
 
 	attrs := &historypb.WorkflowTaskCompletedEventAttributes{
-		StreamCursors: []*streampb.StreamCursor{{StreamId: "s1", FromOffset: 4, ToOffset: 4}},
+		ConsumedStreamRanges: []*streampb.StreamRange{{StreamId: "s1", FromOffset: 4, ToOffset: 4}},
 	}
 	ab, err := proto.Marshal(attrs)
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestApiForkCarriesStreamShapes(t *testing.T) {
 	require.NoError(t, proto.Unmarshal(ab, &aback))
 	// An empty range has to survive the round trip: it is the fact that a
 	// subscription observed nothing, which replay must reproduce.
-	require.Len(t, aback.GetStreamCursors(), 1)
+	require.Len(t, aback.GetConsumedStreamRanges(), 1)
 	require.Equal(t,
-		aback.GetStreamCursors()[0].GetFromOffset(), aback.GetStreamCursors()[0].GetToOffset())
+		aback.GetConsumedStreamRanges()[0].GetFromOffset(), aback.GetConsumedStreamRanges()[0].GetToOffset())
 }

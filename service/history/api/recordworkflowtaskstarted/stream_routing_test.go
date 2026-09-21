@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
@@ -44,15 +45,15 @@ func TestExternalStreamLiveAndReplayUseRoutedPayloadRead(t *testing.T) {
 				require.Empty(t, req.GetFrontendRequest().GetTopics())
 				return &streamlib.PollMessagesResponse{FrontendResponse: &streamlib.PollMessagesOutput{
 					NextOffset: 6, HeadOffset: 9,
-					Messages: []*streamlib.StreamMessage{
+					Records: []*streamlib.StreamRecord{
 						{
 							Offset: 4,
-							Kind:   streamlib.STREAM_MESSAGE_KIND_DATA,
+							Kind:   streampb.STREAM_RECORD_KIND_DATA,
 							Body:   &commonpb.Payload{Data: []byte("a")},
 						},
 						{
 							Offset: 5,
-							Kind:   streamlib.STREAM_MESSAGE_KIND_DATA,
+							Kind:   streampb.STREAM_RECORD_KIND_DATA,
 							Body:   &commonpb.Payload{Data: []byte("b")},
 						},
 					},
@@ -72,7 +73,7 @@ func TestExternalStreamLiveAndReplayUseRoutedPayloadRead(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, 1, calls)
-			messages, next, err := stream.CollectMessages(
+			messages, next, err := stream.CollectRecords(
 				window.Blobs, window.Starts, 4, window.To, window.Limit, nil)
 			require.NoError(t, err)
 			require.EqualValues(t, 6, next)
@@ -88,19 +89,19 @@ func TestExternalStreamRoutedReadRejectsCorruptOrExpandedRange(t *testing.T) {
 		"missing-response": nil,
 		"skipped-offset": {
 			NextOffset: 6, HeadOffset: 9,
-			Messages: []*streamlib.StreamMessage{{Offset: 4}, {Offset: 6}},
+			Records: []*streamlib.StreamRecord{{Offset: 4}, {Offset: 6}},
 		},
 		"short-count": {
 			NextOffset: 6, HeadOffset: 9,
-			Messages: []*streamlib.StreamMessage{{Offset: 4}},
+			Records: []*streamlib.StreamRecord{{Offset: 4}},
 		},
 		"past-requested-frontier": {
 			NextOffset: 7, HeadOffset: 9,
-			Messages: []*streamlib.StreamMessage{{Offset: 4}, {Offset: 5}, {Offset: 6}},
+			Records: []*streamlib.StreamRecord{{Offset: 4}, {Offset: 5}, {Offset: 6}},
 		},
 		"past-committed-head": {
 			NextOffset: 6, HeadOffset: 5,
-			Messages: []*streamlib.StreamMessage{{Offset: 4}, {Offset: 5}},
+			Records: []*streamlib.StreamRecord{{Offset: 4}, {Offset: 5}},
 		},
 	}
 	for name, response := range cases {

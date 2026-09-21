@@ -36,7 +36,7 @@ func StreamAdmissionFailure(cause enumspb.WorkflowTaskFailedCause, err error) er
 	return err
 }
 
-// handleAddStreamMessagesCommand appends to a stream the workflow owns.
+// handleAppendStreamRecordsCommand appends to a stream the workflow owns.
 //
 // The stream is a co-located subcomponent, so the batch and the frontier land
 // in the workflow task's own commit: no extra transition, no cross-execution
@@ -44,7 +44,7 @@ func StreamAdmissionFailure(cause enumspb.WorkflowTaskFailedCause, err error) er
 //
 // The offsets are known here, unlike a subscription's, so the event is written
 // here too rather than reserved and filled in later.
-func handleAddStreamMessagesCommand(
+func handleAppendStreamRecordsCommand(
 	chasmCtx chasm.MutableContext,
 	wf *Workflow,
 	validator Validator,
@@ -52,16 +52,16 @@ func handleAddStreamMessagesCommand(
 	opts CommandHandlerOptions,
 	limits stream.Limits,
 ) error {
-	badAttributes := enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_ADD_STREAM_MESSAGES_ATTRIBUTES
-	attrs := command.GetAddStreamMessagesCommandAttributes()
+	badAttributes := enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_APPEND_STREAM_RECORDS_ATTRIBUTES
+	attrs := command.GetAppendStreamRecordsCommandAttributes()
 	if attrs == nil {
 		return FailWorkflowTaskError{
-			Cause: badAttributes, Message: "AddStreamMessagesCommandAttributes is not set",
+			Cause: badAttributes, Message: "AppendStreamRecordsCommandAttributes is not set",
 		}
 	}
-	if len(attrs.GetMessages()) == 0 {
+	if len(attrs.GetRecords()) == 0 {
 		return FailWorkflowTaskError{
-			Cause: badAttributes, Message: "AddStreamMessages command carries no messages",
+			Cause: badAttributes, Message: "AppendStreamRecords command carries no records",
 		}
 	}
 
@@ -70,13 +70,13 @@ func handleAddStreamMessagesCommand(
 	// persistence error out of a task the worker will replay and re-issue
 	// forever, with nothing naming the batch as the cause.
 	size := 0
-	for _, m := range attrs.GetMessages() {
+	for _, m := range attrs.GetRecords() {
 		size += m.Size()
 	}
 	if !validator.IsValidPayloadSize(size) {
 		return FailWorkflowTaskError{
 			Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_PAYLOADS_TOO_LARGE,
-			Message:           "AddStreamMessagesCommandAttributes.Messages exceeds size limit",
+			Message:           "AppendStreamRecordsCommandAttributes.Records exceeds size limit",
 			TerminateWorkflow: true,
 		}
 	}
@@ -92,8 +92,8 @@ func handleAddStreamMessagesCommand(
 	}
 
 	result, err := s.AddMessages(chasmCtx, stream.AddMessagesRequest{
-		Messages: toLibraryMessages(attrs.GetMessages()),
-		Limits:   limits,
+		Records: toLibraryRecords(attrs.GetRecords()),
+		Limits:  limits,
 	})
 	if err != nil {
 		return StreamAdmissionFailure(badAttributes, err)
@@ -102,7 +102,7 @@ func handleAddStreamMessagesCommand(
 	// the command was still issued and the event is what the replaying worker
 	// matches it against. It names the original offsets, which is what a
 	// deduplicated append resolves to.
-	wf.RecordStreamMessagesAdded(
+	wf.RecordStreamRecordsAppended(
 		name, result.FirstOffset, result.Count, opts.WorkflowTaskCompletedEventID)
 	return nil
 }
@@ -155,7 +155,7 @@ func handleSubscribeStreamCommand(
 
 // streamSubscribedEvent is the event a subscription writes.
 //
-// It is recorded once per subscription, not per message: the offsets a task
+// It is recorded once per subscription, not per record: the offsets a task
 // consumed ride WorkflowTaskCompleted, and payloads never enter History. The
 // event exists because a command that produces none desynchronises the
 // command-to-event matching every SDK's replay depends on, and because without
@@ -217,26 +217,26 @@ func RecordStreamSubscribedOffset(event *historypb.HistoryEvent, startOffset int
 	event.GetWorkflowStreamSubscribedEventAttributes().StartOffset = startOffset
 }
 
-// streamMessagesAddedEvent is the event a publish writes.
+// streamRecordsAppendedEvent is the event a publish writes.
 //
 // One per batch, holding the offset range and nothing else. That is what makes
-// it a fixed cost: a batch of one 20-byte message and a batch of a thousand
-// 2KB messages write the same event, because the bodies stay in the stream
+// it a fixed cost: a batch of one 20-byte record and a batch of a thousand
+// 2KB records write the same event, because the bodies stay in the stream
 // component. It exists for the same reason the subscription event does, that a
 // command producing no event desynchronises the command-to-event matching
 // every SDK's replay depends on, and it doubles as the only record in History
 // that the workflow published at all.
-type streamMessagesAddedEvent struct{}
+type streamRecordsAppendedEvent struct{}
 
-func (streamMessagesAddedEvent) Type() enumspb.EventType {
-	return enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED
+func (streamRecordsAppendedEvent) Type() enumspb.EventType {
+	return enumspb.EVENT_TYPE_WORKFLOW_STREAM_RECORDS_APPENDED
 }
 
-func (streamMessagesAddedEvent) IsWorkflowTaskTrigger() bool { return false }
+func (streamRecordsAppendedEvent) IsWorkflowTaskTrigger() bool { return false }
 
 // The frontier it describes is CHASM state, persisted and rebuilt with the
 // execution, so there is nothing here to reconstruct.
-func (streamMessagesAddedEvent) Apply(
+func (streamRecordsAppendedEvent) Apply(
 	chasm.MutableContext, *Workflow, *historypb.HistoryEvent,
 ) error {
 	return nil
@@ -244,7 +244,7 @@ func (streamMessagesAddedEvent) Apply(
 
 // A command event, so it is never cherry-picked: the offsets belong to a log
 // the new branch did not write.
-func (streamMessagesAddedEvent) CherryPick(
+func (streamRecordsAppendedEvent) CherryPick(
 	chasm.MutableContext,
 	*Workflow,
 	*historypb.HistoryEvent,
@@ -253,23 +253,23 @@ func (streamMessagesAddedEvent) CherryPick(
 	return ErrEventNotCherryPickable
 }
 
-// RecordStreamMessagesAdded writes the event for one published batch.
-func (w *Workflow) RecordStreamMessagesAdded(
+// RecordStreamRecordsAppended writes the event for one published batch.
+func (w *Workflow) RecordStreamRecordsAppended(
 	streamID string,
 	firstOffset int64,
 	count int64,
 	workflowTaskCompletedEventID int64,
 ) {
-	eventType := enumspb.EVENT_TYPE_WORKFLOW_STREAM_MESSAGES_ADDED
+	eventType := enumspb.EVENT_TYPE_WORKFLOW_STREAM_RECORDS_APPENDED
 	w.AddHistoryEvent(eventType, func(e *historypb.HistoryEvent) {
-		attrs := &historypb.WorkflowStreamMessagesAddedEventAttributes{
+		attrs := &historypb.WorkflowStreamRecordsAppendedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			StreamId:                     streamID,
 			FirstOffset:                  firstOffset,
-			MessageCount:                 count,
+			RecordCount:                  count,
 		}
-		e.Attributes = &historypb.HistoryEvent_WorkflowStreamMessagesAddedEventAttributes{
-			WorkflowStreamMessagesAddedEventAttributes: attrs,
+		e.Attributes = &historypb.HistoryEvent_WorkflowStreamRecordsAppendedEventAttributes{
+			WorkflowStreamRecordsAppendedEventAttributes: attrs,
 		}
 	})
 }
@@ -319,15 +319,28 @@ func (w *Workflow) streamNamed(
 	return created, nil
 }
 
-func toLibraryMessages(in []*streampb.StreamMessage) []*streamlib.StreamMessage {
-	out := make([]*streamlib.StreamMessage, len(in))
+// toLibraryRecords shapes a command's records for the store.
+//
+// The producer id is cleared rather than copied: an empty id is how a reader
+// tells the owning workflow's records from an outside producer's, and only this
+// path writes on the workflow's behalf. The kind is settled here as well as in
+// the store, because the store settles it in place and the command's records
+// belong to the worker's request.
+func toLibraryRecords(in []*streampb.StreamRecord) []*streamlib.StreamRecord {
+	out := make([]*streamlib.StreamRecord, len(in))
 	for i, m := range in {
-		out[i] = &streamlib.StreamMessage{
-			Body:          m.GetBody(),
-			Metadata:      m.GetMetadata(),
-			Topic:         m.GetTopic(),
-			TopicSequence: m.GetTopicSequence(),
-			Kind:          streamlib.STREAM_MESSAGE_KIND_DATA,
+		kind := m.GetKind()
+		if kind == streampb.STREAM_RECORD_KIND_UNSPECIFIED {
+			kind = streampb.STREAM_RECORD_KIND_DATA
+		}
+		out[i] = &streamlib.StreamRecord{
+			Body:       m.GetBody(),
+			Metadata:   m.GetMetadata(),
+			Topic:      m.GetTopic(),
+			Kind:       kind,
+			ProducerId: "",
+			Attempt:    m.GetAttempt(),
+			Sequence:   m.GetSequence(),
 		}
 	}
 	return out
@@ -344,7 +357,7 @@ func newStreamLibrary(config *stream.Config) *streamLibrary {
 
 func (l *streamLibrary) CommandHandlers() map[enumspb.CommandType]CommandHandler {
 	return map[enumspb.CommandType]CommandHandler{
-		enumspb.COMMAND_TYPE_ADD_STREAM_MESSAGES: func(
+		enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS: func(
 			chasmCtx chasm.MutableContext,
 			wf *Workflow,
 			validator Validator,
@@ -352,12 +365,12 @@ func (l *streamLibrary) CommandHandlers() map[enumspb.CommandType]CommandHandler
 			opts CommandHandlerOptions,
 		) error {
 			limits := l.config.LimitsFor(chasmCtx.NamespaceEntry().Name().String())
-			return handleAddStreamMessagesCommand(chasmCtx, wf, validator, command, opts, limits)
+			return handleAppendStreamRecordsCommand(chasmCtx, wf, validator, command, opts, limits)
 		},
 		enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM: handleSubscribeStreamCommand,
 	}
 }
 
 func (l *streamLibrary) EventDefinitions() []EventDefinition {
-	return []EventDefinition{streamSubscribedEvent{}, streamMessagesAddedEvent{}}
+	return []EventDefinition{streamSubscribedEvent{}, streamRecordsAppendedEvent{}}
 }
