@@ -460,7 +460,7 @@ func TestOutsideAppendsRaceTheWorkflowPublishWithoutFailing(t *testing.T) {
 					FrontendRequest: &streamlib.AddWorkflowMessagesInput{
 						Namespace: s.ns, WorkflowId: execution.GetWorkflowId(),
 						Records: []*streamlib.StreamRecord{{
-							Body: &commonpb.Payload{Data: []byte(fmt.Sprintf("outside-%d-%d", p, i))},
+							Body: &commonpb.Payload{Data: fmt.Appendf(nil, "outside-%d-%d", p, i)},
 						}},
 					},
 				})
