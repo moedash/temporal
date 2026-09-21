@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -536,6 +537,43 @@ func (e *historyEngineImpl) PollMutableState(
 		WorkflowStatus:                        response.WorkflowStatus,
 		FirstExecutionRunId:                   response.FirstExecutionRunId,
 	}, nil
+}
+
+// GetStreamReplaySlices re-supplies the stream ranges the workflow's completed
+// tasks recorded, for a query task built outside RecordWorkflowTaskStarted.
+func (e *historyEngineImpl) GetStreamReplaySlices(
+	ctx context.Context,
+	request *historyservice.GetStreamReplaySlicesRequest,
+) (*historyservice.GetStreamReplaySlicesResponse, error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
+		return nil, err
+	}
+	nsEntry, err := e.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return nil, err
+	}
+	runID := request.GetExecution().GetRunId()
+	if runID == "" {
+		runID, err = e.workflowConsistencyChecker.GetCurrentWorkflowRunID(
+			ctx, request.GetNamespaceId(), request.GetExecution().GetWorkflowId(), locks.PriorityHigh)
+		if err != nil {
+			return nil, err
+		}
+	}
+	workflowKey := definition.NewWorkflowKey(
+		request.GetNamespaceId(), request.GetExecution().GetWorkflowId(), runID)
+	slices, err := recordworkflowtaskstarted.ReplaySlicesForQuery(
+		ctx,
+		e.shardContext,
+		e.workflowConsistencyChecker,
+		workflowKey,
+		int32(e.config.HistoryMaxPageSize(nsEntry.Name().String())),
+	)
+	if err != nil {
+		return nil, recordworkflowtaskstarted.AsRefusal(err)
+	}
+	return &historyservice.GetStreamReplaySlicesResponse{StreamSlices: slices}, nil
 }
 
 func (e *historyEngineImpl) QueryWorkflow(

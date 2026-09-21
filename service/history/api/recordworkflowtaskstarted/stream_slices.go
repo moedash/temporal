@@ -15,8 +15,10 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/api"
@@ -94,6 +96,36 @@ type streamOrigin struct {
 	// silently handing the workflow less than it originally saw.
 	start     int64
 	committed int64
+}
+
+// streamOrigins describes every stream the workflow consumes from a read-only
+// view of its component, for a task that is built without delivering anything
+// and so has no other way of learning what a cold replay owes it.
+func streamOrigins(
+	ctx context.Context,
+	ms historyi.MutableState,
+) (map[string]streamOrigin, error) {
+	if !ms.HasChasmWorkflowComponent() {
+		return nil, nil
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(wf.StreamCursors) == 0 {
+		return nil, nil
+	}
+	addresses := make(map[string]streamOrigin, len(wf.StreamCursors))
+	for name, field := range wf.StreamCursors {
+		cursor := field.Get(chasmCtx)
+		addresses[cursor.StreamID()] = streamOrigin{
+			external:  cursor.IsExternal(),
+			name:      name,
+			start:     cursor.StartOffset(),
+			committed: cursor.Offset(),
+		}
+	}
+	return addresses, nil
 }
 
 // deliveryFrontier is the offset a delivery clips to. For a stream this
@@ -481,6 +513,100 @@ func attachReplaySlices(
 	}
 	resp.StreamSlices = append(resp.StreamSlices, supply.slices...)
 	return nil
+}
+
+// ReplaySlicesForQuery re-supplies the recorded ranges for a query dispatched
+// straight through matching.
+//
+// Such a query carries the workflow's whole history to a worker that may never
+// have seen the execution, exactly like a task after a cache miss, but it is
+// built without RecordWorkflowTaskStarted and so never passes through the
+// delivery above. The history is read from the branch rather than from a
+// response, which is the only difference from the task path.
+//
+// The lease is held only long enough to read the cursors and the branch, and
+// released before any page or stream is read, as on the task path. A range the
+// stream can no longer serve is a failed precondition here rather than a failed
+// task, because there is no task to fail: the query is refused and the
+// workflow's next real task will fail with the cause.
+func ReplaySlicesForQuery(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	workflowKey definition.WorkflowKey,
+	pageSize int32,
+) ([]*streampb.StreamSlice, error) {
+	lease, err := workflowConsistencyChecker.GetWorkflowLease(
+		ctx, nil, workflowKey, locks.PriorityHigh)
+	if err != nil {
+		return nil, err
+	}
+	ms := lease.GetMutableState()
+	addresses, err := streamOrigins(ctx, ms)
+	if err != nil || len(addresses) == 0 {
+		lease.GetReleaseFn()(nil)
+		return nil, err
+	}
+	branchToken, err := ms.GetCurrentBranchToken()
+	if err != nil {
+		lease.GetReleaseFn()(nil)
+		return nil, err
+	}
+	nextEventID := ms.GetNextEventID()
+	consumer := ms.GetWorkflowKey()
+	lease.GetReleaseFn()(nil)
+
+	supply := &replaySupply{
+		ctx:       ctx,
+		consumer:  consumer,
+		addresses: addresses,
+		reached:   make(map[string]int64, len(addresses)),
+	}
+	var token []byte
+	for pages := 1; ; pages++ {
+		if pages > maxReplayPages {
+			return nil, unavailablef(
+				"replaying workflow %q needs more than %d pages of history to find the stream "+
+					"ranges its tasks consumed", consumer.GetWorkflowID(), maxReplayPages)
+		}
+		blobs, _, next, err := persistence.ReadFullPageRawEvents(
+			ctx, shardContext.GetExecutionManager(), &persistence.ReadHistoryBranchRequest{
+				BranchToken:   branchToken,
+				MinEventID:    common.FirstEventID,
+				MaxEventID:    nextEventID,
+				PageSize:      int(pageSize),
+				NextPageToken: token,
+				ShardID:       shardContext.GetShardID(),
+			})
+		if err != nil {
+			return nil, err
+		}
+		events, err := decodeEventBlobs(blobs)
+		if err != nil {
+			return nil, err
+		}
+		if err := supply.collect(events); err != nil {
+			return nil, err
+		}
+		if len(next) == 0 {
+			break
+		}
+		token = next
+	}
+	if err := supply.checkCoverage(); err != nil {
+		return nil, err
+	}
+	return supply.slices, nil
+}
+
+// AsRefusal turns a range that cannot be served into the error a caller with
+// no task to fail should return. Any other error is handed back unchanged.
+func AsRefusal(err error) error {
+	var unavailable *rangeUnavailable
+	if errors.As(err, &unavailable) {
+		return serviceerror.NewFailedPrecondition(unavailable.Error())
+	}
+	return err
 }
 
 // collect re-reads every range the events on one page recorded.

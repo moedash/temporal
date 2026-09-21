@@ -19,6 +19,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/api/stream/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -754,6 +755,16 @@ pollLoop:
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 
+			// After the history, so every range the history records is
+			// re-supplied. Read the other way round a task could complete in
+			// between and the worker would see a recorded range with no bytes.
+			streamSlices, err := e.getStreamSlicesForQueryTask(
+				ctx, req.GetNamespaceId(), task, isStickyEnabled)
+			if err != nil {
+				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
+				return emptyPollWorkflowTaskQueueResponse, nil
+			}
+
 			resp := &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId:     mutableStateResp.PreviousStartedEventId,
 				NextEventId:                mutableStateResp.NextEventId,
@@ -765,6 +776,7 @@ pollLoop:
 				Attempt:                    1,
 				History:                    hist,
 				NextPageToken:              nextPageToken,
+				StreamSlices:               streamSlices,
 			}
 
 			// Local query match. Emit the dispatch latency metric. This metric does not include the query response time.
@@ -861,6 +873,33 @@ pollLoop:
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 	}
+}
+
+// getStreamSlicesForQueryTask asks History for the stream ranges the
+// workflow's history records, re-read from their streams.
+//
+// A query task is built here without RecordWorkflowTaskStarted, so the
+// delivery that attaches those ranges to an ordinary task never runs for it.
+// Only a non-sticky query needs them: a sticky one goes to a worker that still
+// holds the execution and has nothing to replay.
+func (e *matchingEngineImpl) getStreamSlicesForQueryTask(
+	ctx context.Context,
+	namespaceID string,
+	task *internalTask,
+	isStickyEnabled bool,
+) ([]*streampb.StreamSlice, error) {
+	if isStickyEnabled {
+		return nil, nil
+	}
+	resp, err := e.historyClient.GetStreamReplaySlices(ctx,
+		&historyservice.GetStreamReplaySlicesRequest{
+			NamespaceId: namespaceID,
+			Execution:   task.workflowExecution(),
+		})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetStreamSlices(), nil
 }
 
 func (e *matchingEngineImpl) getHistoryForQueryTask(

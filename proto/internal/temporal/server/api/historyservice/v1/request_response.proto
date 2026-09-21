@@ -123,6 +123,22 @@ message StartWorkflowExecutionResponse {
   string first_execution_run_id = 7;
 }
 
+// Asks for the stream ranges a workflow's completed tasks recorded, re-read from
+// their streams, for a task that is built without RecordWorkflowTaskStarted.
+// A query dispatched straight through matching is the one such task.
+message GetStreamReplaySlicesRequest {
+  option (routing).workflow_id = "execution.workflow_id";
+
+  string namespace_id = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+}
+
+message GetStreamReplaySlicesResponse {
+  // Every slice is tagged with the completed event that recorded its range.
+  // Empty when the workflow consumes no stream.
+  repeated temporal.api.stream.v1.StreamSlice stream_slices = 1;
+}
+
 message GetMutableStateRequest {
   option (routing).workflow_id = "execution.workflow_id";
 

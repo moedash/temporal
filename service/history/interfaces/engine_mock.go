@@ -280,6 +280,21 @@ func (mr *MockEngineMockRecorder) GetReplicationTasksIter(ctx, pollingCluster, m
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksIter", reflect.TypeOf((*MockEngine)(nil).GetReplicationTasksIter), ctx, pollingCluster, minInclusiveTaskID, maxExclusiveTaskID)
 }
 
+// GetStreamReplaySlices mocks base method.
+func (m *MockEngine) GetStreamReplaySlices(ctx context.Context, request *historyservice.GetStreamReplaySlicesRequest) (*historyservice.GetStreamReplaySlicesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStreamReplaySlices", ctx, request)
+	ret0, _ := ret[0].(*historyservice.GetStreamReplaySlicesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetStreamReplaySlices indicates an expected call of GetStreamReplaySlices.
+func (mr *MockEngineMockRecorder) GetStreamReplaySlices(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStreamReplaySlices", reflect.TypeOf((*MockEngine)(nil).GetStreamReplaySlices), ctx, request)
+}
+
 // GetWorkflowExecutionHistory mocks base method.
 func (m *MockEngine) GetWorkflowExecutionHistory(ctx context.Context, request *historyservice.GetWorkflowExecutionHistoryRequest) (*historyservice.GetWorkflowExecutionHistoryResponseWithRaw, error) {
 	m.ctrl.T.Helper()
