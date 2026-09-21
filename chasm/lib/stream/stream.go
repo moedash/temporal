@@ -10,9 +10,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	apistreampb "go.temporal.io/api/stream/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
-	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -28,7 +28,7 @@ import (
 type Stream struct {
 	chasm.UnimplementedComponent
 
-	State *streampb.StreamState
+	State *streamlib.StreamState
 
 	// Batches holds the payload, each keyed by the offset it starts at. They are
 	// data nodes, so they replicate with the component and are reclaimed with
@@ -45,11 +45,11 @@ type Stream struct {
 }
 
 type NewStreamRequest struct {
-	Lifecycle *streampb.StreamLifecycle
+	Lifecycle *streamlib.StreamLifecycle
 
 	// Budget bounds what the stream may hold. Set for a stream a workflow
 	// owns, whose batches are the owning execution's mutable state.
-	Budget *streampb.StreamBudget
+	Budget *streamlib.StreamBudget
 
 	// Attached means the stream is a subcomponent of another execution rather
 	// than a root. CHASM requires a visibility component to be an immediate
@@ -59,7 +59,7 @@ type NewStreamRequest struct {
 }
 
 type AddMessagesRequest struct {
-	Records []*streampb.StreamRecord
+	Records []*streamlib.StreamRecord
 
 	// Optional idempotency. A producer supplies either an identity and
 	// sequence, or an expected offset, or neither and accepts at-least-once.
@@ -94,11 +94,11 @@ func NewStream(ctx chasm.MutableContext, req NewStreamRequest) (*Stream, error) 
 	return &Stream{
 		Visibility: visibility,
 		Batches:    make(chasm.Map[int64, *commonpb.DataBlob]),
-		State: &streampb.StreamState{
+		State: &streamlib.StreamState{
 			Lifecycle: req.Lifecycle,
 			Budget:    req.Budget,
-			Producers: make(map[string]*streampb.ProducerCursor),
-			Consumers: make(map[string]*streampb.ConsumerCursor),
+			Producers: make(map[string]*streamlib.ProducerCursor),
+			Consumers: make(map[string]*streamlib.ConsumerCursor),
 		},
 	}, nil
 }
@@ -122,7 +122,7 @@ func (s *Stream) Terminate(
 
 // Snapshot returns a copy of the frontier for read paths. It is a copy because
 // the caller reads it outside the transition that produced it.
-func (s *Stream) Snapshot(_ chasm.Context, _ struct{}) (*streampb.StreamState, error) {
+func (s *Stream) Snapshot(_ chasm.Context, _ struct{}) (*streamlib.StreamState, error) {
 	return common.CloneProto(s.State), nil
 }
 
@@ -159,8 +159,8 @@ func (s *Stream) AddMessages(
 	// to agree on what that means. Settled before the batch is marshalled, so a
 	// retry hashes the same bytes.
 	for _, m := range req.Records {
-		if m.GetKind() == apistreampb.STREAM_RECORD_KIND_UNSPECIFIED {
-			m.Kind = apistreampb.STREAM_RECORD_KIND_DATA
+		if m.GetKind() == streampb.STREAM_RECORD_KIND_UNSPECIFIED {
+			m.Kind = streampb.STREAM_RECORD_KIND_DATA
 		}
 	}
 
@@ -211,9 +211,9 @@ func (s *Stream) AddMessages(
 	s.State.AppendedBytes += int64(len(blob.Data))
 	if req.ProducerID != "" {
 		if s.State.Producers == nil {
-			s.State.Producers = make(map[string]*streampb.ProducerCursor)
+			s.State.Producers = make(map[string]*streamlib.ProducerCursor)
 		}
-		s.State.Producers[req.ProducerID] = &streampb.ProducerCursor{
+		s.State.Producers[req.ProducerID] = &streamlib.ProducerCursor{
 			Seq:         req.Sequence,
 			FirstOffset: first,
 			Count:       count,
@@ -253,7 +253,7 @@ func (s *Stream) notifyConsumers(mctx chasm.MutableContext) {
 		if consumer.GetExternal() && consumer.GetActive() && consumer.GetOffset() < s.State.HeadOffset {
 			s.State.NotifyPending = true
 			mctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: mctx.Now(s)},
-				&streampb.StreamNotifyConsumersTask{})
+				&streamlib.StreamNotifyConsumersTask{})
 			return
 		}
 	}
@@ -265,7 +265,7 @@ func (s *Stream) notifyConsumers(mctx chasm.MutableContext) {
 // and schedules its own task.
 func (s *Stream) TakeNotifySnapshot(
 	_ chasm.MutableContext, _ struct{},
-) (*streampb.StreamState, error) {
+) (*streamlib.StreamState, error) {
 	s.State.NotifyPending = false
 	return common.CloneProto(s.State), nil
 }
@@ -366,11 +366,11 @@ func (s *Stream) FinishWriting(_ chasm.MutableContext, producerID string) error 
 		return serviceerror.NewInvalidArgument("producer id is required")
 	}
 	if s.State.Producers == nil {
-		s.State.Producers = make(map[string]*streampb.ProducerCursor)
+		s.State.Producers = make(map[string]*streamlib.ProducerCursor)
 	}
 	cursor := s.State.Producers[producerID]
 	if cursor == nil {
-		cursor = &streampb.ProducerCursor{Seq: -1}
+		cursor = &streamlib.ProducerCursor{Seq: -1}
 		s.State.Producers[producerID] = cursor
 	}
 	cursor.Fenced = true
@@ -402,7 +402,7 @@ func (s *Stream) Close(now time.Time, reason *commonpb.Payload) time.Time {
 // CloseAndSchedule closes the stream and arms retention if it asked for it.
 func (s *Stream) CloseAndSchedule(mctx chasm.MutableContext, reason *commonpb.Payload) error {
 	if at := s.Close(mctx.Now(s), reason); !at.IsZero() {
-		mctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: at}, &streampb.StreamRetentionTask{})
+		mctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: at}, &streamlib.StreamRetentionTask{})
 	}
 	return nil
 }
@@ -494,7 +494,7 @@ type WindowRequest struct {
 // Window is one read's worth: the frontier it was served against, the batches
 // covering the range, and the range itself.
 type Window struct {
-	State  *streampb.StreamState
+	State  *streamlib.StreamState
 	Blobs  []*commonpb.DataBlob
 	Starts []int64
 	To     int64
@@ -684,7 +684,7 @@ func (s *Stream) RegisterConsumer(_ chasm.MutableContext, reg ConsumerRegistrati
 			"stream already has %d consumers, which is the limit", maxConsumers)
 	}
 	if s.State.Consumers == nil {
-		s.State.Consumers = make(map[string]*streampb.ConsumerCursor)
+		s.State.Consumers = make(map[string]*streamlib.ConsumerCursor)
 	}
 	// One workflow id has one open run, so an entry for another run of this
 	// workflow belongs to a closed run. Its floor would otherwise hold storage
@@ -707,7 +707,7 @@ func (s *Stream) RegisterConsumer(_ chasm.MutableContext, reg ConsumerRegistrati
 		existing.Active = true
 		return existing.GetOffset(), nil
 	}
-	s.State.Consumers[reg.ConsumerID] = &streampb.ConsumerCursor{
+	s.State.Consumers[reg.ConsumerID] = &streamlib.ConsumerCursor{
 		WorkflowId:  reg.WorkflowID,
 		RunId:       reg.RunID,
 		Offset:      offset,
@@ -746,13 +746,13 @@ func (s *Stream) ForgetConsumer(_ chasm.MutableContext, consumerID string) {
 	delete(s.State.Consumers, consumerID)
 }
 
-func marshalBatch(records []*streampb.StreamRecord) (*commonpb.DataBlob, error) {
+func marshalBatch(records []*streamlib.StreamRecord) (*commonpb.DataBlob, error) {
 	// The serialized batch is also the producer's deduplication fingerprint, and
 	// protobuf map iteration order is not stable. A record carrying payload or
 	// record metadata would otherwise hash differently on a retry and be
 	// refused as a conflicting duplicate of itself.
 	data, err := (proto.MarshalOptions{Deterministic: true}).Marshal(
-		&streampb.StreamRecordBatch{Records: records})
+		&streamlib.StreamRecordBatch{Records: records})
 	if err != nil {
 		return nil, err
 	}

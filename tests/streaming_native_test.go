@@ -11,8 +11,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
-	apistreampb "go.temporal.io/api/stream/v1"
-	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	streampb "go.temporal.io/api/stream/v1"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc"
@@ -32,15 +32,15 @@ func runNativeStream(t *testing.T, p streamBaselineParams) streamBaselineResult 
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
-	client := streampb.NewStreamServiceClient(conn)
+	client := streamlib.NewStreamServiceClient(conn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), p.duration+2*time.Minute)
 	defer cancel()
 
 	ns := env.Namespace().String()
 	streamID := fmt.Sprintf("bench-%s", p.name)
-	created, err := client.CreateStream(ctx, &streampb.CreateStreamRequest{
-		FrontendRequest: &streampb.CreateStreamInput{Namespace: ns, StreamId: streamID},
+	created, err := client.CreateStream(ctx, &streamlib.CreateStreamRequest{
+		FrontendRequest: &streamlib.CreateStreamInput{Namespace: ns, StreamId: streamID},
 	})
 	require.NoError(t, err)
 	runID := created.GetFrontendResponse().GetRunId()
@@ -105,7 +105,7 @@ func runNativeStream(t *testing.T, p streamBaselineParams) streamBaselineResult 
 func runNativeProducer(
 	ctx context.Context,
 	t *testing.T,
-	client streampb.StreamServiceClient,
+	client streamlib.StreamServiceClient,
 	ns, streamID, runID string,
 	p streamBaselineParams,
 	sentAt *sync.Map,
@@ -123,7 +123,7 @@ func runNativeProducer(
 	deadline := time.Now().Add(p.duration)
 
 	seq := 0
-	var pending []*streampb.StreamRecord
+	var pending []*streamlib.StreamRecord
 	sequence := int64(0)
 
 	flush := func() bool {
@@ -133,8 +133,8 @@ func runNativeProducer(
 		batch := pending
 		pending = nil
 		sequence++
-		_, err := client.AddMessages(ctx, &streampb.AddMessagesRequest{
-			FrontendRequest: &streampb.AddMessagesInput{
+		_, err := client.AddMessages(ctx, &streamlib.AddMessagesRequest{
+			FrontendRequest: &streamlib.AddMessagesInput{
 				Namespace: ns, StreamId: streamID, RunId: runID, Records: batch,
 				ProducerId: "bench", Sequence: sequence,
 			},
@@ -153,9 +153,9 @@ func runNativeProducer(
 			return seq
 		case <-genTicker.C:
 			sentAt.Store(seq, time.Now())
-			pending = append(pending, &streampb.StreamRecord{
+			pending = append(pending, &streamlib.StreamRecord{
 				Body: &commonpb.Payload{Data: payload},
-				Kind: apistreampb.STREAM_RECORD_KIND_DATA,
+				Kind: streampb.STREAM_RECORD_KIND_DATA,
 			})
 			seq++
 		case <-flushTicker.C:
@@ -170,7 +170,7 @@ func runNativeProducer(
 
 func runNativeConsumer(
 	ctx context.Context,
-	client streampb.StreamServiceClient,
+	client streamlib.StreamServiceClient,
 	ns, streamID, runID string,
 	sentAt *sync.Map,
 	receivedTotal *atomic.Int64,
@@ -180,8 +180,8 @@ func runNativeConsumer(
 	lastSeen := int64(0)
 
 	for ctx.Err() == nil {
-		resp, err := client.PollMessages(ctx, &streampb.PollMessagesRequest{
-			FrontendRequest: &streampb.PollMessagesInput{
+		resp, err := client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+			FrontendRequest: &streamlib.PollMessagesInput{
 				Namespace: ns, StreamId: streamID, RunId: runID,
 				FromOffset: lastSeen, WaitNewMessages: true,
 			},

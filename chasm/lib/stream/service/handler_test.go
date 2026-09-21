@@ -6,23 +6,23 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	apistreampb "go.temporal.io/api/stream/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm/lib/stream"
-	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"google.golang.org/protobuf/proto"
 )
 
 func batchBlob(t *testing.T, topic string, bodies ...string) *commonpb.DataBlob {
 	t.Helper()
-	messages := make([]*streampb.StreamRecord, len(bodies))
+	messages := make([]*streamlib.StreamRecord, len(bodies))
 	for i, b := range bodies {
-		messages[i] = &streampb.StreamRecord{
+		messages[i] = &streamlib.StreamRecord{
 			Body:  &commonpb.Payload{Data: []byte(b)},
 			Topic: topic,
-			Kind:  apistreampb.STREAM_RECORD_KIND_DATA,
+			Kind:  streampb.STREAM_RECORD_KIND_DATA,
 		}
 	}
-	data, err := proto.Marshal(&streampb.StreamRecordBatch{Records: messages})
+	data, err := proto.Marshal(&streamlib.StreamRecordBatch{Records: messages})
 	require.NoError(t, err)
 	return &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3, Data: data}
 }
@@ -33,7 +33,7 @@ func batchBlob(t *testing.T, topic string, bodies ...string) *commonpb.DataBlob 
 // steps over messages it was never shown.
 func TestFormatWindowAdvancesOnlyOverExaminedOffsets(t *testing.T) {
 	w := stream.Window{
-		State:  &streampb.StreamState{HeadOffset: 10},
+		State:  &streamlib.StreamState{HeadOffset: 10},
 		Blobs:  []*commonpb.DataBlob{batchBlob(t, "a", "m0", "m1", "m2")},
 		Starts: []int64{0},
 		To:     5,

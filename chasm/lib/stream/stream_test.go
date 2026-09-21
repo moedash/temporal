@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	apistreampb "go.temporal.io/api/stream/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
-	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -21,19 +21,19 @@ import (
 func newTestStream(t *testing.T) *Stream {
 	t.Helper()
 	return &Stream{
-		State: &streampb.StreamState{
-			Producers: make(map[string]*streampb.ProducerCursor),
-			Consumers: make(map[string]*streampb.ConsumerCursor),
+		State: &streamlib.StreamState{
+			Producers: make(map[string]*streamlib.ProducerCursor),
+			Consumers: make(map[string]*streamlib.ConsumerCursor),
 		},
 	}
 }
 
-func msgs(bodies ...string) []*streampb.StreamRecord {
-	out := make([]*streampb.StreamRecord, len(bodies))
+func msgs(bodies ...string) []*streamlib.StreamRecord {
+	out := make([]*streamlib.StreamRecord, len(bodies))
 	for i, b := range bodies {
-		out[i] = &streampb.StreamRecord{
+		out[i] = &streamlib.StreamRecord{
 			Body: &commonpb.Payload{Data: []byte(b)},
-			Kind: apistreampb.STREAM_RECORD_KIND_DATA,
+			Kind: streampb.STREAM_RECORD_KIND_DATA,
 		}
 	}
 	return out
@@ -99,8 +99,8 @@ func TestDedupIgnoresPayloadMetadataMapOrder(t *testing.T) {
 			},
 		}
 		result, err := s.AddMessages(nil, AddMessagesRequest{
-			Records: []*streampb.StreamRecord{{
-				Kind:     apistreampb.STREAM_RECORD_KIND_DATA,
+			Records: []*streamlib.StreamRecord{{
+				Kind:     streampb.STREAM_RECORD_KIND_DATA,
 				Body:     body,
 				Metadata: map[string]*commonpb.Payload{"attempt": body, "checkpoint": body},
 			}},
@@ -247,7 +247,7 @@ func TestTruncateBounds(t *testing.T) {
 
 func TestCapTruncatesInline(t *testing.T) {
 	s := newTestStream(t)
-	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 4}
+	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxItems: 4}
 
 	for range 4 {
 		_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b")})
@@ -262,7 +262,7 @@ func TestCapTruncatesInline(t *testing.T) {
 
 func TestCapRefusesAnAppendItCouldOnlyAbsorbByDroppingReadRecords(t *testing.T) {
 	s := newTestStream(t)
-	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
+	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxItems: 2}
 	_, err := s.RegisterConsumer(nil, ConsumerRegistration{
 		ConsumerID: "wf-1", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
 	})
@@ -287,7 +287,7 @@ func TestCloseSchedulesRetentionOnlyWhenConfigured(t *testing.T) {
 	require.True(t, plain.Close(now, nil).IsZero(), "no retention configured, nothing to schedule")
 
 	withRetention := newTestStream(t)
-	withRetention.State.Lifecycle = &streampb.StreamLifecycle{
+	withRetention.State.Lifecycle = &streamlib.StreamLifecycle{
 		Retention: durationpb.New(time.Hour),
 	}
 	at := withRetention.Close(now, nil)
@@ -397,7 +397,7 @@ func TestDeregisterConsumerReleasesThePin(t *testing.T) {
 
 func TestMessageCapStillAppliesWithNoConsumerToProtect(t *testing.T) {
 	s := newTestStream(t)
-	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
+	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxItems: 2}
 
 	for range 3 {
 		_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b")})
@@ -415,7 +415,7 @@ func TestMessageCapStillAppliesWithNoConsumerToProtect(t *testing.T) {
 // its cap until it goes away.
 func TestCapClampsToAConsumerThatRegisteredLate(t *testing.T) {
 	s := newTestStream(t)
-	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
+	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxItems: 2}
 
 	_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b")})
 	require.NoError(t, err)
@@ -423,7 +423,7 @@ func TestCapClampsToAConsumerThatRegisteredLate(t *testing.T) {
 		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
 	})
 	require.NoError(t, err)
-	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 1}
+	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxItems: 1}
 	s.applyCap()
 
 	require.Equal(t, int64(0), s.State.BaseOffset, "the clamp keeps what the consumer needs")
@@ -433,7 +433,7 @@ func TestCapClampsToAConsumerThatRegisteredLate(t *testing.T) {
 // a consumer that finished has to stop holding storage.
 func TestAConsumerThatDeregisteredHoldsNothing(t *testing.T) {
 	s := newTestStream(t)
-	s.State.Lifecycle = &streampb.StreamLifecycle{MaxItems: 2}
+	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxItems: 2}
 	_, err := s.RegisterConsumer(nil, ConsumerRegistration{
 		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
 	})
@@ -538,7 +538,7 @@ func TestStreamConsumerTableIsBounded(t *testing.T) {
 // offset and never be seen by a subscriber.
 func TestAddMessagesTreatsAnUnsetKindAsData(t *testing.T) {
 	s := newTestStream(t)
-	unset := []*streampb.StreamRecord{
+	unset := []*streamlib.StreamRecord{
 		{Body: &commonpb.Payload{Data: []byte("a")}},
 		{Body: &commonpb.Payload{Data: []byte("b")}},
 	}
@@ -555,7 +555,7 @@ func TestAddMessagesTreatsAnUnsetKindAsData(t *testing.T) {
 
 	// The retry carries the same unset kind and has to hash the same.
 	retry, err := s.AddMessages(nil, AddMessagesRequest{
-		Records: []*streampb.StreamRecord{
+		Records: []*streamlib.StreamRecord{
 			{Body: &commonpb.Payload{Data: []byte("a")}},
 			{Body: &commonpb.Payload{Data: []byte("b")}},
 		},
@@ -570,7 +570,7 @@ func TestAddMessagesTreatsAnUnsetKindAsData(t *testing.T) {
 // to refusing is the execution size limit terminating that workflow later.
 func TestBudgetRefusesAnAppendThatDoesNotFit(t *testing.T) {
 	s := newTestStream(t)
-	s.State.Budget = &streampb.StreamBudget{MaxItems: 3}
+	s.State.Budget = &streamlib.StreamBudget{MaxItems: 3}
 
 	_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b")})
 	require.NoError(t, err)
@@ -585,7 +585,7 @@ func TestBudgetRefusesAnAppendThatDoesNotFit(t *testing.T) {
 	require.NoError(t, err)
 
 	bytesOnly := newTestStream(t)
-	bytesOnly.State.Budget = &streampb.StreamBudget{MaxBytes: 16}
+	bytesOnly.State.Budget = &streamlib.StreamBudget{MaxBytes: 16}
 	_, err = bytesOnly.AddMessages(nil, AddMessagesRequest{Records: msgs("small")})
 	require.NoError(t, err)
 	_, err = bytesOnly.AddMessages(nil, AddMessagesRequest{Records: msgs("another one")})

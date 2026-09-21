@@ -5,16 +5,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
-	apistreampb "go.temporal.io/api/stream/v1"
-	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	streampb "go.temporal.io/api/stream/v1"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 )
 
-func sized(n int, bytes int) []*streampb.StreamRecord {
-	out := make([]*streampb.StreamRecord, n)
+func sized(n int, bytes int) []*streamlib.StreamRecord {
+	out := make([]*streamlib.StreamRecord, n)
 	for i := range out {
-		out[i] = &streampb.StreamRecord{
+		out[i] = &streamlib.StreamRecord{
 			Body: &commonpb.Payload{Data: make([]byte, bytes)},
-			Kind: apistreampb.STREAM_RECORD_KIND_DATA,
+			Kind: streampb.STREAM_RECORD_KIND_DATA,
 		}
 	}
 	return out
@@ -52,12 +52,12 @@ func TestCapByBytesOnAnEmptyRun(t *testing.T) {
 // producer identity included. A FINISH record is a record like any other to the
 // consumer that reads it.
 func TestToAPIRecordsCarriesTheRecordAsWritten(t *testing.T) {
-	stored := []*streampb.StreamRecord{
+	stored := []*streamlib.StreamRecord{
 		{
 			Body:       &commonpb.Payload{Data: []byte("token")},
 			Metadata:   map[string]*commonpb.Payload{"model": {Data: []byte("m1")}},
 			Topic:      "tokens",
-			Kind:       apistreampb.STREAM_RECORD_KIND_DATA,
+			Kind:       streampb.STREAM_RECORD_KIND_DATA,
 			ProducerId: "model-call",
 			Attempt:    2,
 			Sequence:   7,
@@ -65,7 +65,7 @@ func TestToAPIRecordsCarriesTheRecordAsWritten(t *testing.T) {
 		},
 		{
 			Topic:      "tokens",
-			Kind:       apistreampb.STREAM_RECORD_KIND_FINISH,
+			Kind:       streampb.STREAM_RECORD_KIND_FINISH,
 			ProducerId: "model-call",
 			Attempt:    2,
 			Sequence:   -1,
@@ -79,12 +79,12 @@ func TestToAPIRecordsCarriesTheRecordAsWritten(t *testing.T) {
 	require.Equal(t, "token", string(got[0].GetBody().GetData()))
 	require.Equal(t, "m1", string(got[0].GetMetadata()["model"].GetData()))
 	require.Equal(t, "tokens", got[0].GetTopic())
-	require.Equal(t, apistreampb.STREAM_RECORD_KIND_DATA, got[0].GetKind())
+	require.Equal(t, streampb.STREAM_RECORD_KIND_DATA, got[0].GetKind())
 	require.Equal(t, "model-call", got[0].GetProducerId())
 	require.Equal(t, int64(2), got[0].GetAttempt())
 	require.Equal(t, int64(7), got[0].GetSequence())
 
-	require.Equal(t, apistreampb.STREAM_RECORD_KIND_FINISH, got[1].GetKind())
+	require.Equal(t, streampb.STREAM_RECORD_KIND_FINISH, got[1].GetKind())
 	require.Nil(t, got[1].GetBody())
 	require.Equal(t, "model-call", got[1].GetProducerId())
 	require.Equal(t, int64(-1), got[1].GetSequence())

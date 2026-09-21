@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
-	apistreampb "go.temporal.io/api/stream/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	chasmstream "go.temporal.io/server/chasm/lib/stream"
-	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc"
@@ -26,7 +26,7 @@ const streamMaxBatch = chasmstream.MaxRecordsPerBatch
 
 type streamTestEnv struct {
 	env     *testcore.TestEnv
-	client  streampb.StreamServiceClient
+	client  streamlib.StreamServiceClient
 	ns      string
 	cleanup []func()
 }
@@ -45,7 +45,7 @@ func newStreamTestEnvFrom(t *testing.T, env *testcore.TestEnv) *streamTestEnv {
 	t.Cleanup(func() { _ = conn.Close() })
 
 	env2 := &streamTestEnv{
-		env: env, client: streampb.NewStreamServiceClient(conn), ns: env.Namespace().String(),
+		env: env, client: streamlib.NewStreamServiceClient(conn), ns: env.Namespace().String(),
 	}
 	t.Cleanup(func() {
 		for _, c := range env2.cleanup {
@@ -64,19 +64,19 @@ func (s *streamTestEnv) ctx() context.Context {
 
 func (s *streamTestEnv) create(ctx context.Context, t *testing.T, streamID string) {
 	t.Helper()
-	_, err := s.client.CreateStream(ctx, &streampb.CreateStreamRequest{
-		FrontendRequest: &streampb.CreateStreamInput{Namespace: s.ns, StreamId: streamID},
+	_, err := s.client.CreateStream(ctx, &streamlib.CreateStreamRequest{
+		FrontendRequest: &streamlib.CreateStreamInput{Namespace: s.ns, StreamId: streamID},
 	})
 	require.NoError(t, err)
 }
 
 func (s *streamTestEnv) add(
-	ctx context.Context, t *testing.T, streamID string, in *streampb.AddMessagesInput,
-) (*streampb.AddMessagesOutput, error) {
+	ctx context.Context, t *testing.T, streamID string, in *streamlib.AddMessagesInput,
+) (*streamlib.AddMessagesOutput, error) {
 	t.Helper()
 	in.Namespace = s.ns
 	in.StreamId = streamID
-	resp, err := s.client.AddMessages(ctx, &streampb.AddMessagesRequest{FrontendRequest: in})
+	resp, err := s.client.AddMessages(ctx, &streamlib.AddMessagesRequest{FrontendRequest: in})
 	if err != nil {
 		return nil, err
 	}
@@ -85,10 +85,10 @@ func (s *streamTestEnv) add(
 
 func (s *streamTestEnv) poll(
 	ctx context.Context, t *testing.T, streamID string, from int64, topics ...string,
-) *streampb.PollMessagesOutput {
+) *streamlib.PollMessagesOutput {
 	t.Helper()
-	resp, err := s.client.PollMessages(ctx, &streampb.PollMessagesRequest{
-		FrontendRequest: &streampb.PollMessagesInput{
+	resp, err := s.client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+		FrontendRequest: &streamlib.PollMessagesInput{
 			Namespace: s.ns, StreamId: streamID, FromOffset: from, Topics: topics,
 		},
 	})
@@ -96,19 +96,19 @@ func (s *streamTestEnv) poll(
 	return resp.GetFrontendResponse()
 }
 
-func streamMsgs(topic string, bodies ...string) []*streampb.StreamRecord {
-	out := make([]*streampb.StreamRecord, len(bodies))
+func streamMsgs(topic string, bodies ...string) []*streamlib.StreamRecord {
+	out := make([]*streamlib.StreamRecord, len(bodies))
 	for i, b := range bodies {
-		out[i] = &streampb.StreamRecord{
+		out[i] = &streamlib.StreamRecord{
 			Body:  &commonpb.Payload{Data: []byte(b)},
 			Topic: topic,
-			Kind:  apistreampb.STREAM_RECORD_KIND_DATA,
+			Kind:  streampb.STREAM_RECORD_KIND_DATA,
 		}
 	}
 	return out
 }
 
-func bodies(msgs []*streampb.StreamRecord) []string {
+func bodies(msgs []*streamlib.StreamRecord) []string {
 	out := make([]string, len(msgs))
 	for i, m := range msgs {
 		out[i] = string(m.GetBody().GetData())
@@ -129,12 +129,12 @@ func TestStreamAppendAndRead(t *testing.T) {
 	s.create(ctx, t, id)
 
 	first, err := s.add(ctx, t, id,
-		&streampb.AddMessagesInput{Records: streamMsgs("", "a", "b", "c")})
+		&streamlib.AddMessagesInput{Records: streamMsgs("", "a", "b", "c")})
 	require.NoError(t, err)
 	require.Equal(t, int64(0), first.GetFirstOffset())
 	require.Equal(t, int64(3), first.GetNextOffset())
 
-	second, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "d")})
+	second, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "d")})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), second.GetFirstOffset())
 
@@ -160,7 +160,7 @@ func TestStreamManyReadersAreIndependent(t *testing.T) {
 	const id = "stream-many-readers"
 	s.create(ctx, t, id)
 
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a", "b")})
+	_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "a", "b")})
 	require.NoError(t, err)
 
 	// No durable per-subscriber state, so reader count is not a state-machine
@@ -178,14 +178,14 @@ func TestStreamProducerDedup(t *testing.T) {
 	const id = "stream-dedup"
 	s.create(ctx, t, id)
 
-	in := &streampb.AddMessagesInput{
+	in := &streamlib.AddMessagesInput{
 		Records: streamMsgs("", "a", "b"), ProducerId: "p1", Sequence: 1,
 	}
 	first, err := s.add(ctx, t, id, in)
 	require.NoError(t, err)
 	require.False(t, first.GetDeduplicated())
 
-	retry, err := s.add(ctx, t, id, &streampb.AddMessagesInput{
+	retry, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{
 		Records: streamMsgs("", "a", "b"), ProducerId: "p1", Sequence: 1,
 	})
 	require.NoError(t, err)
@@ -198,7 +198,7 @@ func TestStreamProducerDedup(t *testing.T) {
 
 	// Same sequence with different content is a client bug. Returning the
 	// recorded offsets would report success while dropping the data.
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{
 		Records: streamMsgs("", "different"), ProducerId: "p1", Sequence: 1,
 	})
 	require.ErrorContains(t, err, "different content")
@@ -210,11 +210,11 @@ func TestStreamTopicFilter(t *testing.T) {
 	const id = "stream-topics"
 	s.create(ctx, t, id)
 
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("tokens", "t1")})
+	_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("tokens", "t1")})
 	require.NoError(t, err)
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("tools", "x1")})
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("tools", "x1")})
 	require.NoError(t, err)
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("tokens", "t2")})
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("tokens", "t2")})
 	require.NoError(t, err)
 
 	got := s.poll(ctx, t, id, 0, "tokens")
@@ -229,20 +229,20 @@ func TestStreamFinishWritingIsPerProducer(t *testing.T) {
 	const id = "stream-finish"
 	s.create(ctx, t, id)
 
-	_, err := s.client.FinishWriting(ctx, &streampb.FinishWritingRequest{
-		FrontendRequest: &streampb.FinishWritingInput{
+	_, err := s.client.FinishWriting(ctx, &streamlib.FinishWritingRequest{
+		FrontendRequest: &streamlib.FinishWritingInput{
 			Namespace: s.ns, StreamId: id, ProducerId: "p1",
 		},
 	})
 	require.NoError(t, err)
 
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{
 		Records: streamMsgs("", "a"), ProducerId: "p1", Sequence: 1,
 	})
 	require.Error(t, err)
 
 	// Finishing is per-producer, not a close, so others carry on.
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{
 		Records: streamMsgs("", "b"), ProducerId: "p2", Sequence: 1,
 	})
 	require.NoError(t, err)
@@ -254,11 +254,11 @@ func TestStreamCloseAndTruncate(t *testing.T) {
 	const id = "stream-lifecycle"
 	s.create(ctx, t, id)
 
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a", "b", "c")})
+	_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "a", "b", "c")})
 	require.NoError(t, err)
 
-	_, err = s.client.TruncateStream(ctx, &streampb.TruncateStreamRequest{
-		FrontendRequest: &streampb.TruncateStreamInput{
+	_, err = s.client.TruncateStream(ctx, &streamlib.TruncateStreamRequest{
+		FrontendRequest: &streamlib.TruncateStreamInput{
 			Namespace: s.ns, StreamId: id, NewBaseOffset: 1,
 		},
 	})
@@ -266,17 +266,17 @@ func TestStreamCloseAndTruncate(t *testing.T) {
 
 	// A reader below the floor gets a distinguishable error carrying the floor,
 	// so it can jump forward rather than fail.
-	_, err = s.client.PollMessages(ctx, &streampb.PollMessagesRequest{
-		FrontendRequest: &streampb.PollMessagesInput{Namespace: s.ns, StreamId: id, FromOffset: 0},
+	_, err = s.client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+		FrontendRequest: &streamlib.PollMessagesInput{Namespace: s.ns, StreamId: id, FromOffset: 0},
 	})
 	require.ErrorContains(t, err, "truncated")
 
-	_, err = s.client.CloseStream(ctx, &streampb.CloseStreamRequest{
-		FrontendRequest: &streampb.CloseStreamInput{Namespace: s.ns, StreamId: id},
+	_, err = s.client.CloseStream(ctx, &streamlib.CloseStreamRequest{
+		FrontendRequest: &streamlib.CloseStreamInput{Namespace: s.ns, StreamId: id},
 	})
 	require.NoError(t, err)
 
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "d")})
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "d")})
 	require.Error(t, err)
 
 	// Closed is a state a reader observes, not an error, and the data stays
@@ -296,9 +296,9 @@ func TestStreamReadStartingInsideABatch(t *testing.T) {
 	// first offset of its batch, so reading from 2 has to find the node that
 	// contains it rather than the node whose ID equals it. Getting that wrong
 	// silently drops the messages before the boundary.
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a", "b", "c")})
+	_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "a", "b", "c")})
 	require.NoError(t, err)
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "d")})
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "d")})
 	require.NoError(t, err)
 
 	for from, want := range map[int64][]string{
@@ -325,15 +325,15 @@ func TestStreamBatchSizeIsBounded(t *testing.T) {
 	for i := range tooMany {
 		tooMany[i] = "x"
 	}
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", tooMany...)})
+	_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", tooMany...)})
 	require.ErrorContains(t, err, "exceeds the limit")
 }
 
 func (s *streamTestEnv) pollWait(
 	ctx context.Context, streamID string, from int64,
-) (*streampb.PollMessagesOutput, error) {
-	resp, err := s.client.PollMessages(ctx, &streampb.PollMessagesRequest{
-		FrontendRequest: &streampb.PollMessagesInput{
+) (*streamlib.PollMessagesOutput, error) {
+	resp, err := s.client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+		FrontendRequest: &streamlib.PollMessagesInput{
 			Namespace: s.ns, StreamId: streamID, FromOffset: from, WaitNewMessages: true,
 		},
 	})
@@ -350,7 +350,7 @@ func TestStreamLongPollWakesOnAppend(t *testing.T) {
 	s.create(ctx, t, id)
 
 	type result struct {
-		out *streampb.PollMessagesOutput
+		out *streamlib.PollMessagesOutput
 		err error
 	}
 	done := make(chan result, 1)
@@ -360,7 +360,7 @@ func TestStreamLongPollWakesOnAppend(t *testing.T) {
 	}()
 
 	// The poll is parked on an empty stream; the append is what releases it.
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a")})
+	_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "a")})
 	require.NoError(t, err)
 
 	select {
@@ -379,7 +379,7 @@ func TestStreamLongPollWakesOnClose(t *testing.T) {
 	const id = "stream-longpoll-close"
 	s.create(ctx, t, id)
 
-	done := make(chan *streampb.PollMessagesOutput, 1)
+	done := make(chan *streamlib.PollMessagesOutput, 1)
 	go func() {
 		out, err := s.pollWait(ctx, id, 0)
 		if err == nil {
@@ -387,8 +387,8 @@ func TestStreamLongPollWakesOnClose(t *testing.T) {
 		}
 	}()
 
-	_, err := s.client.CloseStream(ctx, &streampb.CloseStreamRequest{
-		FrontendRequest: &streampb.CloseStreamInput{Namespace: s.ns, StreamId: id},
+	_, err := s.client.CloseStream(ctx, &streamlib.CloseStreamRequest{
+		FrontendRequest: &streamlib.CloseStreamInput{Namespace: s.ns, StreamId: id},
 	})
 	require.NoError(t, err)
 
@@ -427,7 +427,7 @@ func TestStreamLongPollReturnsImmediatelyWhenBehind(t *testing.T) {
 	const id = "stream-longpoll-behind"
 	s.create(ctx, t, id)
 
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a", "b")})
+	_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "a", "b")})
 	require.NoError(t, err)
 
 	// Waiting is only for a reader that is caught up. One that is behind must
@@ -444,16 +444,16 @@ func TestStreamCapTruncatesAndReclaims(t *testing.T) {
 	ctx := streamCtx(t)
 	const id = "stream-cap"
 
-	_, err := s.client.CreateStream(ctx, &streampb.CreateStreamRequest{
-		FrontendRequest: &streampb.CreateStreamInput{
+	_, err := s.client.CreateStream(ctx, &streamlib.CreateStreamRequest{
+		FrontendRequest: &streamlib.CreateStreamInput{
 			Namespace: s.ns, StreamId: id,
-			Lifecycle: &streampb.StreamLifecycle{MaxItems: 4},
+			Lifecycle: &streamlib.StreamLifecycle{MaxItems: 4},
 		},
 	})
 	require.NoError(t, err)
 
 	for _, batch := range [][]string{{"a", "b"}, {"c", "d"}, {"e", "f"}} {
-		_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", batch...)})
+		_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", batch...)})
 		require.NoError(t, err)
 	}
 
@@ -464,8 +464,8 @@ func TestStreamCapTruncatesAndReclaims(t *testing.T) {
 	require.Equal(t, []string{"c", "d", "e", "f"}, bodies(got.GetRecords()))
 
 	// Below the floor is a distinguishable error, not silence.
-	_, err = s.client.PollMessages(ctx, &streampb.PollMessagesRequest{
-		FrontendRequest: &streampb.PollMessagesInput{Namespace: s.ns, StreamId: id, FromOffset: 0},
+	_, err = s.client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+		FrontendRequest: &streamlib.PollMessagesInput{Namespace: s.ns, StreamId: id, FromOffset: 0},
 	})
 	require.ErrorContains(t, err, "truncated")
 }
@@ -476,10 +476,10 @@ func TestStreamClosedStaysReadable(t *testing.T) {
 	const id = "stream-closed-readable"
 	s.create(ctx, t, id)
 
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "a", "b")})
+	_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "a", "b")})
 	require.NoError(t, err)
-	_, err = s.client.CloseStream(ctx, &streampb.CloseStreamRequest{
-		FrontendRequest: &streampb.CloseStreamInput{Namespace: s.ns, StreamId: id},
+	_, err = s.client.CloseStream(ctx, &streamlib.CloseStreamRequest{
+		FrontendRequest: &streamlib.CloseStreamInput{Namespace: s.ns, StreamId: id},
 	})
 	require.NoError(t, err)
 
@@ -490,8 +490,8 @@ func TestStreamClosedStaysReadable(t *testing.T) {
 	require.Equal(t, []string{"a", "b"}, bodies(got.GetRecords()))
 	require.True(t, got.GetClosed())
 
-	desc, err := s.client.DescribeStream(ctx, &streampb.DescribeStreamRequest{
-		FrontendRequest: &streampb.DescribeStreamInput{Namespace: s.ns, StreamId: id},
+	desc, err := s.client.DescribeStream(ctx, &streamlib.DescribeStreamRequest{
+		FrontendRequest: &streamlib.DescribeStreamInput{Namespace: s.ns, StreamId: id},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, desc.GetFrontendResponse().GetState().GetCloseTime())
@@ -509,8 +509,8 @@ func TestStreamListStreams(t *testing.T) {
 	// Visibility is written by a task after the create commits, so this is
 	// eventually consistent by design rather than by accident.
 	await.RequireTrue(t, func() bool {
-		resp, err := s.client.ListStreams(ctx, &streampb.ListStreamsRequest{
-			FrontendRequest: &streampb.ListStreamsInput{Namespace: s.ns},
+		resp, err := s.client.ListStreams(ctx, &streamlib.ListStreamsRequest{
+			FrontendRequest: &streamlib.ListStreamsInput{Namespace: s.ns},
 		})
 		if err != nil {
 			return false
@@ -538,7 +538,7 @@ func TestStreamPollReadsOnlyWhatItReturns(t *testing.T) {
 	s.create(ctx, t, id)
 
 	for i := range 40 {
-		_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{
+		_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{
 			Records: streamMsgs("", fmt.Sprintf("m%d", i)),
 		})
 		require.NoError(t, err)
@@ -571,18 +571,18 @@ func TestStreamPollAfterIdIsReusedServesTheNewStream(t *testing.T) {
 	const id = "stream-reused-id"
 
 	s.create(ctx, t, id)
-	_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "old")})
+	_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "old")})
 	require.NoError(t, err)
 	// Read it back so the bytes are certain to be cached before the id is reused.
 	require.Equal(t, []string{"old"}, bodies(s.poll(ctx, t, id, 0).GetRecords()))
 
-	_, err = s.client.DeleteStream(ctx, &streampb.DeleteStreamRequest{
-		FrontendRequest: &streampb.DeleteStreamInput{Namespace: s.ns, StreamId: id},
+	_, err = s.client.DeleteStream(ctx, &streamlib.DeleteStreamRequest{
+		FrontendRequest: &streamlib.DeleteStreamInput{Namespace: s.ns, StreamId: id},
 	})
 	require.NoError(t, err)
 
 	s.create(ctx, t, id)
-	_, err = s.add(ctx, t, id, &streampb.AddMessagesInput{Records: streamMsgs("", "new")})
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "new")})
 	require.NoError(t, err)
 
 	got := s.poll(ctx, t, id, 0)
@@ -599,7 +599,7 @@ func TestStreamFilteredReadReportsRealOffsets(t *testing.T) {
 	s.create(ctx, t, id)
 
 	for i, topic := range []string{"a", "b", "a", "b", "a"} {
-		_, err := s.add(ctx, t, id, &streampb.AddMessagesInput{
+		_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{
 			Records: streamMsgs(topic, fmt.Sprintf("m%d", i)),
 		})
 		require.NoError(t, err)
@@ -613,10 +613,10 @@ func TestStreamFilteredReadReportsRealOffsets(t *testing.T) {
 func (s *streamTestEnv) pollMaxTopics(
 	ctx context.Context, t *testing.T, streamID string, from int64, maxMessages int32,
 	topics ...string,
-) *streampb.PollMessagesOutput {
+) *streamlib.PollMessagesOutput {
 	t.Helper()
-	resp, err := s.client.PollMessages(ctx, &streampb.PollMessagesRequest{
-		FrontendRequest: &streampb.PollMessagesInput{
+	resp, err := s.client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+		FrontendRequest: &streamlib.PollMessagesInput{
 			Namespace: s.ns, StreamId: streamID, FromOffset: from,
 			MaxMessages: maxMessages, Topics: topics,
 		},
@@ -627,10 +627,10 @@ func (s *streamTestEnv) pollMaxTopics(
 
 func (s *streamTestEnv) pollMax(
 	ctx context.Context, t *testing.T, streamID string, from int64, maxMessages int32,
-) *streampb.PollMessagesOutput {
+) *streamlib.PollMessagesOutput {
 	t.Helper()
-	resp, err := s.client.PollMessages(ctx, &streampb.PollMessagesRequest{
-		FrontendRequest: &streampb.PollMessagesInput{
+	resp, err := s.client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+		FrontendRequest: &streamlib.PollMessagesInput{
 			Namespace: s.ns, StreamId: streamID, FromOffset: from, MaxMessages: maxMessages,
 		},
 	})
@@ -638,7 +638,7 @@ func (s *streamTestEnv) pollMax(
 	return resp.GetFrontendResponse()
 }
 
-func offsets(msgs []*streampb.StreamRecord) []int64 {
+func offsets(msgs []*streamlib.StreamRecord) []int64 {
 	out := make([]int64, len(msgs))
 	for i, m := range msgs {
 		out[i] = m.GetOffset()
