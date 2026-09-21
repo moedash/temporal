@@ -168,9 +168,32 @@ func (streamSubscribedEvent) Type() enumspb.EventType {
 
 func (streamSubscribedEvent) IsWorkflowTaskTrigger() bool { return false }
 
-// The cursor lives in CHASM state, which is persisted and rebuilt with the
-// execution, so there is nothing for replication or reset to reconstruct here.
-func (streamSubscribedEvent) Apply(chasm.MutableContext, *Workflow, *historypb.HistoryEvent) error {
+// Apply recreates the cursor for a run rebuilt from its history, which is how a
+// reset run comes to exist. The event records the stream and where reading
+// began; the ranges consumed since are folded in as the completed events that
+// carry them are applied. Whether the stream lives in this execution or in
+// another is not in the event, so the rebuilt cursor is owned until the reset
+// copies that from the run it was rebuilt from.
+func (streamSubscribedEvent) Apply(
+	mctx chasm.MutableContext,
+	wf *Workflow,
+	event *historypb.HistoryEvent,
+) error {
+	attrs := event.GetWorkflowStreamSubscribedEventAttributes()
+	if _, ok := wf.StreamCursors[attrs.GetStreamId()]; ok {
+		return nil
+	}
+	cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
+		StreamID:    attrs.GetStreamId(),
+		StartOffset: attrs.GetStartOffset(),
+	})
+	if err != nil {
+		return err
+	}
+	if wf.StreamCursors == nil {
+		wf.StreamCursors = make(chasm.Map[string, *stream.Cursor])
+	}
+	wf.StreamCursors[attrs.GetStreamId()] = chasm.NewComponentField(mctx, cursor)
 	return nil
 }
 
@@ -277,6 +300,13 @@ func (w *Workflow) RecordStreamRecordsAppended(
 // streamNamed returns the workflow's stream of that name, creating it on first
 // use. Implicit creation is deliberate: a workflow publishing to its own output
 // should not have to coordinate with anyone about who creates it.
+//
+// The stream belongs to this run. After a reset the new run publishes to and
+// subscribes on streams of its own, created here on first use, and the run it
+// was reset from keeps the records its own history refers to. A stream the
+// reset run inherited a subscription to is created by the reset itself, at the
+// offset that subscription stood at, so it is already here by the time a
+// command names it.
 func (w *Workflow) streamNamed(
 	ctx chasm.MutableContext,
 	name string,

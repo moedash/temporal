@@ -261,6 +261,9 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			); err != nil {
 				return nil, err
 			}
+			if err := b.applyConsumedStreamRanges(ctx, event); err != nil {
+				return nil, err
+			}
 
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
 			if err := b.mutableState.ApplyWorkflowTaskTimedOutEvent(
@@ -730,6 +733,26 @@ func (b *MutableStateRebuilderImpl) applyStateMachineEvent(
 		return nil
 	}
 	return b.applyHSMEvent(event)
+}
+
+// applyConsumedStreamRanges moves the stream cursors to where the completed
+// event says they stood. The cursors are CHASM state and the ranges ride the
+// event, so a run rebuilt from its history, a reset run above all, ends up with
+// its cursors exactly where the events put them.
+func (b *MutableStateRebuilderImpl) applyConsumedStreamRanges(
+	ctx context.Context,
+	event *historypb.HistoryEvent,
+) error {
+	ranges := event.GetWorkflowTaskCompletedEventAttributes().GetConsumedStreamRanges()
+	if len(ranges) == 0 || !b.mutableState.ChasmEnabled() {
+		return nil
+	}
+	b.mutableState.EnsureChasmWorkflowComponent(ctx)
+	wf, chasmCtx, err := b.mutableState.ChasmWorkflowComponent(ctx)
+	if err != nil {
+		return err
+	}
+	return wf.ApplyConsumedStreamRanges(chasmCtx, ranges)
 }
 
 // applyHSMEvent applies an event to the HSM tree

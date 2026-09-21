@@ -139,3 +139,23 @@ func (c *Cursor) AdvanceKnownHead(_ chasm.MutableContext, head int64) {
 func (c *Cursor) StartOffset() int64 {
 	return c.State.StartOffset
 }
+
+// Restore puts the cursor where a completed task's event says it stood, for a
+// run being rebuilt from its history. It only moves forward: the events are
+// applied in order, and a range folded in earlier is never taken back.
+func (c *Cursor) Restore(_ chasm.MutableContext, offset int64) {
+	if offset > c.State.Offset {
+		c.State.Offset = offset
+	}
+	if offset > c.State.KnownHead {
+		c.State.KnownHead = offset
+	}
+}
+
+// MarkExternal says the stream lives in another execution, which the subscribe
+// event alone cannot tell a rebuilt run, and carries over the frontier that
+// stream last pushed at the run this one was rebuilt from.
+func (c *Cursor) MarkExternal(mctx chasm.MutableContext, knownHead int64) {
+	c.State.External = true
+	c.AdvanceKnownHead(mctx, knownHead)
+}

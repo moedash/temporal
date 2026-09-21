@@ -67,7 +67,7 @@ func TestExternalStreamLiveAndReplayUseRoutedPayloadRead(t *testing.T) {
 			if replay {
 				window, err = readRecordedRange(ctx,
 					definition.NewWorkflowKey("namespace-id", "consumer", "consumer-run"),
-					streamOrigin{external: true}, "remote-source", 4, 6)
+					streamOrigin{external: true}, "consumer-run", "remote-source", 4, 6)
 			} else {
 				window, err = readWindowFor(ctx, nil, nil, "namespace-id", "input", true, "remote-source", 4, 6)
 			}
@@ -158,6 +158,6 @@ func TestOwnedReplayPinsConsumerRun(t *testing.T) {
 		})
 	_, err := readRecordedRange(chasm.NewEngineContext(context.Background(), engine),
 		definition.NewWorkflowKey("ns", "consumer", "consumer-run"),
-		streamOrigin{name: "owned"}, "owned", 4, 6)
+		streamOrigin{name: "owned"}, "consumer-run", "owned", 4, 6)
 	require.NoError(t, err)
 }
