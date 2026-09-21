@@ -106,11 +106,13 @@ func (w *Workflow) SubscribeToOwnedStream(
 	startOffset int64,
 	limits stream.Limits,
 ) (int64, error) {
-	field, ok := w.Streams[name]
-	if !ok {
-		return 0, serviceerror.NewNotFoundf("workflow does not own a stream named %q", name)
+	// Created here as well as on first write, so a workflow can start reading a
+	// topic before anything has been published to it. An outside producer that
+	// arrives later appends to the same stream.
+	owned, err := w.streamNamed(mctx, name, limits)
+	if err != nil {
+		return 0, err
 	}
-	owned := field.Get(mctx)
 
 	if w.StreamCursors == nil {
 		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
@@ -125,7 +127,7 @@ func (w *Workflow) SubscribeToOwnedStream(
 	// separately it could be lost while the cursor survived, and truncation
 	// would then be free to take a range the cursor still points at.
 	key := mctx.ExecutionKey()
-	startOffset, err := owned.RegisterConsumer(mctx, stream.ConsumerRegistration{
+	startOffset, err = owned.RegisterConsumer(mctx, stream.ConsumerRegistration{
 		ConsumerID:   streamConsumerID(name),
 		WorkflowID:   key.BusinessID,
 		RunID:        key.RunID,

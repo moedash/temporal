@@ -91,12 +91,22 @@ func TestSubscribeFromTheTailResolvesToHead(t *testing.T) {
 	require.Equal(t, int64(4), start, "a negative offset means from wherever the stream is now")
 }
 
-func TestSubscribeRejectsAStreamTheWorkflowDoesNotOwn(t *testing.T) {
+// A workflow reads a topic by name before anything has been written to it, so
+// subscribing has to bring the stream into being the way a first write does.
+func TestSubscribeCreatesTheStreamItNames(t *testing.T) {
 	ctx := newStreamCursorTestContext()
 	w := &Workflow{}
 
-	_, err := w.SubscribeToOwnedStream(ctx, "absent", 0, stream.DefaultLimits())
-	require.ErrorContains(t, err, "does not own a stream")
+	start, err := w.SubscribeToOwnedStream(ctx, "inputs", 0, stream.DefaultLimits())
+	require.NoError(t, err)
+	require.Equal(t, int64(0), start)
+
+	field, ok := w.Streams["inputs"]
+	require.True(t, ok, "the subscribed name is now an owned stream")
+	state, err := field.Get(ctx).Snapshot(ctx, struct{}{})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), state.GetHeadOffset())
+	require.Len(t, state.GetConsumers(), 1, "the subscription pinned the new stream")
 }
 
 // Committing a delivered range moves the consumer's cursor on the stream, so

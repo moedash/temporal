@@ -2,6 +2,7 @@ package respondworkflowtaskcompleted
 
 import (
 	"context"
+	"errors"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -82,8 +83,23 @@ func resolveStagedStreamSubscriptions(
 
 		pin, err := registerExternalConsumer(ctx, ms, namespaceID, pending)
 		if err != nil {
-			return chasmworkflow.StreamAdmissionFailure(
-				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
+			var notFound *serviceerror.NotFound
+			if !errors.As(err, &notFound) {
+				return chasmworkflow.StreamAdmissionFailure(
+					enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
+			}
+			// No execution holds a stream by this id, so the name is one of this
+			// workflow's own that nothing has written to yet. A reader has to be
+			// able to subscribe before the first record arrives, so the stream
+			// is created here and the subscription lands on it.
+			startOffset, err := wf.SubscribeToOwnedStream(
+				chasmCtx, pending.StreamID, pending.StartOffset, limits)
+			if err != nil {
+				return chasmworkflow.StreamAdmissionFailure(
+					enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
+			}
+			chasmworkflow.RecordStreamSubscribedOffset(pending.Event, startOffset)
+			continue
 		}
 
 		if _, err := wf.SubscribeToExternalStream(chasmCtx, chasmworkflow.ExternalStreamSubscription{

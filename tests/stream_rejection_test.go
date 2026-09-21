@@ -81,15 +81,16 @@ func TestOverLimitPublishFailsTheWorkflowTask(t *testing.T) {
 	require.Equal(t, []int64{0}, offsets(poll.GetFrontendResponse().GetRecords()))
 }
 
-// A subscribe naming a stream that does not exist is refused where the stream
-// is looked up, which is after the commands and before the commit. It still has
-// to surface as a failed task with a cause, and leave no half-made subscription.
-func TestSubscribeToAMissingStreamFailsTheWorkflowTask(t *testing.T) {
+// A workflow reads a topic by name before anything has been written to it, so
+// the subscribe has to bring the owned stream into being rather than fail the
+// task. An outside producer that arrives later appends to that same stream,
+// and its records reach the workflow carrying the identity it wrote.
+func TestSubscribeToAnUnwrittenNameCreatesTheOwnedStream(t *testing.T) {
 	env := testcore.NewEnv(t)
 	s := newStreamTestEnvFrom(t, env)
-	execution, tq := startConsumer(t, s, "stream-wf-reject-subscribe-")
+	execution, tq := startConsumer(t, s, "stream-wf-subscribe-first-")
 
-	missing := "no-such-stream-" + uuid.NewString()
+	name := "inputs-" + uuid.NewString()
 	var delivered [][]*streampb.StreamSlice
 	//nolint:staticcheck // SA1019: only the deprecated poller can emit this command type.
 	poller := &testcore.TaskPoller{
@@ -102,7 +103,7 @@ func TestSubscribeToAMissingStreamFailsTheWorkflowTask(t *testing.T) {
 		) ([]*commandpb.Command, error) {
 			delivered = append(delivered, resp.GetStreamSlices())
 			if len(delivered) == 1 {
-				return subscribeCommand(missing), nil
+				return subscribeCommand(name), nil
 			}
 			return nil, nil
 		},
@@ -111,17 +112,51 @@ func TestSubscribeToAMissingStreamFailsTheWorkflowTask(t *testing.T) {
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask()
-	require.Error(t, err)
+	require.NoError(t, err)
 
 	events := env.GetHistory(s.ns, execution)
-	require.NotNil(t, workflowTaskFailedWith(events,
+	require.Nil(t, workflowTaskFailedWith(events,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES))
-	require.Empty(t, subscribedEvents(events), "a refused subscribe writes no event")
+	subscribed := subscribedEvents(events)
+	require.Len(t, subscribed, 1)
+	require.Equal(t, name, subscribed[0].GetStreamId())
+	require.Equal(t, int64(0), subscribed[0].GetStartOffset(), "the new stream starts empty")
 
-	// The retry carries no slice, because no cursor was made.
-	_, err = poller.PollAndProcessWorkflowTask(testcore.WithExpectedAttemptCount(2))
+	_, err = s.client.AddWorkflowMessages(s.ctx(), &streamlib.AddWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.AddWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(), StreamName: name,
+			Records: []*streamlib.StreamRecord{
+				{
+					Body: &commonpb.Payload{Data: []byte("hello")}, Topic: name,
+					ProducerId: "model", Attempt: 2, Sequence: 0,
+				},
+				{
+					Kind: streampb.STREAM_RECORD_KIND_FINISH, Topic: name,
+					ProducerId: "model", Attempt: 2, Sequence: -1,
+				},
+			},
+		},
+	})
 	require.NoError(t, err)
-	require.Empty(t, delivered[1])
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	got := currentSlice(t, delivered[1])
+	require.Equal(t, name, got.GetStreamId())
+	require.Equal(t, int64(2), got.GetToOffset())
+
+	records := got.GetRecords()
+	require.Len(t, records, 2)
+	require.Equal(t, "hello", string(records[0].GetBody().GetData()))
+	require.Equal(t, streampb.STREAM_RECORD_KIND_DATA, records[0].GetKind(),
+		"a record with no kind is data")
+	require.Equal(t, "model", records[0].GetProducerId())
+	require.Equal(t, int64(2), records[0].GetAttempt())
+	require.Equal(t, int64(0), records[0].GetSequence())
+	require.Equal(t, streampb.STREAM_RECORD_KIND_FINISH, records[1].GetKind(),
+		"a finish record is delivered like any other")
+	require.Equal(t, "model", records[1].GetProducerId())
+	require.Equal(t, int64(-1), records[1].GetSequence())
 }
 
 // The guarantee the design is sold on: a publish commits with the workflow
