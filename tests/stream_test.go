@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,9 +26,13 @@ import (
 const streamMaxBatch = chasmstream.MaxRecordsPerBatch
 
 type streamTestEnv struct {
-	env     *testcore.TestEnv
-	client  streamlib.StreamServiceClient
-	ns      string
+	env    *testcore.TestEnv
+	client streamlib.StreamServiceClient
+	ns     string
+
+	// Guards cleanup: a test that races outside producers against the
+	// workflow asks for contexts from several goroutines at once.
+	mu      sync.Mutex
 	cleanup []func()
 }
 
@@ -48,6 +53,8 @@ func newStreamTestEnvFrom(t *testing.T, env *testcore.TestEnv) *streamTestEnv {
 		env: env, client: streamlib.NewStreamServiceClient(conn), ns: env.Namespace().String(),
 	}
 	t.Cleanup(func() {
+		env2.mu.Lock()
+		defer env2.mu.Unlock()
 		for _, c := range env2.cleanup {
 			c()
 		}
@@ -58,7 +65,9 @@ func newStreamTestEnvFrom(t *testing.T, env *testcore.TestEnv) *streamTestEnv {
 
 func (s *streamTestEnv) ctx() context.Context {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	s.mu.Lock()
 	s.cleanup = append(s.cleanup, cancel)
+	s.mu.Unlock()
 	return ctx
 }
 
