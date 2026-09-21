@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -697,4 +698,83 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_RemoteRoutin
 	failureMetrics := snapshot[metrics.ClientRedirectionFailures.Name()]
 	s.Len(failureMetrics, 1)
 	s.Equal(int64(1), failureMetrics[0].Value)
+}
+
+// streamNamespaceActiveElsewhere registers a global namespace whose active
+// cluster is the alternative one, so a call for it has to be forwarded.
+func (s *redirectionInterceptorSuite) streamNamespaceActiveElsewhere() namespace.Name {
+	namespaceName := namespace.Name("stream-namespace-active-elsewhere")
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1,
+	)
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil).AnyTimes()
+	return namespaceName
+}
+
+// A stream call registered as redirectable is forwarded to the namespace's
+// active cluster, resolved from the namespace inside `frontend_request`.
+func (s *redirectionInterceptorSuite) TestStreamAPI_ForwardedWhenRegistered() {
+	namespaceName := s.streamNamespaceActiveElsewhere()
+	info := &grpc.UnaryServerInfo{
+		FullMethod: streampb.StreamService_AddWorkflowMessages_FullMethodName,
+	}
+	req := &streampb.AddWorkflowMessagesRequest{
+		FrontendRequest: &streampb.AddWorkflowMessagesInput{
+			Namespace:  namespaceName.String(),
+			WorkflowId: "wf",
+		},
+	}
+	redirector := s.redirector.WithRedirectResponses(map[string]func() any{
+		info.FullMethod: func() any { return &streampb.AddWorkflowMessagesResponse{} },
+	})
+
+	grpcConn := &mockClientConnInterface{
+		Suite:          &s.Suite,
+		targetMethod:   info.FullMethod,
+		targetResponse: &streampb.AddWorkflowMessagesResponse{},
+	}
+	s.clientBean.EXPECT().GetRemoteFrontendClient(cluster.TestAlternativeClusterName).
+		Return(grpcConn, nil, nil).Times(1)
+
+	resp, err := redirector.Intercept(context.Background(), req, info,
+		func(context.Context, any) (any, error) {
+			s.Fail("a call for a namespace active elsewhere must not be served locally")
+			return nil, nil
+		})
+	s.NoError(err)
+	s.IsType(&streampb.AddWorkflowMessagesResponse{}, resp)
+}
+
+// Without registration a stream call is served wherever it lands, which is
+// what the bare interceptor does for any service other than WorkflowService.
+func (s *redirectionInterceptorSuite) TestStreamAPI_ServedLocallyWhenNotRegistered() {
+	namespaceName := s.streamNamespaceActiveElsewhere()
+	info := &grpc.UnaryServerInfo{
+		FullMethod: streampb.StreamService_AddWorkflowMessages_FullMethodName,
+	}
+	req := &streampb.AddWorkflowMessagesRequest{
+		FrontendRequest: &streampb.AddWorkflowMessagesInput{
+			Namespace:  namespaceName.String(),
+			WorkflowId: "wf",
+		},
+	}
+
+	served := false
+	resp, err := s.redirector.Intercept(context.Background(), req, info,
+		func(context.Context, any) (any, error) {
+			served = true
+			return &streampb.AddWorkflowMessagesResponse{}, nil
+		})
+	s.NoError(err)
+	s.True(served)
+	s.IsType(&streampb.AddWorkflowMessagesResponse{}, resp)
 }

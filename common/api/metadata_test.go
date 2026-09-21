@@ -84,6 +84,15 @@ func TestGetMethodMetadata(t *testing.T) {
 	assert.Equal(t, ScopeCluster, md.Scope)
 	assert.Equal(t, AccessAdmin, md.Access)
 
+	md = GetMethodMetadata(StreamServicePrefix + "AddWorkflowMessages")
+	require.Equal(t, ScopeNamespace, md.Scope)
+	require.Equal(t, AccessWrite, md.Access)
+
+	md = GetMethodMetadata(StreamServicePrefix + "PollWorkflowMessages")
+	require.Equal(t, ScopeNamespace, md.Scope)
+	require.Equal(t, AccessReadOnly, md.Access)
+	require.Equal(t, PollingCapable, md.Polling)
+
 	md = GetMethodMetadata("/OtherService/Method1")
 	assert.Equal(t, ScopeUnknown, md.Scope)
 	assert.Equal(t, AccessUnknown, md.Access)

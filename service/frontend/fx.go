@@ -416,7 +416,7 @@ func RedirectionInterceptorProvider(
 		metricsHandler,
 		timeSource,
 		clusterMetadata,
-	)
+	).WithRedirectResponses(chasmstream.RedirectableMethods())
 }
 
 func BusinessIDInterceptorProvider(

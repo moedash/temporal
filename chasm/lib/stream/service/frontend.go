@@ -45,6 +45,59 @@ func NewFrontendHandler(
 	}
 }
 
+// RedirectableMethods lists the stream RPCs a cell forwards to the namespace's
+// active cell when it is not that cell itself, each with the response it
+// answers with, for the redirection interceptor.
+//
+// The stream lives in the active cell's mutable state, so a call served where
+// it happens to land would write to a copy nothing reads or read one that
+// stops at the last replication. The two calls History makes on itself are not
+// listed: they never reach a frontend legitimately, and this handler answers
+// them with Unimplemented wherever they land.
+func RedirectableMethods() map[string]func() any {
+	return map[string]func() any{
+		streampb.StreamService_CreateStream_FullMethodName: func() any {
+			return &streampb.CreateStreamResponse{}
+		},
+		streampb.StreamService_AddMessages_FullMethodName: func() any {
+			return &streampb.AddMessagesResponse{}
+		},
+		streampb.StreamService_FinishWriting_FullMethodName: func() any {
+			return &streampb.FinishWritingResponse{}
+		},
+		streampb.StreamService_SubscribeWorkflow_FullMethodName: func() any {
+			return &streampb.SubscribeWorkflowResponse{}
+		},
+		streampb.StreamService_PollMessages_FullMethodName: func() any {
+			return &streampb.PollMessagesResponse{}
+		},
+		streampb.StreamService_DescribeStream_FullMethodName: func() any {
+			return &streampb.DescribeStreamResponse{}
+		},
+		streampb.StreamService_PollWorkflowMessages_FullMethodName: func() any {
+			return &streampb.PollWorkflowMessagesResponse{}
+		},
+		streampb.StreamService_DescribeWorkflowStream_FullMethodName: func() any {
+			return &streampb.DescribeWorkflowStreamResponse{}
+		},
+		streampb.StreamService_AddWorkflowMessages_FullMethodName: func() any {
+			return &streampb.AddWorkflowMessagesResponse{}
+		},
+		streampb.StreamService_CloseStream_FullMethodName: func() any {
+			return &streampb.CloseStreamResponse{}
+		},
+		streampb.StreamService_TruncateStream_FullMethodName: func() any {
+			return &streampb.TruncateStreamResponse{}
+		},
+		streampb.StreamService_ListStreams_FullMethodName: func() any {
+			return &streampb.ListStreamsResponse{}
+		},
+		streampb.StreamService_DeleteStream_FullMethodName: func() any {
+			return &streampb.DeleteStreamResponse{}
+		},
+	}
+}
+
 func (h *FrontendHandler) namespaceID(name string) (string, error) {
 	if name == "" {
 		return "", serviceerror.NewInvalidArgument("namespace is required")
