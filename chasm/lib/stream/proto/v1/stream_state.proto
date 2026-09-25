@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.stream.proto.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
+
+// Size is O(producers + consumers), never O(messages). Payload bytes live in
+// the component's data nodes, not here, which keeps this off the CHASM
+// partial-read path.
+message StreamState {
+  // Field numbers of removed fields, kept out of reuse so an old blob never
+  // decodes into a field with a different meaning.
+  reserved 3, 6, 7, 8;
+
+  // Visibility frontier. Readers never observe an offset at or past this.
+  int64 head_offset = 1;
+  // Truncation floor. Offsets below this are gone.
+  int64 base_offset = 2;
+
+  bool closed = 4;
+  temporal.api.common.v1.Payload close_reason = 5;
+
+  map<string, ProducerCursor> producers = 9;
+  map<string, ConsumerCursor> consumers = 10;
+
+  StreamLifecycle lifecycle = 11;
+
+  // Set when a successor run takes ownership, so an in-flight poll can follow
+  // the chain instead of stalling on a superseded run.
+  string redirect_run_id = 12;
+
+  // Wall-clock close time, used to schedule retention deletion.
+  google.protobuf.Timestamp close_time = 13;
+
+  // Set on a stream a workflow owns. Its batches are the owning execution's
+  // mutable state, so appends past the budget are refused rather than left to
+  // the execution size limit, which terminates the workflow.
+  StreamBudget budget = 14;
+
+  // Bytes appended over the stream's life, kept for the budget check. A stream
+  // with a budget never reclaims, so this is also what it holds.
+  int64 appended_bytes = 15;
+
+  // A notify task is scheduled and has not run yet. Appends while it is set
+  // schedule none of their own; the task reads the head when it runs, so it
+  // carries every append that landed before it.
+  bool notify_pending = 16;
+}
+
+// Hard bounds on what a stream may hold. Distinct from StreamLifecycle.max_items,
+// which reclaims the oldest messages: a budget refuses the newest.
+message StreamBudget {
+  int64 max_items = 1;
+  int64 max_bytes = 2;
+}
+
+message ProducerCursor {
+  int64 seq = 1;
+  int64 first_offset = 2;
+  int64 count = 3;
+  // Distinguishes a genuine retry from a client reusing a sequence with
+  // different content, which must be rejected rather than deduplicated.
+  bytes content_hash = 4;
+  // Set by FinishWriting. Ends this producer's writes without closing the
+  // stream for anyone else.
+  bool fenced = 5;
+}
+
+message ConsumerCursor {
+  string workflow_id = 1;
+  string run_id = 2;
+  // How far this consumer has read. Used to decide whether it needs waking,
+  // not to decide what the stream may drop.
+  int64 offset = 3;
+  bool active = 4;
+  // Set when the consumer is a workflow in another execution, which is the
+  // only case that has to be told the frontier moved. A workflow consuming a
+  // stream it owns sees that while closing its own transaction.
+  bool external = 5;
+  // The oldest offset this consumer's History still depends on.
+  //
+  // It is where the subscription started, not where it has read to. A range
+  // this consumer already consumed is recorded in its History and has to be
+  // re-readable for the workflow to replay, so bytes below the read position
+  // are exactly the ones a replay needs most. It stays put while the consumer
+  // is active and is released when it deregisters.
+  int64 replay_floor = 6;
+}
+
+// A consuming Workflow's position in a stream. This lives in the consuming
+// Workflow's own state rather than on the stream, so advancing it commits in
+// the same transaction as the WorkflowTaskCompleted event that records the
+// range. Keeping it on the stream would make the advance a cross-execution
+// write, and a crash between the two would either redeliver or skip.
+message WorkflowStreamCursor {
+  reserved 2, 3;
+
+  string stream_id = 1;
+
+  // Next offset to deliver.
+  int64 offset = 4;
+
+  // The stream's frontier as of the last delivery. A workflow consuming a
+  // stream in another execution cannot read the real frontier while closing its
+  // own transaction, so this is what tells it a capped slice left more behind.
+  int64 known_head = 8;
+
+  // Set when the stream lives in another execution, which decides whether the
+  // frontier is read locally or taken from known_head.
+  bool external = 9;
+
+  // The range attached to the Workflow Task currently in flight. Recorded on
+  // the event that closes that task, then folded into offset. An empty range
+  // is still recorded: a task where the subscription saw nothing is a fact
+  // replay has to reproduce.
+  int64 pending_from = 5;
+  int64 pending_to = 6;
+  bool has_pending = 7;
+
+  // Where this subscription began reading. Retained separately from offset,
+  // which advances, because replay has to tell "committed nothing yet" apart
+  // from "the events recording what was committed are not in this page".
+  int64 start_offset = 10;
+}
+
+message StreamLifecycle {
+  // How long a closed stream stays readable before it is deleted.
+  google.protobuf.Duration retention = 1;
+  // Cap on readable messages. Whole batches are reclaimed once the floor
+  // passes them, so a capped stream has bounded storage.
+  int64 max_items = 2;
+}
