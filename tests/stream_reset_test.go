@@ -308,3 +308,87 @@ func TestResetHandsTheExternalPinToTheResetRun(t *testing.T) {
 			"the floor is where the inherited subscription began, which its replay depends on")
 	}
 }
+
+// A workflow that only publishes gets no cursor, so a reset gives its run a
+// stream that starts over at offset zero while the copied history still
+// carries the base run's appended events at the offsets it wrote.
+//
+// Characterized rather than changed: whether the publish side should inherit
+// the offset space the way the consume side does is a design decision, and
+// until it is made this is what a reader following the workflow id sees.
+func TestResetOfAPublisherRestartsItsStreamAtZero(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+	execution, tq := startConsumer(t, s, "stream-wf-reset-publisher-")
+
+	var commands [][]*commandpb.Command
+	//nolint:staticcheck // SA1019: only the deprecated poller can emit this command type.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(
+			*workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
+			next := commands[0]
+			commands = commands[1:]
+			return next, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	runTask := func(cmds []*commandpb.Command) {
+		t.Helper()
+		commands = append(commands, cmds)
+		_, err := poller.PollAndProcessWorkflowTask()
+		require.NoError(t, err)
+	}
+
+	// Publishes only, so nothing subscribes and no cursor is ever created.
+	runTask(publishCommand("a", "b"))
+	signalWorkflow(t, s, execution.GetWorkflowId(), execution.GetRunId())
+	runTask(publishCommand("c"))
+
+	baseEvents := env.GetHistory(s.ns, execution)
+	var appendedOffsets []int64
+	for _, e := range baseEvents {
+		if attrs := e.GetWorkflowStreamRecordsAppendedEventAttributes(); attrs != nil {
+			appendedOffsets = append(appendedOffsets, attrs.GetFirstOffset())
+		}
+	}
+	require.Equal(t, []int64{0, 2}, appendedOffsets)
+
+	// Reset to the second completion, so the copied history keeps the first
+	// publish's event at offset 0 and drops the second's.
+	resetRunID := resetTo(t, s, execution, nthCompletedEvent(t, baseEvents, 2))
+	resetRun := &commonpb.WorkflowExecution{
+		WorkflowId: execution.GetWorkflowId(), RunId: resetRunID,
+	}
+
+	// The reset run publishes again. Its stream is a new one, so the offsets
+	// restart even though the copied history already names offset 0.
+	runTask(publishCommand("d"))
+
+	read, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(),
+			OwnerRunId: resetRunID, FromOffset: 0, MaxMessages: 10,
+		},
+	})
+	require.NoError(t, err)
+	records := read.GetFrontendResponse().GetRecords()
+	require.Equal(t, []string{"d"}, bodies(records))
+	require.Equal(t, int64(0), records[0].GetOffset(),
+		"the publish side restarts its offset space, unlike the consume side")
+
+	resetEvents := env.GetHistory(s.ns, resetRun)
+	var resetOffsets []int64
+	for _, e := range resetEvents {
+		if attrs := e.GetWorkflowStreamRecordsAppendedEventAttributes(); attrs != nil {
+			resetOffsets = append(resetOffsets, attrs.GetFirstOffset())
+		}
+	}
+	require.Equal(t, []int64{0, 0}, resetOffsets,
+		"the copied event and the new one name the same offset for different records")
+}

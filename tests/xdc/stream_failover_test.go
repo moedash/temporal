@@ -13,6 +13,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	streampb "go.temporal.io/api/stream/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -107,6 +108,29 @@ func (s *streamFailoverBase) streamNodesOn(
 	return paths
 }
 
+// historyOn reads a workflow's history from one cluster, for assertions about
+// what a task there did rather than about what replicated.
+func (s *streamFailoverBase) historyOn(
+	ctx context.Context, clusterIndex int, ns string, execution *commonpb.WorkflowExecution,
+) []*historypb.HistoryEvent {
+	var events []*historypb.HistoryEvent
+	var token []byte
+	for {
+		resp, err := s.clusters[clusterIndex].FrontendClient().GetWorkflowExecutionHistory(ctx,
+			&workflowservice.GetWorkflowExecutionHistoryRequest{
+				Namespace: ns, Execution: execution, NextPageToken: token,
+			})
+		if err != nil {
+			return events
+		}
+		events = append(events, resp.GetHistory().GetEvents()...)
+		token = resp.GetNextPageToken()
+		if len(token) == 0 {
+			return events
+		}
+	}
+}
+
 func apiBodies(records []*streampb.StreamRecord) []string {
 	out := make([]string, 0, len(records))
 	for _, r := range records {
@@ -184,6 +208,20 @@ func (w *streamingWorkflow) currentSlice(delivered []*streampb.StreamSlice) *str
 	}
 	w.s.FailNow("no slice for the current task")
 	return nil
+}
+
+// pollOnce asks for a workflow task and throws away whatever comes back. Used
+// where the point of the test is that the task cannot be started, so the
+// ordinary poller, which expects a task and a history, has nothing to work
+// with.
+func (w *streamingWorkflow) pollOnce(ctx context.Context, clusterIndex int) {
+	pollCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	//nolint:errcheck // The call is expected to come back empty.
+	w.s.clusters[clusterIndex].FrontendClient().PollWorkflowTaskQueue(pollCtx,
+		&workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: w.ns, TaskQueue: w.tq, Identity: "tester",
+		})
 }
 
 func (w *streamingWorkflow) signal(ctx context.Context, clusterIndex int) {
@@ -346,4 +384,27 @@ func (s *StreamEventReplicationSuite) TestStreamDoesNotReplicateUnderEventBasedR
 	})
 	s.NoError(err)
 	s.Empty(polled.GetFrontendResponse().GetRecords(), "the records did not follow the namespace")
+
+	// What the workflow itself sees, which is the part that matters to a user.
+	// Its cursor names a stream this cluster does not hold, so the task cannot
+	// be started and the failure is written into History with a cause an
+	// operator can read, rather than coming back from matching forever.
+	w.signal(ctx, 1)
+	await.Require(ctx, s.T(), func(t *await.T) {
+		// Each attempt is driven by a poll, because the failure happens when
+		// matching tries to start the task rather than when it is scheduled.
+		w.pollOnce(ctx, 1)
+		events := s.historyOn(ctx, 1, ns, w.execution)
+		var failed *historypb.HistoryEvent
+		for _, e := range events {
+			if e.GetWorkflowTaskFailedEventAttributes().GetCause() ==
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_STREAM_RANGE_UNAVAILABLE {
+				failed = e
+			}
+		}
+		require.NotNil(t, failed, "the first task on the new cluster has to fail with a cause")
+		require.Contains(t,
+			failed.GetWorkflowTaskFailedEventAttributes().GetFailure().GetMessage(),
+			"neither owns nor subscribed to externally")
+	}, replicationWaitTime, replicationCheckInterval)
 }

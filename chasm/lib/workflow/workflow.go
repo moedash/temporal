@@ -305,6 +305,13 @@ func (w *Workflow) ApplyConsumedStreamRanges(
 // are in the base run's stream, which is where replay re-reads them, and
 // everything from here on is this run's. Continuing the offset space is what
 // keeps a range in this run's History unambiguous about which run holds it.
+//
+// Two things the reset run does not get. Records the base run's stream held
+// but had not delivered, everything between the cursor and the base head, are
+// not carried and are invisible to it: the reset run starts past them. And the
+// ranges below the cursor stay in the base run's mutable state, so nothing
+// here pins that run. Once namespace retention deletes it, the reset run's
+// cold replay has nowhere to read those ranges from.
 func (w *Workflow) InheritStreamsOnReset(
 	mctx chasm.MutableContext,
 	base *Workflow,
