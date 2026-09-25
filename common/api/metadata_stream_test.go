@@ -29,9 +29,9 @@ var expectedStreamAccess = map[string]api.Access{
 	"RegisterStreamConsumer": api.AccessAdmin,
 	"AdvanceConsumerHead":    api.AccessAdmin,
 	"CloseStream":            api.AccessWrite,
-	"TruncateStream":         api.AccessWrite,
+	"TruncateStream":         api.AccessAdmin,
 	"ListStreams":            api.AccessReadOnly,
-	"DeleteStream":           api.AccessWrite,
+	"DeleteStream":           api.AccessAdmin,
 }
 
 func TestStreamServiceMetadata(t *testing.T) {

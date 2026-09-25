@@ -285,6 +285,14 @@ message RegisterStreamConsumerOutput {
   // The frontier at registration, so the cursor starts with a known head
   // instead of waiting for the first push.
   int64 known_head = 4;
+
+  // No execution in this namespace holds a stream with that id, so nothing
+  // was registered. An answer rather than a NotFound because the caller acts
+  // on it: a subscribe command falls back to a stream of the workflow's own by
+  // that name. Every other NotFound, from a registry miss to a shard that has
+  // moved, stays an error, since binding the workflow to different data on one
+  // of those would be silent and permanent.
+  bool stream_absent = 5;
 }
 
 // Telling one consumer that the frontier moved. Routed to the consumer, which

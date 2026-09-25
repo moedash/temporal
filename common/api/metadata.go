@@ -218,10 +218,14 @@ var (
 	}
 	// Every stream request carries its namespace inside `frontend_request`,
 	// exposed through a hand-written `GetNamespace()`, which is what namespace
-	// scope needs. Closing, truncating and deleting a stream are ordinary
-	// writes here; whether they should need an operator is a policy call this
-	// table does not make. The two internal calls History makes on itself are
-	// admin so that no namespace-level role can reach them through a frontend.
+	// scope needs.
+	//
+	// Truncating and deleting are admin, not write. Both destroy records that
+	// another workflow's History refers to, and the comparable operation on a
+	// workflow, DeleteWorkflowExecution, needs an operator for the same reason.
+	// Closing stays a write: it seals the stream and the records stay readable.
+	// The two internal calls History makes on itself are admin so that no
+	// namespace-level role can reach them through a frontend.
 	streamServiceMetadata = map[string]MethodMetadata{
 		"CreateStream":           namespaceWrite,
 		"AddMessages":            namespaceWrite,
@@ -235,9 +239,9 @@ var (
 		"RegisterStreamConsumer": namespaceAdmin,
 		"AdvanceConsumerHead":    namespaceAdmin,
 		"CloseStream":            namespaceWrite,
-		"TruncateStream":         namespaceWrite,
+		"TruncateStream":         namespaceAdmin,
 		"ListStreams":            namespaceRead,
-		"DeleteStream":           namespaceWrite,
+		"DeleteStream":           namespaceAdmin,
 	}
 
 	namespaceRead = MethodMetadata{

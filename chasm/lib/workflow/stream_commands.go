@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"errors"
+	"fmt"
 
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -94,14 +95,15 @@ func handleAppendStreamRecordsCommand(
 	result, err := s.AddMessages(chasmCtx, stream.AddMessagesRequest{
 		Records: toLibraryRecords(attrs.GetRecords()),
 		Limits:  limits,
+		// Every stream this execution owns shares one byte budget, because
+		// their per-stream budgets multiplied out come to more than the
+		// execution size limit, which terminates the workflow rather than
+		// refusing an append.
+		SiblingBytes: wf.siblingStreamBytes(chasmCtx, name),
 	})
 	if err != nil {
 		return StreamAdmissionFailure(badAttributes, err)
 	}
-	// Written even when a producer sequence deduplicated the append, because
-	// the command was still issued and the event is what the replaying worker
-	// matches it against. It names the original offsets, which is what a
-	// deduplicated append resolves to.
 	wf.RecordStreamRecordsAppended(
 		name, result.FirstOffset, result.Count, opts.WorkflowTaskCompletedEventID)
 	return nil
@@ -119,6 +121,7 @@ func handleSubscribeStreamCommand(
 	_ Validator,
 	command *commandpb.Command,
 	opts CommandHandlerOptions,
+	limits stream.Limits,
 ) error {
 	badAttributes := enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES
 	attrs := command.GetSubscribeStreamCommandAttributes()
@@ -139,6 +142,19 @@ func handleSubscribeStreamCommand(
 	// command-generated events in order, so a command that produces none puts
 	// that matching out of step, which is the whole reason this event exists.
 	_, already := wf.StreamCursors[streamID]
+
+	// Each new subscription costs a routed call on the completion path, made
+	// with this execution's lock held, and each delivery costs another on
+	// every task start. Bounded here, because nothing else bounds how many a
+	// workflow may hold or how many one task may carry.
+	if subscribed, known := wf.subscribedStreams(streamID); !known &&
+		subscribed >= limits.MaxSubscriptionsPerWorkflow {
+		return FailWorkflowTaskError{
+			Cause: badAttributes,
+			Message: fmt.Sprintf("workflow already subscribes to %d streams, the limit",
+				limits.MaxSubscriptionsPerWorkflow),
+		}
+	}
 
 	// Everything is staged, including a stream this workflow owns, so that the
 	// resolved start offset and the event recording it are produced in one
@@ -346,21 +362,16 @@ func (w *Workflow) streamNamed(
 //
 // The producer id is cleared rather than copied: an empty id is how a reader
 // tells the owning workflow's records from an outside producer's, and only this
-// path writes on the workflow's behalf. The kind is settled here as well as in
-// the store, because the store settles it in place and the command's records
-// belong to the worker's request.
+// path writes on the workflow's behalf. The kind is left as sent, since the
+// store settles an unspecified one on the copy it serializes.
 func toLibraryRecords(in []*streampb.StreamRecord) []*streamlib.StreamRecord {
 	out := make([]*streamlib.StreamRecord, len(in))
 	for i, m := range in {
-		kind := m.GetKind()
-		if kind == streampb.STREAM_RECORD_KIND_UNSPECIFIED {
-			kind = streampb.STREAM_RECORD_KIND_DATA
-		}
 		out[i] = &streamlib.StreamRecord{
 			Body:       m.GetBody(),
 			Metadata:   m.GetMetadata(),
 			Topic:      m.GetTopic(),
-			Kind:       kind,
+			Kind:       m.GetKind(),
 			ProducerId: "",
 			Attempt:    m.GetAttempt(),
 			Sequence:   m.GetSequence(),
@@ -387,13 +398,93 @@ func (l *streamLibrary) CommandHandlers() map[enumspb.CommandType]CommandHandler
 			command *commandpb.Command,
 			opts CommandHandlerOptions,
 		) error {
-			limits := l.config.LimitsFor(chasmCtx.NamespaceEntry().Name().String())
+			namespaceName := chasmCtx.NamespaceEntry().Name().String()
+			if err := l.checkEnabled(
+				namespaceName,
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_APPEND_STREAM_RECORDS_ATTRIBUTES,
+			); err != nil {
+				return err
+			}
+			limits := l.config.LimitsFor(namespaceName)
 			return handleAppendStreamRecordsCommand(chasmCtx, wf, validator, command, opts, limits)
 		},
-		enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM: handleSubscribeStreamCommand,
+		enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM: func(
+			chasmCtx chasm.MutableContext,
+			wf *Workflow,
+			validator Validator,
+			command *commandpb.Command,
+			opts CommandHandlerOptions,
+		) error {
+			namespaceName := chasmCtx.NamespaceEntry().Name().String()
+			if err := l.checkEnabled(
+				namespaceName,
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES,
+			); err != nil {
+				return err
+			}
+			limits := l.config.LimitsFor(namespaceName)
+			return handleSubscribeStreamCommand(chasmCtx, wf, validator, command, opts, limits)
+		},
+	}
+}
+
+// checkEnabled fails the workflow task when streams are off for the namespace.
+//
+// The command path does not go through the stream service, so the frontend
+// gate does not cover it. Failed with a cause rather than returned raw, so the
+// worker sees why instead of reissuing the same command until the task times
+// out.
+func (l *streamLibrary) checkEnabled(
+	namespaceName string,
+	cause enumspb.WorkflowTaskFailedCause,
+) error {
+	if l.config.EnabledFor(namespaceName) {
+		return nil
+	}
+	return FailWorkflowTaskError{
+		Cause:   cause,
+		Message: "streams are not enabled for namespace: " + namespaceName,
 	}
 }
 
 func (l *streamLibrary) EventDefinitions() []EventDefinition {
 	return []EventDefinition{streamSubscribedEvent{}, streamRecordsAppendedEvent{}}
+}
+
+// subscribedStreams counts the distinct streams this workflow consumes or is
+// about to, and says whether the given one is among them. Staged subscriptions
+// count: they are resolved before the commit, so a single task can otherwise
+// stage as many as it likes.
+func (w *Workflow) subscribedStreams(streamID string) (int, bool) {
+	seen := make(map[string]struct{}, len(w.StreamCursors)+len(w.pendingStreamSubscriptions))
+	for name := range w.StreamCursors {
+		seen[name] = struct{}{}
+	}
+	for _, pending := range w.pendingStreamSubscriptions {
+		seen[pending.StreamID] = struct{}{}
+	}
+	_, known := seen[streamID]
+	return len(seen), known
+}
+
+// siblingStreamBytes is what every other stream this workflow owns holds.
+//
+// The per-stream budget bounds one stream, and an outside writer can name as
+// many as MaxOwnedStreamsPerWorkflow allows. Their sum is what the execution
+// size limit sees, so the append has to be measured against the sum.
+//
+// Skipped for the common case of a single stream, where the sum is the stream
+// itself and reading the others would load state nothing else needs.
+func (w *Workflow) siblingStreamBytes(ctx chasm.Context, name string) int64 {
+	if len(w.Streams) < 2 {
+		return 0
+	}
+	var total int64
+	for other, field := range w.Streams {
+		if other == name {
+			continue
+		}
+		total += field.Get(ctx).State.GetAppendedBytes()
+	}
+	return total
 }

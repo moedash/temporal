@@ -52,6 +52,11 @@ type Workflow struct {
 	// Positions in streams the workflow consumes, keyed by stream name. Held
 	// here rather than on the stream so that folding in a delivered range
 	// commits with the event that records it.
+	//
+	// One keyspace holds both origins: a stream this workflow owns is keyed by
+	// its name, and one in another execution by its id. A subscription that
+	// would collide with the other origin under the same key is refused rather
+	// than silently handed the wrong cursor.
 	StreamCursors chasm.Map[string, *stream.Cursor]
 
 	// Subscribe commands whose stream is in another execution, so the addressing
@@ -118,9 +123,15 @@ func (w *Workflow) SubscribeToOwnedStream(
 		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
 	}
 	if existing, ok := w.StreamCursors[name]; ok {
+		cursor := existing.Get(mctx)
+		if cursor.IsExternal() {
+			return 0, serviceerror.NewFailedPreconditionf(
+				"this workflow already consumes a stream with id %q in another execution, so "+
+					"it cannot also consume a stream of its own by that name", name)
+		}
 		// Resubscribing must not rewind a cursor: ranges below it are already
 		// recorded in History, and moving back would replay them as new.
-		return existing.Get(mctx).Offset(), nil
+		return cursor.Offset(), nil
 	}
 
 	// Pin the stream's floor in the same transaction as the cursor. Registered
@@ -168,9 +179,18 @@ func (w *Workflow) SubscribeToExternalStream(
 		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
 	}
 	if existing, ok := w.StreamCursors[req.StreamID]; ok {
+		cursor := existing.Get(mctx)
+		// Refused rather than answered with the owned cursor. Handing that one
+		// back reports a subscription that never delivers, and the pin taken on
+		// the standalone stream is then held by nothing.
+		if !cursor.IsExternal() {
+			return 0, serviceerror.NewFailedPreconditionf(
+				"this workflow already owns a stream named %q, so it cannot also consume a "+
+					"stream with that id in another execution", req.StreamID)
+		}
 		// Resubscribing must not rewind: ranges below the cursor are already
 		// recorded in History, and moving back would replay them as new.
-		return existing.Get(mctx).Offset(), nil
+		return cursor.Offset(), nil
 	}
 
 	cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
@@ -193,6 +213,15 @@ func (w *Workflow) SubscribeToExternalStream(
 // workflow owns lives in this execution and does not survive the run
 // transition, so carrying a cursor for one would leave the successor pointing
 // at a stream it cannot reach.
+//
+// So a subscription to a stream the workflow owns ends at a continue-as-new.
+// The successor's stream of the same name is a new one starting at offset
+// zero, an outside producer addressing the workflow with no run id reaches
+// that one, and records written to the predecessor's stream between the
+// commit and the successor's re-subscribe are not carried. A workflow that
+// wants its own output to continue across runs has to republish; a stream in
+// another execution, which is what the offsets of a long-lived reader belong
+// to, does carry.
 func (w *Workflow) ExportStreamSubscriptions(ctx chasm.Context) []ExternalStreamSubscription {
 	var out []ExternalStreamSubscription
 	for _, field := range w.StreamCursors {
@@ -237,7 +266,11 @@ func (w *Workflow) ImportStreamSubscriptions(
 // workflow task, which is the same path an owned stream takes.
 func (w *Workflow) AdvanceKnownHead(mctx chasm.MutableContext, streamID string, head int64) error {
 	field, ok := w.StreamCursors[streamID]
-	if !ok {
+	// Only an external cursor takes a push. A cursor of the same key on a
+	// stream this workflow owns belongs to a different stream that happens to
+	// share the name, and moving its frontier would answer for data it is not
+	// reading.
+	if !ok || !field.Get(mctx).IsExternal() {
 		return serviceerror.NewNotFoundf("workflow does not consume stream %q", streamID)
 	}
 	field.Get(mctx).AdvanceKnownHead(mctx, head)
@@ -652,5 +685,6 @@ func (w *Workflow) AppendToOwnedStream(
 	if err != nil {
 		return stream.AddMessagesResult{}, err
 	}
+	req.SiblingBytes = w.siblingStreamBytes(mctx, name)
 	return s.AddMessages(mctx, req)
 }

@@ -35,7 +35,7 @@ func TestPublishedRecordsBelongToTheWorkflow(t *testing.T) {
 	require.Equal(t, int64(3), got[0].GetAttempt())
 	require.Equal(t, int64(9), got[0].GetSequence())
 
-	require.Equal(t, streampb.STREAM_RECORD_KIND_DATA, got[1].GetKind(),
-		"a record with no kind is data")
+	require.Equal(t, streampb.STREAM_RECORD_KIND_UNSPECIFIED, got[1].GetKind(),
+		"the kind is left as sent; the store settles it on the copy it serializes")
 	require.Empty(t, got[1].GetProducerId())
 }
