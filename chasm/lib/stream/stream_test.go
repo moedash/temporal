@@ -11,6 +11,7 @@ import (
 	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"go.temporal.io/server/common/payload"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -652,4 +653,62 @@ func TestNotifyCoalescesIntoOneOutstandingTask(t *testing.T) {
 	_, err = s.AddMessages(mctx, AddMessagesRequest{Records: msgs("c")})
 	require.NoError(t, err)
 	require.Len(t, mctx.Tasks, 2)
+}
+
+// The budget bounds what the stream holds, and offsets are global: a stream
+// whose floor has moved, or one that begins above zero, holds fewer records
+// than its head offset names. Measuring the head instead puts such a stream
+// over budget the moment it exists.
+func TestBudgetCountsHeldRecordsRatherThanTheHeadOffset(t *testing.T) {
+	s := newTestStream(t)
+	s.State.Budget = &streamlib.StreamBudget{MaxItems: 5}
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b", "c", "d", "e")})
+	require.NoError(t, err)
+
+	require.NoError(t, s.Truncate(nil, 5))
+	require.Equal(t, int64(5), s.State.BaseOffset)
+
+	_, err = s.AddMessages(nil, AddMessagesRequest{Records: msgs("f", "g", "h")})
+	require.NoError(t, err, "a truncated stream holds nothing and has its whole budget free")
+	require.Equal(t, int64(8), s.State.HeadOffset)
+
+	// Still bounded: three held plus three more is over the budget of five.
+	_, err = s.AddMessages(nil, AddMessagesRequest{Records: msgs("i", "j", "k")})
+	var exhausted *serviceerror.ResourceExhausted
+	require.ErrorAs(t, err, &exhausted)
+}
+
+// A close reason with no encoding metadata is not decodable by any SDK data
+// converter, so it would reach a reader as opaque bytes.
+func TestTerminateEncodesTheCloseReason(t *testing.T) {
+	mctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
+		HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+	}}
+	s := newTestStream(t)
+	_, err := s.Terminate(mctx, chasm.TerminateComponentRequest{Reason: "operator asked"})
+	require.NoError(t, err)
+
+	require.True(t, s.State.Closed)
+	var reason string
+	require.NoError(t, payload.Decode(s.State.GetCloseReason(), &reason))
+	require.Equal(t, "operator asked", reason)
+}
+
+// The records belong to the caller's request, which on the command path is the
+// worker's own proto. Settling the kind through them would edit it.
+func TestAddMessagesDoesNotSettleTheKindOnTheCallersRecords(t *testing.T) {
+	s := newTestStream(t)
+	caller := []*streamlib.StreamRecord{{Body: &commonpb.Payload{Data: []byte("a")}}}
+
+	_, err := s.AddMessages(nil, AddMessagesRequest{Records: caller})
+	require.NoError(t, err)
+	require.Equal(t, streampb.STREAM_RECORD_KIND_UNSPECIFIED, caller[0].GetKind())
+
+	blobs, starts, err := s.ReadBatches(nil, 0, 1, 0)
+	require.NoError(t, err)
+	collected, _, err := CollectRecords(blobs, starts, 0, 1, 10, nil)
+	require.NoError(t, err)
+	require.Equal(t, streampb.STREAM_RECORD_KIND_DATA, collected[0].GetKind(),
+		"the stored record still reads as data")
 }

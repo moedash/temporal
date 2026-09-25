@@ -2244,7 +2244,14 @@ type RegisterStreamConsumerOutput struct {
 	StartOffset int64                  `protobuf:"varint,1,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
 	// The frontier at registration, so the cursor starts with a known head
 	// instead of waiting for the first push.
-	KnownHead     int64 `protobuf:"varint,4,opt,name=known_head,json=knownHead,proto3" json:"known_head,omitempty"`
+	KnownHead int64 `protobuf:"varint,4,opt,name=known_head,json=knownHead,proto3" json:"known_head,omitempty"`
+	// No execution in this namespace holds a stream with that id, so nothing
+	// was registered. An answer rather than a NotFound because the caller acts
+	// on it: a subscribe command falls back to a stream of the workflow's own by
+	// that name. Every other NotFound, from a registry miss to a shard that has
+	// moved, stays an error, since binding the workflow to different data on one
+	// of those would be silent and permanent.
+	StreamAbsent  bool `protobuf:"varint,5,opt,name=stream_absent,json=streamAbsent,proto3" json:"stream_absent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2291,6 +2298,13 @@ func (x *RegisterStreamConsumerOutput) GetKnownHead() int64 {
 		return x.KnownHead
 	}
 	return 0
+}
+
+func (x *RegisterStreamConsumerOutput) GetStreamAbsent() bool {
+	if x != nil {
+		return x.StreamAbsent
+	}
+	return false
 }
 
 // Telling one consumer that the frontier moved. Routed to the consumer, which
@@ -3443,11 +3457,12 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x120\n" +
 	"\x14consumer_workflow_id\x18\x03 \x01(\tR\x12consumerWorkflowId\x12&\n" +
 	"\x0fconsumer_run_id\x18\x05 \x01(\tR\rconsumerRunId\x12!\n" +
-	"\fstart_offset\x18\x04 \x01(\x03R\vstartOffset\"l\n" +
+	"\fstart_offset\x18\x04 \x01(\x03R\vstartOffset\"\x91\x01\n" +
 	"\x1cRegisterStreamConsumerOutput\x12!\n" +
 	"\fstart_offset\x18\x01 \x01(\x03R\vstartOffset\x12\x1d\n" +
 	"\n" +
-	"known_head\x18\x04 \x01(\x03R\tknownHeadJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"\xb9\x01\n" +
+	"known_head\x18\x04 \x01(\x03R\tknownHead\x12#\n" +
+	"\rstream_absent\x18\x05 \x01(\bR\fstreamAbsentJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"\xb9\x01\n" +
 	"\x18AdvanceConsumerHeadInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +

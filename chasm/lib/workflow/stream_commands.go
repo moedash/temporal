@@ -397,3 +397,25 @@ func (l *streamLibrary) CommandHandlers() map[enumspb.CommandType]CommandHandler
 func (l *streamLibrary) EventDefinitions() []EventDefinition {
 	return []EventDefinition{streamSubscribedEvent{}, streamRecordsAppendedEvent{}}
 }
+
+// siblingStreamBytes is what every other stream this workflow owns holds.
+//
+// The per-stream budget bounds one stream, and an outside writer can name as
+// many as MaxOwnedStreamsPerWorkflow allows. Their sum is what the execution
+// size limit sees, so the append has to be measured against the sum.
+//
+// Skipped for the common case of a single stream, where the sum is the stream
+// itself and reading the others would load state nothing else needs.
+func (w *Workflow) siblingStreamBytes(ctx chasm.Context, name string) int64 {
+	if len(w.Streams) < 2 {
+		return 0
+	}
+	var total int64
+	for other, field := range w.Streams {
+		if other == name {
+			continue
+		}
+		total += field.Get(ctx).State.GetAppendedBytes()
+	}
+	return total
+}

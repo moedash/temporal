@@ -2,13 +2,17 @@ package service
 
 import (
 	"context"
+	"strings"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/searchattribute/sadefs"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -98,15 +102,65 @@ func RedirectableMethods() map[string]func() any {
 	}
 }
 
+// namespaceID resolves the namespace and refuses the call when streams are off
+// for it.
+//
+// Every RPC goes through here, so the gate covers the whole surface. It is off
+// by default: this registers a large new service on the public frontend, and
+// an operator needs a switch for it that is not a rollback.
 func (h *FrontendHandler) namespaceID(name string) (string, error) {
 	if name == "" {
 		return "", serviceerror.NewInvalidArgument("namespace is required")
+	}
+	if !h.config.EnabledFor(name) {
+		return "", serviceerror.NewUnimplementedf(
+			"streams are not enabled for namespace: %s", name)
 	}
 	id, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(name))
 	if err != nil {
 		return "", err
 	}
 	return id.String(), nil
+}
+
+// checkLifecycle settles the lifecycle a caller asked for.
+//
+// Retention left unset means the namespace's own workflow retention rather
+// than forever: a closed stream with no retention schedules no deletion task,
+// so its execution and its batches stay in the database for good. Everything
+// else in the system gets a retention bound from its namespace, and a stream
+// should not be the exception because the caller left a field empty.
+func (h *FrontendHandler) checkLifecycle(
+	namespaceName string,
+	lifecycle *streampb.StreamLifecycle,
+) (*streampb.StreamLifecycle, error) {
+	ns, err := h.namespaceRegistry.GetNamespace(namespace.Name(namespaceName))
+	if err != nil {
+		return nil, err
+	}
+	if lifecycle == nil {
+		lifecycle = &streampb.StreamLifecycle{}
+	}
+	lifecycle = common.CloneProto(lifecycle)
+
+	if lifecycle.GetMaxItems() < 0 {
+		return nil, serviceerror.NewInvalidArgumentf(
+			"max items cannot be negative, got %d", lifecycle.GetMaxItems())
+	}
+
+	retention := lifecycle.GetRetention().AsDuration()
+	switch {
+	case lifecycle.GetRetention() == nil:
+		retention = ns.Retention()
+	case retention <= 0:
+		return nil, serviceerror.NewInvalidArgumentf(
+			"retention must be positive, got %v", retention)
+	case retention > ns.Retention():
+		return nil, serviceerror.NewInvalidArgumentf(
+			"retention of %v is over the namespace's retention of %v", retention, ns.Retention())
+	}
+	lifecycle.Retention = durationpb.New(retention)
+	return lifecycle, nil
 }
 
 // checkID refuses an id or name longer than the namespace's id limit. Empty is
@@ -150,6 +204,11 @@ func (h *FrontendHandler) CreateStream(
 	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
 		return nil, err
 	}
+	lifecycle, err := h.checkLifecycle(in.GetNamespace(), in.GetLifecycle())
+	if err != nil {
+		return nil, err
+	}
+	in.Lifecycle = lifecycle
 	return h.client.CreateStream(ctx, &streampb.CreateStreamRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
@@ -166,6 +225,9 @@ func (h *FrontendHandler) AddMessages(
 	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
 		return nil, err
 	}
+	if err := h.checkID("producer id", in.GetProducerId()); err != nil {
+		return nil, err
+	}
 	return h.client.AddMessages(ctx, &streampb.AddMessagesRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
@@ -180,6 +242,9 @@ func (h *FrontendHandler) FinishWriting(
 		return nil, err
 	}
 	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
+		return nil, err
+	}
+	if err := h.checkID("producer id", in.GetProducerId()); err != nil {
 		return nil, err
 	}
 	return h.client.FinishWriting(ctx, &streampb.FinishWritingRequest{
@@ -199,6 +264,9 @@ func (h *FrontendHandler) SubscribeWorkflow(
 		return nil, err
 	}
 	if err := h.checkID("stream name", in.GetStreamName()); err != nil {
+		return nil, err
+	}
+	if err := h.checkID("workflow id", in.GetWorkflowId()); err != nil {
 		return nil, err
 	}
 	return h.client.SubscribeWorkflow(ctx, &streampb.SubscribeWorkflowRequest{
@@ -240,6 +308,9 @@ func (h *FrontendHandler) PollWorkflowMessages(
 	if err := checkOffset("from offset", in.GetFromOffset()); err != nil {
 		return nil, err
 	}
+	if err := h.checkID("workflow id", in.GetWorkflowId()); err != nil {
+		return nil, err
+	}
 	in.MaxMessages = clampMaxMessages(in.GetMaxMessages())
 	return h.client.PollWorkflowMessages(ctx, &streampb.PollWorkflowMessagesRequest{
 		NamespaceId: id, FrontendRequest: in,
@@ -257,6 +328,9 @@ func (h *FrontendHandler) DescribeWorkflowStream(
 	if err := h.checkID("stream name", in.GetStreamName()); err != nil {
 		return nil, err
 	}
+	if err := h.checkID("workflow id", in.GetWorkflowId()); err != nil {
+		return nil, err
+	}
 	return h.client.DescribeWorkflowStream(ctx, &streampb.DescribeWorkflowStreamRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
@@ -271,6 +345,12 @@ func (h *FrontendHandler) AddWorkflowMessages(
 		return nil, err
 	}
 	if err := h.checkID("stream name", in.GetStreamName()); err != nil {
+		return nil, err
+	}
+	if err := h.checkID("workflow id", in.GetWorkflowId()); err != nil {
+		return nil, err
+	}
+	if err := h.checkID("producer id", in.GetProducerId()); err != nil {
 		return nil, err
 	}
 	return h.client.AddWorkflowMessages(ctx, &streampb.AddWorkflowMessagesRequest{
@@ -351,8 +431,17 @@ func (h *FrontendHandler) ListStreams(
 	ctx context.Context, req *streampb.ListStreamsRequest,
 ) (*streampb.ListStreamsResponse, error) {
 	in := req.GetFrontendRequest()
-	if in.GetNamespace() == "" {
-		return nil, serviceerror.NewInvalidArgument("namespace is required")
+	if _, err := h.namespaceID(in.GetNamespace()); err != nil {
+		return nil, err
+	}
+	// The archetype is a predicate the caller's query can replace rather than
+	// one it is anded with, so a query naming the division would list any
+	// archetype in the namespace, workflows included, through a stream-scoped
+	// read-only RPC.
+	if strings.Contains(
+		strings.ToLower(in.GetQuery()), strings.ToLower(sadefs.TemporalNamespaceDivision)) {
+		return nil, serviceerror.NewInvalidArgumentf(
+			"a stream query cannot filter on %s", sadefs.TemporalNamespaceDivision)
 	}
 
 	pageSize := int(in.GetPageSize())

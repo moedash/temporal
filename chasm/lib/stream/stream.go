@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/chasm"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/payload"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -63,6 +64,11 @@ type AddMessagesRequest struct {
 
 	// Optional idempotency. A producer supplies either an identity and
 	// sequence, or an expected offset, or neither and accepts at-least-once.
+	//
+	// The dedup table keeps one entry per producer id, so a producer may have
+	// one append in flight at a time: sequences have to arrive in order, and a
+	// retry of an earlier sequence after a later one committed is refused.
+	// Pipelining needs a distinct producer id per lane.
 	ProducerID     string
 	Sequence       int64
 	ExpectedOffset *int64
@@ -70,6 +76,11 @@ type AddMessagesRequest struct {
 	// The namespace's limits, resolved by the caller. A zero value means the
 	// defaults.
 	Limits Limits
+
+	// What the other streams of the same owner already hold, so the per-owner
+	// aggregate can be checked here alongside this stream's own budget. Zero
+	// for a standalone stream, which has no siblings.
+	SiblingBytes int64
 }
 
 type AddMessagesResult struct {
@@ -116,8 +127,11 @@ func (s *Stream) Terminate(
 	mctx chasm.MutableContext,
 	req chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
-	reason := &commonpb.Payload{Data: []byte(req.Reason)}
-	return chasm.TerminateComponentResponse{}, s.CloseAndSchedule(mctx, reason)
+	// Encoded rather than wrapped raw: a payload without encoding metadata is
+	// not decodable by any SDK data converter, so the reason would reach a
+	// reader as opaque bytes.
+	return chasm.TerminateComponentResponse{},
+		s.CloseAndSchedule(mctx, payload.EncodeString(req.Reason))
 }
 
 // Snapshot returns a copy of the frontier for read paths. It is a copy because
@@ -154,17 +168,7 @@ func (s *Stream) AddMessages(
 	if err := checkBatchBytes(req.Records, limits); err != nil {
 		return AddMessagesResult{}, err
 	}
-	// A record with no kind is data. A producer that never heard of kinds
-	// leaves the field at its zero value, and every reader would otherwise have
-	// to agree on what that means. Settled before the batch is marshalled, so a
-	// retry hashes the same bytes.
-	for _, m := range req.Records {
-		if m.GetKind() == streampb.STREAM_RECORD_KIND_UNSPECIFIED {
-			m.Kind = streampb.STREAM_RECORD_KIND_DATA
-		}
-	}
-
-	blob, err := marshalBatch(req.Records)
+	blob, err := marshalBatch(settleKinds(req.Records))
 	if err != nil {
 		return AddMessagesResult{}, err
 	}
@@ -181,7 +185,8 @@ func (s *Stream) AddMessages(
 	if err := s.checkProducerRoom(req.ProducerID, limits.MaxProducersPerStream); err != nil {
 		return AddMessagesResult{}, err
 	}
-	if err := s.checkBudget(int64(len(req.Records)), int64(len(blob.Data))); err != nil {
+	if err := s.checkBudget(
+		limits, req.SiblingBytes, int64(len(req.Records)), int64(len(blob.Data))); err != nil {
 		return AddMessagesResult{}, err
 	}
 
@@ -297,22 +302,40 @@ func (s *Stream) checkProducerRoom(producerID string, maxProducers int) error {
 	return nil
 }
 
+// held is how many records the stream still has. Offsets are global and a
+// stream can begin above zero, so the head alone is a position rather than an
+// amount.
+func (s *Stream) held() int64 {
+	return s.State.HeadOffset - s.State.BaseOffset
+}
+
 // checkBudget refuses an append a budgeted stream cannot hold.
 //
 // Refused rather than reclaimed: the budget exists because the batches are
 // mutable state of the execution that owns the stream, and the alternative to
 // refusing here is the execution size limit terminating that workflow later,
 // with nothing naming the stream as the cause.
-func (s *Stream) checkBudget(count int64, size int64) error {
+func (s *Stream) checkBudget(limits Limits, siblingBytes, count, size int64) error {
 	budget := s.State.GetBudget()
 	if budget == nil {
 		return nil
 	}
-	if limit := budget.GetMaxItems(); limit > 0 && s.State.HeadOffset+count > limit {
+	// The per-stream budget bounds one stream, and one execution can own many.
+	// Multiplied out they come to far more than the execution size limit, so
+	// the aggregate is what keeps that limit from terminating the workflow.
+	if limit := int64(limits.OwnedStreamsMaxBytesPerWorkflow); limit > 0 &&
+		siblingBytes+s.State.AppendedBytes+size > limit {
+		return serviceerror.NewResourceExhaustedf(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT,
+			"the workflow's streams hold %d of their shared budget of %d bytes; the append "+
+				"of %d does not fit",
+			siblingBytes+s.State.AppendedBytes, limit, size)
+	}
+	if limit := budget.GetMaxItems(); limit > 0 && s.held()+count > limit {
 		return serviceerror.NewResourceExhaustedf(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT,
 			"stream holds %d of its budget of %d records; the append of %d does not fit",
-			s.State.HeadOffset, limit, count)
+			s.held(), limit, count)
 	}
 	if limit := budget.GetMaxBytes(); limit > 0 && s.State.AppendedBytes+size > limit {
 		return serviceerror.NewResourceExhaustedf(
@@ -342,7 +365,9 @@ func (s *Stream) checkProducer(req AddMessagesRequest, hash []byte) (*AddMessage
 	}
 	if req.Sequence < cursor.Seq {
 		return nil, serviceerror.NewInvalidArgumentf(
-			"stale producer sequence %d, last accepted is %d", req.Sequence, cursor.Seq)
+			"stale producer sequence %d, last accepted for producer %q is %d; a producer id "+
+				"carries one append at a time, so use a separate id per concurrent lane",
+			req.Sequence, req.ProducerID, cursor.Seq)
 	}
 	// Same sequence. Identical content is a retry; different content is a
 	// client bug, and returning the recorded offsets would report success while
@@ -616,6 +641,14 @@ func (s *Stream) applyCap() {
 // The refusal only arrives when honouring the cap and honouring a recorded
 // consumption are the same records, and it names the consumer so the operator
 // knows what to do about it.
+//
+// The floor is the subscription's start and does not move while the consumer
+// is active, because replay re-reads every range the consumer's History
+// recorded, back to that start. So on a stream with a subscriber the cap is a
+// lifetime quota rather than a rolling window, and a consumer that has read
+// everything still holds the writers. Deregistering the consumer releases it.
+// The two promises cannot both hold, and the one kept is that a workflow can
+// always replay a decision it already made.
 func (s *Stream) checkCapRoom(count int64) error {
 	maxItems := s.State.GetLifecycle().GetMaxItems()
 	if maxItems <= 0 {
@@ -739,11 +772,38 @@ func (s *Stream) DeregisterConsumer(_ chasm.MutableContext, consumerID string) {
 	}
 }
 
-// ForgetConsumer drops a consumer whose run is closed. A closed run never
-// replays and never comes back, so unlike a deregistration there is nothing
-// left to refuse later.
+// ForgetConsumer drops a consumer whose run is closed, releasing its floor.
+//
+// A closed run never takes another workflow task, so nothing will ask for a
+// range it has not already been given. It can still be replayed: a query
+// against a completed consumer runs on a worker that may never have seen it,
+// and a reset can branch from it. Neither is served once truncation has taken
+// the bytes, so both are refused with the offset the stream now starts at
+// rather than answered with a hole.
 func (s *Stream) ForgetConsumer(_ chasm.MutableContext, consumerID string) {
 	delete(s.State.Consumers, consumerID)
+}
+
+// settleKinds returns the batch with every unspecified kind read as data. A
+// producer that never heard of kinds leaves the field at its zero value, and
+// every reader would otherwise have to agree on what that means.
+//
+// The records belong to the caller's request, which on the command path is the
+// worker's own proto, so a record that needs settling is copied rather than
+// written through. Settled before the batch is marshalled, so a retry hashes
+// the same bytes.
+func settleKinds(records []*streamlib.StreamRecord) []*streamlib.StreamRecord {
+	out := make([]*streamlib.StreamRecord, len(records))
+	for i, m := range records {
+		if m.GetKind() != streampb.STREAM_RECORD_KIND_UNSPECIFIED {
+			out[i] = m
+			continue
+		}
+		settled := common.CloneProto(m)
+		settled.Kind = streampb.STREAM_RECORD_KIND_DATA
+		out[i] = settled
+	}
+	return out
 }
 
 func marshalBatch(records []*streamlib.StreamRecord) (*commonpb.DataBlob, error) {
