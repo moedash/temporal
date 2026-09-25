@@ -98,8 +98,8 @@ func TestStreamWorkflowPublishesWithARangeEvent(t *testing.T) {
 		}
 	}
 	require.Len(t, added, 1, "one publish command writes one event")
-	require.Equal(t, int64(0), added[0].GetFirstOffset())
-	require.Equal(t, int64(2), added[0].GetRecordCount())
+	require.Equal(t, int64(0), added[0].GetFromOffset())
+	require.Equal(t, int64(2), added[0].GetToOffset())
 	require.Equal(t, chasmworkflow.DefaultStreamName, added[0].GetStreamId(),
 		"an unnamed stream resolves to the default before it is recorded")
 
@@ -342,7 +342,7 @@ func TestStreamWorkflowTakesAppendsFromOutsideToo(t *testing.T) {
 		}
 	}
 	require.Len(t, added, 1)
-	require.Equal(t, int64(1), added[0].GetFirstOffset())
+	require.Equal(t, int64(1), added[0].GetFromOffset())
 }
 
 // A reader tailing a workflow that ends has to be released. Nothing can be

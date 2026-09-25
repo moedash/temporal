@@ -22,8 +22,8 @@ func TestApiForkCarriesStreamShapes(t *testing.T) {
 		CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
 		Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
 			AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
-				StreamId: "s1",
-				Records:  []*streampb.StreamRecord{{Topic: "tokens"}},
+				StreamName: "s1",
+				Records:    []*streampb.StreamRecord{{Topic: "tokens"}},
 			},
 		},
 	}
@@ -31,7 +31,7 @@ func TestApiForkCarriesStreamShapes(t *testing.T) {
 	require.NoError(t, err)
 	var back commandpb.Command
 	require.NoError(t, proto.Unmarshal(b, &back))
-	require.Equal(t, "s1", back.GetAppendStreamRecordsCommandAttributes().GetStreamId())
+	require.Equal(t, "s1", back.GetAppendStreamRecordsCommandAttributes().GetStreamName())
 	require.Equal(t, "tokens",
 		back.GetAppendStreamRecordsCommandAttributes().GetRecords()[0].GetTopic())
 
