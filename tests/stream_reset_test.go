@@ -354,7 +354,7 @@ func TestResetOfAPublisherRestartsItsStreamAtZero(t *testing.T) {
 	var appendedOffsets []int64
 	for _, e := range baseEvents {
 		if attrs := e.GetWorkflowStreamRecordsAppendedEventAttributes(); attrs != nil {
-			appendedOffsets = append(appendedOffsets, attrs.GetFirstOffset())
+			appendedOffsets = append(appendedOffsets, attrs.GetFromOffset())
 		}
 	}
 	require.Equal(t, []int64{0, 2}, appendedOffsets)
@@ -386,7 +386,7 @@ func TestResetOfAPublisherRestartsItsStreamAtZero(t *testing.T) {
 	var resetOffsets []int64
 	for _, e := range resetEvents {
 		if attrs := e.GetWorkflowStreamRecordsAppendedEventAttributes(); attrs != nil {
-			resetOffsets = append(resetOffsets, attrs.GetFirstOffset())
+			resetOffsets = append(resetOffsets, attrs.GetFromOffset())
 		}
 	}
 	require.Equal(t, []int64{0, 0}, resetOffsets,
