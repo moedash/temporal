@@ -53,7 +53,6 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/deleteexecution"
@@ -64,6 +63,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -244,6 +244,18 @@ func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservi
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
+	}
+	if componentRefBytes := request.GetComponentRef(); len(componentRefBytes) > 0 {
+		isValid, err := chasm.ReadComponent(
+			ctx,
+			componentRefBytes,
+			(*activity.Activity).IsDispatchTaskValid,
+			request.GetStamp(),
+		)
+		if err != nil {
+			return nil, h.convertError(err)
+		}
+		return &historyservice.IsActivityTaskValidResponse{IsValid: isValid}, nil
 	}
 	workflowID := request.Execution.WorkflowId
 
@@ -2643,7 +2655,7 @@ func (h *Handler) StartNexusOperation(
 				payload.Metadata = make(map[string][]byte, 1)
 			}
 
-			// Responses from the System Nexus Endpoint have to be protobufs.
+			// For now, we require all responess from the System Nexus Endpoint be protobufs.
 			encoding := string(payload.Metadata["encoding"])
 			if encoding != "binary/protobuf" {
 				return nil, serviceerror.NewFailedPreconditionf("system payload must be encoded as binary/protobuf but got %s", encoding)
