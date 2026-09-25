@@ -15,8 +15,8 @@ message StreamRecord {
   // Producer-supplied provenance, stored as sent.
   map<string, temporal.api.common.v1.Payload> metadata = 2;
   string topic = 3;
-  // The producer's position within its attempt, or -1 when unnumbered. Stored
-  // as sent; the global offset is what orders the stream.
+  // The producer's position within its attempt, zero when it does not number
+  // its records. Stored as sent; the global offset is what orders the stream.
   int64 sequence = 4;
   // Settled to DATA on append when left unspecified, so a retry hashes the
   // same bytes and a reader never sees the zero value.
