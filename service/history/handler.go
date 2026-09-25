@@ -880,33 +880,6 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 	return resp, nil
 }
 
-// GetStreamReplaySlices re-supplies the stream ranges a workflow's completed tasks recorded.
-func (h *Handler) GetStreamReplaySlices(
-	ctx context.Context,
-	request *historyservice.GetStreamReplaySlicesRequest,
-) (*historyservice.GetStreamReplaySlicesResponse, error) {
-	namespaceID := namespace.ID(request.GetNamespaceId())
-	if namespaceID == "" {
-		return nil, h.convertError(errNamespaceNotSet)
-	}
-
-	workflowID := request.GetExecution().GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
-	resp, err := engine.GetStreamReplaySlices(ctx, request)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-	return resp, nil
-}
-
 // PollMutableState - returns the id of the next event in the execution's history
 func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.PollMutableStateRequest) (*historyservice.PollMutableStateResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
