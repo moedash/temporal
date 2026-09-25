@@ -2,7 +2,6 @@ package respondworkflowtaskcompleted
 
 import (
 	"context"
-	"errors"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -32,11 +31,11 @@ import (
 // any shard this host does not own, so a stream living elsewhere in the
 // cluster can only be reached by going back out through the service.
 //
-// A refusal, such as a stream that does not exist or an offset below its floor,
-// comes back as a workflow task failure so the worker sees a cause rather than
-// retrying the same command. A pin already taken for an earlier subscription
-// in the same task stays on its stream; the notify task releases it when it
-// finds this workflow does not consume that stream.
+// A refusal, such as an offset below the stream's floor, comes back as a
+// workflow task failure so the worker sees a cause rather than retrying the
+// same command. A pin already taken for an earlier subscription in the same
+// task stays on its stream; the notify task releases it when it finds this
+// workflow does not consume that stream.
 func resolveStagedStreamSubscriptions(
 	ctx context.Context,
 	ms historyi.MutableState,
@@ -83,15 +82,21 @@ func resolveStagedStreamSubscriptions(
 
 		pin, err := registerExternalConsumer(ctx, ms, namespaceID, pending)
 		if err != nil {
-			var notFound *serviceerror.NotFound
-			if !errors.As(err, &notFound) {
-				return chasmworkflow.StreamAdmissionFailure(
-					enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
-			}
-			// No execution holds a stream by this id, so the name is one of this
-			// workflow's own that nothing has written to yet. A reader has to be
-			// able to subscribe before the first record arrives, so the stream
-			// is created here and the subscription lands on it.
+			return chasmworkflow.StreamAdmissionFailure(
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
+		}
+		if pin.GetStreamAbsent() {
+			// The stream's own shard says no execution holds a stream by this
+			// id, so the name is one of this workflow's own that nothing has
+			// written to yet. A reader has to be able to subscribe before the
+			// first record arrives, so the stream is created here and the
+			// subscription lands on it.
+			//
+			// This is an answer and not a NotFound on purpose. A NotFound can
+			// also come from a registry miss or a shard that has moved, and
+			// treating one of those as "create a stream of your own" would bind
+			// the workflow to different, empty data with a History event that
+			// looks exactly like the intended subscription.
 			startOffset, err := wf.SubscribeToOwnedStream(
 				chasmCtx, pending.StreamID, pending.StartOffset, limits)
 			if err != nil {
@@ -107,7 +112,11 @@ func resolveStagedStreamSubscriptions(
 			StartOffset: pin.GetStartOffset(),
 			KnownHead:   pin.GetKnownHead(),
 		}); err != nil {
-			return err
+			// Failed like every other refusal in this loop: with a cause on the
+			// workflow task, rather than failing the completion call and
+			// leaving the worker to reissue the same command.
+			return chasmworkflow.StreamAdmissionFailure(
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
 		}
 
 		// Completed after the cursor exists. The event was written where the

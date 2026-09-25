@@ -212,6 +212,15 @@ func (w *Workflow) SubscribeToExternalStream(
 // workflow owns lives in this execution and does not survive the run
 // transition, so carrying a cursor for one would leave the successor pointing
 // at a stream it cannot reach.
+//
+// So a subscription to a stream the workflow owns ends at a continue-as-new.
+// The successor's stream of the same name is a new one starting at offset
+// zero, an outside producer addressing the workflow with no run id reaches
+// that one, and records written to the predecessor's stream between the
+// commit and the successor's re-subscribe are not carried. A workflow that
+// wants its own output to continue across runs has to republish; a stream in
+// another execution, which is what the offsets of a long-lived reader belong
+// to, does carry.
 func (w *Workflow) ExportStreamSubscriptions(ctx chasm.Context) []ExternalStreamSubscription {
 	var out []ExternalStreamSubscription
 	for _, field := range w.StreamCursors {

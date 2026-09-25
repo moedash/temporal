@@ -96,6 +96,12 @@ const (
 	// that the byte budget alone does not see.
 	OwnedStreamMaxItems = 10_000
 
+	// MaxSubscriptionsPerWorkflow bounds how many streams one execution
+	// consumes. Each subscription costs a routed call on the completion path
+	// that made it and another on every task start, both with the execution's
+	// lock held, so the count is what bounds the lock hold.
+	MaxSubscriptionsPerWorkflow = 100
+
 	// OwnedStreamsMaxBytesPerWorkflow bounds every stream one execution owns
 	// taken together. The per-stream budget multiplied by the stream count
 	// comes to far more than limit.mutableStateSize.error, so without this an
@@ -163,6 +169,11 @@ under limit.mutableStateSize.error, which would otherwise terminate the workflow
 		OwnedStreamMaxItems,
 		`Message budget of a stream a workflow owns. Appends past it are refused.`,
 	)
+	MaxSubscriptionsPerWorkflowSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.maxSubscriptionsPerWorkflow",
+		MaxSubscriptionsPerWorkflow,
+		`Most streams one workflow execution can consume.`,
+	)
 	OwnedStreamsMaxBytesPerWorkflowSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.ownedStreamsMaxBytesPerWorkflow",
 		OwnedStreamsMaxBytesPerWorkflow,
@@ -197,6 +208,7 @@ type Config struct {
 	// Bounds every stream one execution owns taken together, which the
 	// per-stream budget cannot do.
 	OwnedStreamsMaxBytesPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxSubscriptionsPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func NewConfig(dc *dynamicconfig.Collection) *Config {
@@ -215,6 +227,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		OwnedStreamMaxItems:        OwnedStreamMaxItemsSetting.Get(dc),
 
 		OwnedStreamsMaxBytesPerWorkflow: OwnedStreamsMaxBytesPerWorkflowSetting.Get(dc),
+		MaxSubscriptionsPerWorkflow:     MaxSubscriptionsPerWorkflowSetting.Get(dc),
 	}
 }
 
@@ -232,6 +245,7 @@ type Limits struct {
 	OwnedStreamMaxItems        int
 
 	OwnedStreamsMaxBytesPerWorkflow int
+	MaxSubscriptionsPerWorkflow     int
 }
 
 // LimitsFor resolves the limits for a namespace. A nil Config, which is what
@@ -252,6 +266,7 @@ func (c *Config) LimitsFor(namespaceName string) Limits {
 		OwnedStreamMaxItems:        c.OwnedStreamMaxItems(namespaceName),
 
 		OwnedStreamsMaxBytesPerWorkflow: c.OwnedStreamsMaxBytesPerWorkflow(namespaceName),
+		MaxSubscriptionsPerWorkflow:     c.MaxSubscriptionsPerWorkflow(namespaceName),
 	}.withDefaults()
 }
 
@@ -296,5 +311,6 @@ func (l Limits) withDefaults() Limits {
 	fill(&l.OwnedStreamMaxBytes, OwnedStreamMaxBytes)
 	fill(&l.OwnedStreamMaxItems, OwnedStreamMaxItems)
 	fill(&l.OwnedStreamsMaxBytesPerWorkflow, OwnedStreamsMaxBytesPerWorkflow)
+	fill(&l.MaxSubscriptionsPerWorkflow, MaxSubscriptionsPerWorkflow)
 	return l
 }
