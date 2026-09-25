@@ -342,8 +342,7 @@ func (h *notifyConsumersTaskHandler) Discard(
 ) error {
 	ctx, _ = backgroundCallerContext(ctx, h.namespaceRegistry, ref.NamespaceID)
 	_, _, err := chasm.UpdateComponent(ctx, ref, (*stream.Stream).TakeNotifySnapshot, struct{}{})
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil
 	}
 	return err
