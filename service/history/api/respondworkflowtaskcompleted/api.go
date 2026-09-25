@@ -833,6 +833,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
 		resp.StartedResponse.StickyExecutionEnabled = true
 
+		// The poll path delivers from its own handler, so this one has to ask
+		// as well or a subscribed workflow gets an inline task with no data.
+		resp.StartedResponse.StreamSlices, err = recordworkflowtaskstarted.DeliverStreamSlices(
+			ctx, handler.shardContext, ms)
+		if err != nil {
+			return nil, err
+		}
+
 		resp.NewWorkflowTask, err = handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.StartedResponse)
 		if err != nil {
 			return nil, err
@@ -1005,6 +1013,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		StartedTime:                matchingResp.StartedTime,
 		Queries:                    matchingResp.Queries,
 		Messages:                   matchingResp.Messages,
+		StreamSlices:               matchingResp.StreamSlices,
 	}
 
 	return resp, nil

@@ -23,6 +23,7 @@ const (
 	HistoryService_StartWorkflowExecution_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/StartWorkflowExecution"
 	HistoryService_GetMutableState_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/GetMutableState"
 	HistoryService_PollMutableState_FullMethodName                       = "/temporal.server.api.historyservice.v1.HistoryService/PollMutableState"
+	HistoryService_GetStreamReplaySlices_FullMethodName                  = "/temporal.server.api.historyservice.v1.HistoryService/GetStreamReplaySlices"
 	HistoryService_ResetStickyTaskQueue_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/ResetStickyTaskQueue"
 	HistoryService_RecordWorkflowTaskStarted_FullMethodName              = "/temporal.server.api.historyservice.v1.HistoryService/RecordWorkflowTaskStarted"
 	HistoryService_RecordActivityTaskStarted_FullMethodName              = "/temporal.server.api.historyservice.v1.HistoryService/RecordActivityTaskStarted"
@@ -117,6 +118,10 @@ type HistoryServiceClient interface {
 	// It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
 	// It returns CurrentBranchChangedError if the workflow version branch has changed.
 	PollMutableState(ctx context.Context, in *PollMutableStateRequest, opts ...grpc.CallOption) (*PollMutableStateResponse, error)
+	// Returns the stream ranges the workflow's completed tasks recorded, re-read
+	// from their streams and tagged with the event that recorded each, so a task
+	// built without RecordWorkflowTaskStarted can still replay a consumer.
+	GetStreamReplaySlices(ctx context.Context, in *GetStreamReplaySlicesRequest, opts ...grpc.CallOption) (*GetStreamReplaySlicesResponse, error)
 	// Reset the sticky task queue related information in mutable state of a given workflow.
 	// Things cleared are:
 	// 1. StickyTaskQueue
@@ -422,6 +427,15 @@ func (c *historyServiceClient) GetMutableState(ctx context.Context, in *GetMutab
 func (c *historyServiceClient) PollMutableState(ctx context.Context, in *PollMutableStateRequest, opts ...grpc.CallOption) (*PollMutableStateResponse, error) {
 	out := new(PollMutableStateResponse)
 	err := c.cc.Invoke(ctx, HistoryService_PollMutableState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) GetStreamReplaySlices(ctx context.Context, in *GetStreamReplaySlicesRequest, opts ...grpc.CallOption) (*GetStreamReplaySlicesResponse, error) {
+	out := new(GetStreamReplaySlicesResponse)
+	err := c.cc.Invoke(ctx, HistoryService_GetStreamReplaySlices_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1142,6 +1156,10 @@ type HistoryServiceServer interface {
 	// It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
 	// It returns CurrentBranchChangedError if the workflow version branch has changed.
 	PollMutableState(context.Context, *PollMutableStateRequest) (*PollMutableStateResponse, error)
+	// Returns the stream ranges the workflow's completed tasks recorded, re-read
+	// from their streams and tagged with the event that recorded each, so a task
+	// built without RecordWorkflowTaskStarted can still replay a consumer.
+	GetStreamReplaySlices(context.Context, *GetStreamReplaySlicesRequest) (*GetStreamReplaySlicesResponse, error)
 	// Reset the sticky task queue related information in mutable state of a given workflow.
 	// Things cleared are:
 	// 1. StickyTaskQueue
@@ -1432,6 +1450,9 @@ func (UnimplementedHistoryServiceServer) GetMutableState(context.Context, *GetMu
 func (UnimplementedHistoryServiceServer) PollMutableState(context.Context, *PollMutableStateRequest) (*PollMutableStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PollMutableState not implemented")
 }
+func (UnimplementedHistoryServiceServer) GetStreamReplaySlices(context.Context, *GetStreamReplaySlicesRequest) (*GetStreamReplaySlicesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetStreamReplaySlices not implemented")
+}
 func (UnimplementedHistoryServiceServer) ResetStickyTaskQueue(context.Context, *ResetStickyTaskQueueRequest) (*ResetStickyTaskQueueResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetStickyTaskQueue not implemented")
 }
@@ -1720,6 +1741,24 @@ func _HistoryService_PollMutableState_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HistoryServiceServer).PollMutableState(ctx, req.(*PollMutableStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_GetStreamReplaySlices_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStreamReplaySlicesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).GetStreamReplaySlices(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_GetStreamReplaySlices_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).GetStreamReplaySlices(ctx, req.(*GetStreamReplaySlicesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3100,6 +3139,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PollMutableState",
 			Handler:    _HistoryService_PollMutableState_Handler,
+		},
+		{
+			MethodName: "GetStreamReplaySlices",
+			Handler:    _HistoryService_GetStreamReplaySlices_Handler,
 		},
 		{
 			MethodName: "ResetStickyTaskQueue",
