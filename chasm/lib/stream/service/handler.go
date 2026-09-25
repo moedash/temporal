@@ -479,8 +479,7 @@ func (h *handler) probeConsumer(
 			}
 			return p, nil
 		}, struct{}{})
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return consumerProbe{runID: runID, closed: true}, nil
 	}
 	return probe, err
@@ -897,8 +896,7 @@ func (h *handler) TruncateStream(
 	ref := refFor(req.GetNamespaceId(), in.GetStreamId())
 
 	err := h.truncate(ctx, ref, in.GetNewBaseOffset())
-	var pinned *serviceerror.FailedPrecondition
-	if errors.As(err, &pinned) {
+	if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
 		state, readErr := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
 		if readErr != nil {
 			return nil, err
