@@ -49,7 +49,10 @@ type StreamState struct {
 	// the execution size limit, which terminates the workflow.
 	Budget *StreamBudget `protobuf:"bytes,14,opt,name=budget,proto3" json:"budget,omitempty"`
 	// Bytes appended over the stream's life, kept for the budget check. A stream
-	// with a budget never reclaims, so this is also what it holds.
+	// with a budget carries no lifecycle cap and is never truncated, so nothing
+	// reclaims behind it and this is also what it holds. The item side of the
+	// budget measures head minus base for the same reason: offsets are global
+	// and a stream can begin above zero.
 	AppendedBytes int64 `protobuf:"varint,15,opt,name=appended_bytes,json=appendedBytes,proto3" json:"appended_bytes,omitempty"`
 	// A notify task is scheduled and has not run yet. Appends while it is set
 	// schedule none of their own; the task reads the head when it runs, so it
@@ -527,6 +530,12 @@ type StreamLifecycle struct {
 	Retention *durationpb.Duration `protobuf:"bytes,1,opt,name=retention,proto3" json:"retention,omitempty"`
 	// Cap on readable messages. Whole batches are reclaimed once the floor
 	// passes them, so a capped stream has bounded storage.
+	//
+	// While a workflow consumer is registered the cap stops being a rolling
+	// window: the consumer's floor sits at the offset it subscribed from,
+	// because replay re-reads every range its History recorded, so the cap
+	// behaves as a lifetime quota measured from that subscription and appends
+	// past it are refused rather than reclaiming behind the consumer.
 	MaxItems      int64 `protobuf:"varint,2,opt,name=max_items,json=maxItems,proto3" json:"max_items,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

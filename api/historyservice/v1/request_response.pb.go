@@ -676,8 +676,13 @@ type GetMutableStateResponse struct {
 	// Transient or speculative workflow task events which are not yet persisted in the history.
 	// These events should be appended to the history when it is returned to the worker.
 	TransientOrSpeculativeTasks *v110.TransientWorkflowTaskInfo `protobuf:"bytes,26,opt,name=transient_or_speculative_tasks,json=transientOrSpeculativeTasks,proto3" json:"transient_or_speculative_tasks,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	// Whether this workflow holds a cursor into any stream. Matching builds a
+	// query task without RecordWorkflowTaskStarted, so it has to ask History for
+	// the ranges the history records, and almost no workflow has any. This says
+	// which ones do, so the extra call is only made for those.
+	ConsumesStreams bool `protobuf:"varint,27,opt,name=consumes_streams,json=consumesStreams,proto3" json:"consumes_streams,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetMutableStateResponse) Reset() {
@@ -855,6 +860,13 @@ func (x *GetMutableStateResponse) GetTransientOrSpeculativeTasks() *v110.Transie
 		return x.TransientOrSpeculativeTasks
 	}
 	return nil
+}
+
+func (x *GetMutableStateResponse) GetConsumesStreams() bool {
+	if x != nil {
+		return x.ConsumesStreams
+	}
+	return false
 }
 
 type PollMutableStateRequest struct {
@@ -10885,7 +10897,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x16expected_next_event_id\x18\x03 \x01(\x03R\x13expectedNextEventId\x120\n" +
 	"\x14current_branch_token\x18\x04 \x01(\fR\x12currentBranchToken\x12d\n" +
 	"\x14version_history_item\x18\x05 \x01(\v22.temporal.server.api.history.v1.VersionHistoryItemR\x12versionHistoryItem\x12j\n" +
-	"\x14versioned_transition\x18\x06 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\xf3\f\n" +
+	"\x14versioned_transition\x18\x06 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\x9e\r\n" +
 	"\x17GetMutableStateResponse\x12G\n" +
 	"\texecution\x18\x01 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12I\n" +
 	"\rworkflow_type\x18\x02 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x12\"\n" +
@@ -10908,7 +10920,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x12inherited_build_id\x18\x17 \x01(\tR\x10inheritedBuildId\x12f\n" +
 	"\x12transition_history\x18\x18 \x03(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x11transitionHistory\x12b\n" +
 	"\x0fversioning_info\x18\x19 \x01(\v29.temporal.api.workflow.v1.WorkflowExecutionVersioningInfoR\x0eversioningInfo\x12~\n" +
-	"\x1etransient_or_speculative_tasks\x18\x1a \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x1btransientOrSpeculativeTasksJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\x1etransient_or_speculative_tasks\x18\x1a \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x1btransientOrSpeculativeTasks\x12)\n" +
+	"\x10consumes_streams\x18\x1b \x01(\bR\x0fconsumesStreamsJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
 	"\x10\vJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0f\"\xef\x02\n" +
 	"\x17PollMutableStateRequest\x12!\n" +

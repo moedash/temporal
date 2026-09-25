@@ -6196,7 +6196,8 @@ func TestGetStreamSlicesForQueryTask(t *testing.T) {
 		mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
 		engine := &matchingEngineImpl{historyClient: mockHistoryClient, logger: log.NewNoopLogger()}
 
-		slices, err := engine.getStreamSlicesForQueryTask(context.Background(), nsID.String(), task, true)
+		slices, err := engine.getStreamSlicesForQueryTask(
+			context.Background(), nsID.String(), task, true, true)
 		require.NoError(t, err)
 		require.Empty(t, slices)
 	})
@@ -6214,10 +6215,25 @@ func TestGetStreamSlicesForQueryTask(t *testing.T) {
 		engine := &matchingEngineImpl{historyClient: mockHistoryClient, logger: log.NewNoopLogger()}
 
 		slices, err := engine.getStreamSlicesForQueryTask(
-			context.Background(), nsID.String(), task, false)
+			context.Background(), nsID.String(), task, false, true)
 		require.NoError(t, err)
 		require.Len(t, slices, 1)
 		require.Equal(t, int64(4), slices[0].GetWorkflowTaskCompletedEventId())
+	})
+
+	// Almost no workflow consumes a stream, and the call takes a workflow lease
+	// on the history side before it discovers that. The mutable state matching
+	// already fetched says which ones do.
+	t.Run("a workflow that consumes nothing asks nothing", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
+		engine := &matchingEngineImpl{historyClient: mockHistoryClient, logger: log.NewNoopLogger()}
+
+		slices, err := engine.getStreamSlicesForQueryTask(
+			context.Background(), nsID.String(), task, false, false)
+		require.NoError(t, err)
+		require.Empty(t, slices)
 	})
 
 	t.Run("a refusal fails the query", func(t *testing.T) {
@@ -6228,7 +6244,8 @@ func TestGetStreamSlicesForQueryTask(t *testing.T) {
 			nil, serviceerror.NewFailedPrecondition("stream no longer holds the range")).Times(1)
 		engine := &matchingEngineImpl{historyClient: mockHistoryClient, logger: log.NewNoopLogger()}
 
-		_, err := engine.getStreamSlicesForQueryTask(context.Background(), nsID.String(), task, false)
+		_, err := engine.getStreamSlicesForQueryTask(
+			context.Background(), nsID.String(), task, false, true)
 		require.ErrorContains(t, err, "no longer holds")
 	})
 }

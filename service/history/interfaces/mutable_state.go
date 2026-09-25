@@ -371,6 +371,11 @@ type (
 		// predating CHASM reports the workflow archetype while carrying a tree
 		// that holds no components.
 		HasChasmWorkflowComponent() bool
+		// ConsumesStreams reports whether this workflow holds a cursor into any
+		// stream, which is what decides whether a query task has anything to
+		// re-supply.
+		ConsumesStreams() bool
+
 		// HasPendingStreamData reports whether a stream subscription still has
 		// offsets to deliver, which is the only case where stream traffic
 		// schedules a workflow task.

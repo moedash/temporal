@@ -269,6 +269,11 @@ func (h *handler) SubscribeWorkflow(
 	in := req.GetFrontendRequest()
 
 	if in.GetStreamId() != "" {
+		if in.GetStreamName() != "" {
+			return nil, serviceerror.NewInvalidArgument(
+				"set either stream id, for a standalone stream, or stream name, for one the " +
+					"workflow owns, not both")
+		}
 		return h.subscribeToExternalStream(ctx, req.GetNamespaceId(), in)
 	}
 
@@ -341,6 +346,12 @@ func (h *handler) subscribeToExternalStream(
 		return nil, err
 	}
 	pin := registered.GetFrontendResponse()
+	if pin.GetStreamAbsent() {
+		// The caller named a standalone stream id, so there is nothing to fall
+		// back to: an id that names nothing is the caller's mistake here.
+		return nil, serviceerror.NewNotFoundf(
+			"no stream with id %q in this namespace", in.GetStreamId())
+	}
 
 	startOffset, _, err := chasm.UpdateComponent(
 		ctx,
@@ -403,9 +414,29 @@ func (h *handler) RegisterStreamConsumer(
 		in.GetStartOffset(),
 	)
 	if err != nil {
+		// Only the absence of the execution itself is turned into an answer.
+		// The caller treats that as "the id names no standalone stream" and
+		// binds to a stream of its own instead, which would be the wrong thing
+		// to do about a registry miss or a shard that has moved.
+		if executionAbsent(err) {
+			return &streampb.RegisterStreamConsumerResponse{
+				FrontendResponse: &streampb.RegisterStreamConsumerOutput{StreamAbsent: true},
+			}, nil
+		}
 		return nil, err
 	}
 	return &streampb.RegisterStreamConsumerResponse{FrontendResponse: pin}, nil
+}
+
+// executionAbsent reports whether an error means no execution holds the stream.
+//
+// This runs on the shard that owns the stream, after routing, so a NotFound
+// here is the engine's answer about the execution. A namespace the registry
+// cannot name and a shard that has moved have error types of their own and do
+// not reach it.
+func executionAbsent(err error) bool {
+	var notFound *serviceerror.NotFound
+	return errors.As(err, &notFound)
 }
 
 // externalConsumerID names a workflow run's pin on a stream in another
@@ -438,7 +469,11 @@ func (h *handler) probeConsumer(
 				runID:  cctx.ExecutionKey().RunID,
 				closed: !cctx.ExecutionInfo().CloseTime.IsZero(),
 			}
-			if field, ok := wf.StreamCursors[streamID]; ok {
+			// Only an external cursor counts. A cursor of the same key on a
+			// stream the workflow owns is a different stream that happens to
+			// share the name, and answering for it would keep a pin alive on
+			// a stream nothing reads.
+			if field, ok := wf.StreamCursors[streamID]; ok && field.Get(cctx).IsExternal() {
 				p.consumes = true
 				p.startOffset = field.Get(cctx).StartOffset()
 			}
@@ -528,16 +563,21 @@ func (h *handler) PollMessages(
 	ref := refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId())
 	from := in.GetFromOffset()
 
-	state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
-	if err != nil {
-		return nil, err
-	}
-
-	// Blocking is only worth it once the reader is genuinely caught up.
-	if in.GetWaitNewMessages() && from == state.GetHeadOffset() && !state.GetClosed() {
-		// The window is re-read below, so only the blocking matters here.
-		if _, err := h.waitForMessages(ctx, ref, from, state); err != nil {
+	// Only the blocking path needs the frontier before the read. On the
+	// ordinary path the window carries it, and this is the hottest call in the
+	// feature: the state clone walks the producer and consumer tables, which
+	// hold up to a thousand entries each.
+	if in.GetWaitNewMessages() {
+		state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
+		if err != nil {
 			return nil, err
+		}
+		// Blocking is only worth it once the reader is genuinely caught up.
+		if from == state.GetHeadOffset() && !state.GetClosed() {
+			// The window is re-read below, so only the blocking matters here.
+			if _, err := h.waitForMessages(ctx, ref, from, state); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -840,24 +880,52 @@ func (h *handler) CloseStream(
 	return &streampb.CloseStreamResponse{FrontendResponse: &streampb.CloseStreamOutput{}}, nil
 }
 
+// TruncateStream advances the readable floor.
+//
+// A refusal means an active consumer's pin is below the requested base. Some
+// of those pins belong to nobody: a subscription that took its pin and then
+// failed to write its cursor leaves one behind, and the only thing that
+// notices is the notify probe, which runs on append. A stream that has gone
+// quiet never gets one. So a refusal probes the pins it was refused for and
+// tries once more, and what survives that is a consumer that really is there.
 func (h *handler) TruncateStream(
 	ctx context.Context,
 	req *streampb.TruncateStreamRequest,
 ) (*streampb.TruncateStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
+	ref := refFor(req.GetNamespaceId(), in.GetStreamId())
 
-	if _, _, err := chasm.UpdateComponent(
-		ctx,
-		refFor(req.GetNamespaceId(), in.GetStreamId()),
-		func(s *stream.Stream, mctx chasm.MutableContext, newBase int64) (struct{}, error) {
-			return struct{}{}, s.Truncate(mctx, newBase)
-		},
-		in.GetNewBaseOffset(),
-	); err != nil {
+	err := h.truncate(ctx, ref, in.GetNewBaseOffset())
+	var pinned *serviceerror.FailedPrecondition
+	if errors.As(err, &pinned) {
+		state, readErr := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
+		if readErr != nil {
+			return nil, err
+		}
+		notifier := consumerNotifier{logger: h.logger, routed: h.routed}
+		if probeErr := notifier.notify(
+			ctx, ref, in.GetNamespace(), state, true); probeErr != nil {
+			return nil, err
+		}
+		err = h.truncate(ctx, ref, in.GetNewBaseOffset())
+	}
+	if err != nil {
 		return nil, err
 	}
 	return &streampb.TruncateStreamResponse{FrontendResponse: &streampb.TruncateStreamOutput{}}, nil
+}
+
+func (h *handler) truncate(ctx context.Context, ref chasm.ComponentRef, newBase int64) error {
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(s *stream.Stream, mctx chasm.MutableContext, base int64) (struct{}, error) {
+			return struct{}{}, s.Truncate(mctx, base)
+		},
+		newBase,
+	)
+	return err
 }
 
 // ListStreams is intentionally not implemented here. It queries visibility, so

@@ -185,6 +185,11 @@ message GetMutableStateResponse {
   // Transient or speculative workflow task events which are not yet persisted in the history.
   // These events should be appended to the history when it is returned to the worker.
   temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_tasks = 26;
+  // Whether this workflow holds a cursor into any stream. Matching builds a
+  // query task without RecordWorkflowTaskStarted, so it has to ask History for
+  // the ranges the history records, and almost no workflow has any. This says
+  // which ones do, so the extra call is only made for those.
+  bool consumes_streams = 27;
 }
 
 message PollMutableStateRequest {

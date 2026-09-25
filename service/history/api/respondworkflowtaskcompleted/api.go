@@ -836,7 +836,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// The poll path delivers from its own handler, so this one has to ask
 		// as well or a subscribed workflow gets an inline task with no data.
 		resp.StartedResponse.StreamSlices, err = recordworkflowtaskstarted.DeliverStreamSlices(
-			ctx, handler.shardContext, ms)
+			ctx, handler.shardContext, ms, newWorkflowTask)
 		if err != nil {
 			return nil, err
 		}

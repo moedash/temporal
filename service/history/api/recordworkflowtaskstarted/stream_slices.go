@@ -11,7 +11,9 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	streampb "go.temporal.io/api/stream/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -56,14 +58,22 @@ func unavailableIfGone(err error, format string, args ...any) error {
 	return err
 }
 
-// failTaskForStreams records why the task cannot be started and schedules the
-// next attempt. The event is what an operator sees; a bare error to matching
-// would only make the task come back.
+// failTaskForStreams records why the task cannot be started, and either
+// schedules the next attempt or ends the workflow.
+//
+// The event is what an operator sees; a bare error to matching would only make
+// the task come back. One retry is worth having, because a shard that was
+// moving can serve the range on the next attempt. A second failure with the
+// same cause is not a race: the range is gone or the re-supply is over its
+// budget, and every further attempt redoes the whole page walk, fails again,
+// and grows History until the size limit terminates the workflow for an
+// unrelated reason. Terminating here says what actually happened.
 func failTaskForStreams(
 	ms historyi.MutableState,
 	workflowTask *historyi.WorkflowTaskInfo,
 	cause *rangeUnavailable,
 ) error {
+	repeated := lastFailureWasStreamRange(ms)
 	if _, err := ms.AddWorkflowTaskFailedEvent(
 		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_STREAM_RANGE_UNAVAILABLE,
@@ -78,7 +88,21 @@ func failTaskForStreams(
 		return err
 	}
 	ms.FlushBufferedEvents()
+	if repeated {
+		_, err := ms.AddWorkflowExecutionTerminatedEvent(
+			cause.Error(), nil, consts.IdentityHistoryService, false, nil)
+		return err
+	}
 	return workflow.ScheduleWorkflowTask(ms)
+}
+
+// lastFailureWasStreamRange reports whether the workflow task before this one
+// failed for the same reason, which is what tells a retryable hiccup from a
+// range that is not coming back.
+func lastFailureWasStreamRange(ms historyi.MutableState) bool {
+	recorded, ok := ms.GetExecutionInfo().GetLastWorkflowTaskFailure().(*persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause)
+	return ok && recorded.LastWorkflowTaskFailureCause ==
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_STREAM_RANGE_UNAVAILABLE
 }
 
 // streamOrigin says where a subscribed stream lives, which decides how its
@@ -143,8 +167,14 @@ func deliveryFrontier(
 	}
 	field, ok := wf.Streams[name]
 	if !ok {
-		return 0, serviceerror.NewFailedPreconditionf(
-			"workflow consumes stream %q, which it neither owns nor subscribed to externally", name)
+		// Reported as an unavailable range rather than a bare error, so the
+		// task fails once with a cause an operator can read instead of coming
+		// back from matching forever. A standby rebuilt by event-based
+		// replication lands here: it applies consumed ranges into owned
+		// cursors, and the stream itself does not replicate that way.
+		return 0, unavailablef(
+			"workflow consumes stream %q, which it neither owns nor subscribed to externally",
+			name)
 	}
 	state, err := field.Get(chasmCtx).Snapshot(chasmCtx, struct{}{})
 	if err != nil {
@@ -236,8 +266,9 @@ func DeliverStreamSlices(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	ms historyi.MutableState,
+	workflowTask *historyi.WorkflowTaskInfo,
 ) ([]*streampb.StreamSlice, error) {
-	live, _, err := deliverStreamSlices(ctx, shardContext, ms)
+	live, _, err := deliverStreamSlices(ctx, shardContext, ms, workflowTask)
 	return live, err
 }
 
@@ -253,7 +284,17 @@ func deliverStreamSlices(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	ms historyi.MutableState,
+	workflowTask *historyi.WorkflowTaskInfo,
 ) ([]*streampb.StreamSlice, map[string]streamOrigin, error) {
+	// A speculative task may be thrown away, and a discarded one writes no
+	// completed event, so nothing would commit the cursor. The range would then
+	// be handed out again on the next task while the worker's in-memory
+	// workflow had already consumed it, and live execution would see the
+	// records twice where replay sees them once. A workflow with records
+	// waiting gets a normal task of its own, which is where they belong.
+	if workflowTask != nil && workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		return nil, nil, nil
+	}
 	if !ms.HasChasmWorkflowComponent() {
 		return nil, nil, nil
 	}
@@ -347,19 +388,6 @@ func deliverStreamSlices(
 	return slicesOut, addresses, nil
 }
 
-// Bounds on one cold replay's re-supply. History holds offsets and not payloads,
-// so replaying a consumer means re-reading every range its completed tasks
-// recorded, and that grows with the workflow's whole life rather than with the
-// task being started. A consumer past these bounds cannot be replayed by this
-// path; its task is failed with a cause that says so rather than retried.
-const (
-	maxReplayRecords = 100_000
-	maxReplayBytes   = 64 << 20
-	// Pages of history walked to find the recorded ranges. Empty ranges cost
-	// nothing to attach but each page is a store read under a request deadline.
-	maxReplayPages = 256
-)
-
 // ownedRange names a range of a stream the consumer owns.
 type ownedRange struct {
 	name string
@@ -408,6 +436,7 @@ type replaySupply struct {
 	ctx       context.Context
 	consumer  definition.WorkflowKey
 	addresses map[string]streamOrigin
+	limits    stream.Limits
 
 	records int
 	bytes   int
@@ -449,6 +478,7 @@ func attachReplaySlices(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	consumer definition.WorkflowKey,
+	namespaceName string,
 	addresses map[string]streamOrigin,
 	pageSize int32,
 	resp *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory,
@@ -464,6 +494,13 @@ func attachReplaySlices(
 	// nothing to replay. Its history begins at the previous task's completion,
 	// and that event carries the range that task already consumed, so
 	// re-supplying it here would hand the workflow the same records twice.
+	//
+	// A worker can hold a sticky queue and still have evicted the workflow, and
+	// the recovery from that is the SDK's: it fails the task so the next one is
+	// dispatched on the normal queue with full history, which comes back
+	// through here with the slices attached. An SDK that instead refetches the
+	// history through GetWorkflowExecutionHistory gets no slices, because that
+	// RPC has nowhere to carry them.
 	if resp.GetStickyExecutionEnabled() {
 		return nil
 	}
@@ -472,10 +509,12 @@ func attachReplaySlices(
 	if err != nil {
 		return err
 	}
+	limits := shardContext.GetConfig().Stream.LimitsFor(namespaceName)
 	supply := &replaySupply{
 		ctx:       ctx,
 		consumer:  consumer,
 		addresses: addresses,
+		limits:    limits,
 		reached:   make(map[string]int64, len(addresses)),
 	}
 	if err := supply.collect(events); err != nil {
@@ -486,10 +525,10 @@ func attachReplaySlices(
 	token := resp.GetNextPageToken()
 	for len(token) > 0 {
 		pages++
-		if pages > maxReplayPages {
+		if pages > limits.ReplayMaxPages {
 			return unavailablef(
 				"replaying workflow %q needs more than %d pages of history to find the stream "+
-					"ranges its tasks consumed", consumer.GetWorkflowID(), maxReplayPages)
+					"ranges its tasks consumed", consumer.GetWorkflowID(), limits.ReplayMaxPages)
 		}
 		continuation, err := api.DeserializeHistoryToken(token)
 		if err != nil {
@@ -574,20 +613,22 @@ func ReplaySlicesForQuery(
 	}
 	nextEventID := ms.GetNextEventID()
 	consumer := ms.GetWorkflowKey()
+	limits := shardContext.GetConfig().Stream.LimitsFor(ms.GetNamespaceEntry().Name().String())
 	lease.GetReleaseFn()(nil)
 
 	supply := &replaySupply{
 		ctx:       ctx,
 		consumer:  consumer,
 		addresses: addresses,
+		limits:    limits,
 		reached:   make(map[string]int64, len(addresses)),
 	}
 	var token []byte
 	for pages := 1; ; pages++ {
-		if pages > maxReplayPages {
+		if pages > limits.ReplayMaxPages {
 			return nil, unavailablef(
 				"replaying workflow %q needs more than %d pages of history to find the stream "+
-					"ranges its tasks consumed", consumer.GetWorkflowID(), maxReplayPages)
+					"ranges its tasks consumed", consumer.GetWorkflowID(), limits.ReplayMaxPages)
 		}
 		blobs, _, next, err := persistence.ReadFullPageRawEvents(
 			ctx, shardContext.GetExecutionManager(), &persistence.ReadHistoryBranchRequest{
@@ -739,11 +780,11 @@ func (s *replaySupply) recordsFor(
 	// Bounded because every prior task's range is re-read into one response, so
 	// a long-lived consumer's cold replay grows with its whole history. Refused
 	// rather than trimmed: a short re-supply is what replay cannot survive.
-	if s.records > maxReplayRecords || s.bytes > maxReplayBytes {
+	if s.records > s.limits.ReplayMaxRecords || s.bytes > s.limits.ReplayMaxBytes {
 		return nil, "", unavailablef(
 			"replaying workflow %q needs more than %d records or %d bytes of stream history "+
 				"to re-supply; the consumed ranges cannot be re-delivered in one response",
-			s.consumer.GetWorkflowID(), maxReplayRecords, maxReplayBytes)
+			s.consumer.GetWorkflowID(), s.limits.ReplayMaxRecords, s.limits.ReplayMaxBytes)
 	}
 	return records, ownerRunID, nil
 }

@@ -95,13 +95,51 @@ const (
 	// the same reason: each batch is a node, and many small ones cost state
 	// that the byte budget alone does not see.
 	OwnedStreamMaxItems = 10_000
+
+	// MaxSubscriptionsPerWorkflow bounds how many streams one execution
+	// consumes. Each subscription costs a routed call on the completion path
+	// that made it and another on every task start, both with the execution's
+	// lock held, so the count is what bounds the lock hold.
+	MaxSubscriptionsPerWorkflow = 100
+
+	// A cold replay re-reads every range the consumer's completed tasks
+	// recorded, because History holds offsets and never payloads. That cost
+	// grows with the workflow's whole life rather than with the task being
+	// started, so one response has a bound on records, on bytes, and on the
+	// pages of history walked to find the ranges.
+	//
+	// A consumer past any of them cannot be replayed by this path. There is no
+	// bounded paged re-supply yet, so it is terminated with the cause rather
+	// than left failing the same task forever.
+	ReplayMaxRecords = 100_000
+	ReplayMaxBytes   = 64 << 20
+	ReplayMaxPages   = 256
+
+	// OwnedStreamsMaxBytesPerWorkflow bounds every stream one execution owns
+	// taken together. The per-stream budget multiplied by the stream count
+	// comes to far more than limit.mutableStateSize.error, so without this an
+	// outside writer can name enough streams to terminate the execution while
+	// every single stream stays inside its own budget. Half the error limit,
+	// which leaves the rest of mutable state its own room.
+	OwnedStreamsMaxBytesPerWorkflow = 4 << 20
 )
 
 var (
+	// EnabledSetting gates the whole feature. Off by default: registering
+	// StreamService on the frontend otherwise turns a large new surface on in
+	// every deployment the moment it ships, and an operator needs a way to take
+	// it back without a rollback.
+	EnabledSetting = dynamicconfig.NewNamespaceBoolSetting(
+		"stream.enabled",
+		false,
+		`Whether the stream service and the workflow stream commands are available to a
+namespace. Off by default.`,
+	)
 	MaxConsumeItemsPerTaskSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.maxConsumeItemsPerTask",
 		MaxConsumeItemsPerTask,
-		`Most stream records one workflow task carries per subscription.`,
+		`Most stream records one workflow task carries per subscription. Clamped to 1000,
+which is the largest page a single stream read returns.`,
 	)
 	MaxConsumeBytesPerTaskSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.maxConsumeBytesPerTask",
@@ -144,6 +182,35 @@ under limit.mutableStateSize.error, which would otherwise terminate the workflow
 		OwnedStreamMaxItems,
 		`Message budget of a stream a workflow owns. Appends past it are refused.`,
 	)
+	ReplayMaxRecordsSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.replayMaxRecords",
+		ReplayMaxRecords,
+		`Most stream records one cold replay re-supplies. A consumer whose recorded ranges
+come to more than this cannot be replayed and is terminated with the cause.`,
+	)
+	ReplayMaxBytesSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.replayMaxBytes",
+		ReplayMaxBytes,
+		`Most stream record bytes one cold replay re-supplies.`,
+	)
+	ReplayMaxPagesSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.replayMaxPages",
+		ReplayMaxPages,
+		`Most pages of history one cold replay walks to find the ranges its completed tasks
+consumed.`,
+	)
+	MaxSubscriptionsPerWorkflowSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.maxSubscriptionsPerWorkflow",
+		MaxSubscriptionsPerWorkflow,
+		`Most streams one workflow execution can consume.`,
+	)
+	OwnedStreamsMaxBytesPerWorkflowSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.ownedStreamsMaxBytesPerWorkflow",
+		OwnedStreamsMaxBytesPerWorkflow,
+		`Byte budget of every stream one workflow execution owns, taken together. Appends
+past it are refused. Keep it under limit.mutableStateSize.error, which would otherwise
+terminate the workflow.`,
+	)
 	RetentionRecheckIntervalSetting = dynamicconfig.NewGlobalDurationSetting(
 		"stream.retentionRecheckInterval",
 		time.Minute,
@@ -154,6 +221,7 @@ consumers holding it are still running.`,
 
 // Config holds the settings as live property functions.
 type Config struct {
+	Enabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// The id length limit shared with workflow ids. A stream id becomes an
 	// execution's business id, and a stream name a key in mutable state.
 	MaxIDLength                dynamicconfig.IntPropertyFn
@@ -167,10 +235,18 @@ type Config struct {
 	MaxOwnedStreamsPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	OwnedStreamMaxBytes        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	OwnedStreamMaxItems        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	// Bounds every stream one execution owns taken together, which the
+	// per-stream budget cannot do.
+	OwnedStreamsMaxBytesPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxSubscriptionsPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ReplayMaxRecords                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ReplayMaxBytes                  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ReplayMaxPages                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
+		Enabled:                    EnabledSetting.Get(dc),
 		MaxIDLength:                dynamicconfig.MaxIDLengthLimit.Get(dc),
 		RetentionRecheckInterval:   RetentionRecheckIntervalSetting.Get(dc),
 		MaxConsumeItemsPerTask:     MaxConsumeItemsPerTaskSetting.Get(dc),
@@ -182,6 +258,12 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		MaxOwnedStreamsPerWorkflow: MaxOwnedStreamsPerWorkflowSetting.Get(dc),
 		OwnedStreamMaxBytes:        OwnedStreamMaxBytesSetting.Get(dc),
 		OwnedStreamMaxItems:        OwnedStreamMaxItemsSetting.Get(dc),
+
+		OwnedStreamsMaxBytesPerWorkflow: OwnedStreamsMaxBytesPerWorkflowSetting.Get(dc),
+		MaxSubscriptionsPerWorkflow:     MaxSubscriptionsPerWorkflowSetting.Get(dc),
+		ReplayMaxRecords:                ReplayMaxRecordsSetting.Get(dc),
+		ReplayMaxBytes:                  ReplayMaxBytesSetting.Get(dc),
+		ReplayMaxPages:                  ReplayMaxPagesSetting.Get(dc),
 	}
 }
 
@@ -197,6 +279,12 @@ type Limits struct {
 	MaxOwnedStreamsPerWorkflow int
 	OwnedStreamMaxBytes        int
 	OwnedStreamMaxItems        int
+
+	OwnedStreamsMaxBytesPerWorkflow int
+	MaxSubscriptionsPerWorkflow     int
+	ReplayMaxRecords                int
+	ReplayMaxBytes                  int
+	ReplayMaxPages                  int
 }
 
 // LimitsFor resolves the limits for a namespace. A nil Config, which is what
@@ -215,7 +303,23 @@ func (c *Config) LimitsFor(namespaceName string) Limits {
 		MaxOwnedStreamsPerWorkflow: c.MaxOwnedStreamsPerWorkflow(namespaceName),
 		OwnedStreamMaxBytes:        c.OwnedStreamMaxBytes(namespaceName),
 		OwnedStreamMaxItems:        c.OwnedStreamMaxItems(namespaceName),
+
+		OwnedStreamsMaxBytesPerWorkflow: c.OwnedStreamsMaxBytesPerWorkflow(namespaceName),
+		MaxSubscriptionsPerWorkflow:     c.MaxSubscriptionsPerWorkflow(namespaceName),
+		ReplayMaxRecords:                c.ReplayMaxRecords(namespaceName),
+		ReplayMaxBytes:                  c.ReplayMaxBytes(namespaceName),
+		ReplayMaxPages:                  c.ReplayMaxPages(namespaceName),
 	}.withDefaults()
+}
+
+// EnabledFor reports whether a namespace may use streams. A nil Config, which
+// is what component code driven without a service gets, reads as enabled: the
+// gate is a deployment switch, and a unit test is not a deployment.
+func (c *Config) EnabledFor(namespaceName string) bool {
+	if c == nil || c.Enabled == nil {
+		return true
+	}
+	return c.Enabled(namespaceName)
 }
 
 // DefaultLimits is the constant set above.
@@ -225,6 +329,10 @@ func DefaultLimits() Limits {
 
 // withDefaults fills any limit left at zero, so a zero Limits value means the
 // defaults rather than a stream that accepts nothing.
+//
+// Zero therefore cannot be configured: setting one of these to 0 restores its
+// default rather than turning the thing off. Switching streams off for a
+// namespace is what the enablement setting is for.
 func (l Limits) withDefaults() Limits {
 	fill := func(v *int, def int) {
 		if *v <= 0 {
@@ -232,6 +340,10 @@ func (l Limits) withDefaults() Limits {
 		}
 	}
 	fill(&l.MaxConsumeItemsPerTask, MaxConsumeItemsPerTask)
+	// A slice is built from one stream read, which serves at most a page, so a
+	// larger setting than that cannot take effect. Clamped here rather than
+	// left to disagree with what delivery does.
+	l.MaxConsumeItemsPerTask = min(l.MaxConsumeItemsPerTask, DefaultMaxMessagesPerPoll)
 	fill(&l.MaxConsumeBytesPerTask, MaxConsumeBytesPerTask)
 	fill(&l.MaxProducersPerStream, MaxProducersPerStream)
 	fill(&l.MaxConsumersPerStream, MaxConsumersPerStream)
@@ -240,5 +352,10 @@ func (l Limits) withDefaults() Limits {
 	fill(&l.MaxOwnedStreamsPerWorkflow, MaxOwnedStreamsPerWorkflow)
 	fill(&l.OwnedStreamMaxBytes, OwnedStreamMaxBytes)
 	fill(&l.OwnedStreamMaxItems, OwnedStreamMaxItems)
+	fill(&l.OwnedStreamsMaxBytesPerWorkflow, OwnedStreamsMaxBytesPerWorkflow)
+	fill(&l.MaxSubscriptionsPerWorkflow, MaxSubscriptionsPerWorkflow)
+	fill(&l.ReplayMaxRecords, ReplayMaxRecords)
+	fill(&l.ReplayMaxBytes, ReplayMaxBytes)
+	fill(&l.ReplayMaxPages, ReplayMaxPages)
 	return l
 }
