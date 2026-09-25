@@ -225,6 +225,10 @@ func DefaultLimits() Limits {
 
 // withDefaults fills any limit left at zero, so a zero Limits value means the
 // defaults rather than a stream that accepts nothing.
+//
+// Zero therefore cannot be configured: setting one of these to 0 restores its
+// default rather than turning the thing off. Switching streams off for a
+// namespace is what the enablement setting is for.
 func (l Limits) withDefaults() Limits {
 	fill := func(v *int, def int) {
 		if *v <= 0 {
