@@ -132,7 +132,7 @@ func TestSubscribeToAnUnwrittenNameCreatesTheOwnedStream(t *testing.T) {
 				},
 				{
 					Kind: streampb.STREAM_RECORD_KIND_FINISH, Topic: name,
-					ProducerId: "model", Attempt: 2, Sequence: -1,
+					ProducerId: "model", Attempt: 2, Sequence: 1,
 				},
 			},
 		},
@@ -156,7 +156,7 @@ func TestSubscribeToAnUnwrittenNameCreatesTheOwnedStream(t *testing.T) {
 	require.Equal(t, streampb.STREAM_RECORD_KIND_FINISH, records[1].GetKind(),
 		"a finish record is delivered like any other")
 	require.Equal(t, "model", records[1].GetProducerId())
-	require.Equal(t, int64(-1), records[1].GetSequence())
+	require.Equal(t, int64(1), records[1].GetSequence())
 }
 
 // The guarantee the design is sold on: a publish commits with the workflow

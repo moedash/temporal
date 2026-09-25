@@ -821,8 +821,8 @@ func TestWorkflowSubscribesToAStreamItself(t *testing.T) {
 				CommandType: enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM,
 				Attributes: &commandpb.Command_SubscribeStreamCommandAttributes{
 					SubscribeStreamCommandAttributes: &commandpb.SubscribeStreamCommandAttributes{
-						StreamId:    streamID,
-						StartOffset: 0,
+						StreamNameOrId: streamID,
+						StartOffset:    0,
 					},
 				},
 			}}, nil
@@ -922,7 +922,7 @@ func TestResubscribingStillWritesItsEvent(t *testing.T) {
 		CommandType: enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM,
 		Attributes: &commandpb.Command_SubscribeStreamCommandAttributes{
 			SubscribeStreamCommandAttributes: &commandpb.SubscribeStreamCommandAttributes{
-				StreamId: streamID, StartOffset: 0,
+				StreamNameOrId: streamID, StartOffset: 0,
 			},
 		},
 	}}
@@ -1022,7 +1022,7 @@ func TestStreamSubscribeEventKeepsCommandOrder(t *testing.T) {
 					CommandType: enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM,
 					Attributes: &commandpb.Command_SubscribeStreamCommandAttributes{
 						SubscribeStreamCommandAttributes: &commandpb.SubscribeStreamCommandAttributes{
-							StreamId: streamID, StartOffset: 0,
+							StreamNameOrId: streamID, StartOffset: 0,
 						},
 					},
 				},
