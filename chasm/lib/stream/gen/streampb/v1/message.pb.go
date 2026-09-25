@@ -33,8 +33,8 @@ type StreamRecord struct {
 	// Producer-supplied provenance, stored as sent.
 	Metadata map[string]*v1.Payload `protobuf:"bytes,2,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Topic    string                 `protobuf:"bytes,3,opt,name=topic,proto3" json:"topic,omitempty"`
-	// The producer's position within its attempt, or -1 when unnumbered. Stored
-	// as sent; the global offset is what orders the stream.
+	// The producer's position within its attempt, zero when it does not number
+	// its records. Stored as sent; the global offset is what orders the stream.
 	Sequence int64 `protobuf:"varint,4,opt,name=sequence,proto3" json:"sequence,omitempty"`
 	// Settled to DATA on append when left unspecified, so a retry hashes the
 	// same bytes and a reader never sees the zero value.

@@ -141,7 +141,7 @@ func TestSubscriptionsPerWorkflowAreBounded(t *testing.T) {
 			CommandType: enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM,
 			Attributes: &commandpb.Command_SubscribeStreamCommandAttributes{
 				SubscribeStreamCommandAttributes: &commandpb.SubscribeStreamCommandAttributes{
-					StreamId: id,
+					StreamNameOrId: id,
 				},
 			},
 		}, opts, limits)

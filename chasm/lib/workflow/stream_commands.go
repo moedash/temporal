@@ -82,7 +82,7 @@ func handleAppendStreamRecordsCommand(
 		}
 	}
 
-	name := attrs.GetStreamId()
+	name := attrs.GetStreamName()
 	if name == "" {
 		name = DefaultStreamName
 	}
@@ -105,7 +105,7 @@ func handleAppendStreamRecordsCommand(
 		return StreamAdmissionFailure(badAttributes, err)
 	}
 	wf.RecordStreamRecordsAppended(
-		name, result.FirstOffset, result.Count, opts.WorkflowTaskCompletedEventID)
+		name, result.FirstOffset, result.NextOffset, opts.WorkflowTaskCompletedEventID)
 	return nil
 }
 
@@ -130,8 +130,8 @@ func handleSubscribeStreamCommand(
 			Cause: badAttributes, Message: "SubscribeStreamCommandAttributes is not set",
 		}
 	}
-	streamID := attrs.GetStreamId()
-	if streamID == "" {
+	nameOrID := attrs.GetStreamNameOrId()
+	if nameOrID == "" {
 		return FailWorkflowTaskError{
 			Cause: badAttributes, Message: "SubscribeStream command names no stream",
 		}
@@ -141,13 +141,13 @@ func handleSubscribeStreamCommand(
 	// gets an event. Every SDK matches issued commands against
 	// command-generated events in order, so a command that produces none puts
 	// that matching out of step, which is the whole reason this event exists.
-	_, already := wf.StreamCursors[streamID]
+	_, already := wf.StreamCursors[nameOrID]
 
 	// Each new subscription costs a routed call on the completion path, made
 	// with this execution's lock held, and each delivery costs another on
 	// every task start. Bounded here, because nothing else bounds how many a
 	// workflow may hold or how many one task may carry.
-	if subscribed, known := wf.subscribedStreams(streamID); !known &&
+	if subscribed, known := wf.subscribedStreams(nameOrID); !known &&
 		subscribed >= limits.MaxSubscriptionsPerWorkflow {
 		return FailWorkflowTaskError{
 			Cause: badAttributes,
@@ -160,11 +160,11 @@ func handleSubscribeStreamCommand(
 	// resolved start offset and the event recording it are produced in one
 	// place rather than two.
 	wf.StagePendingSubscription(PendingStreamSubscription{
-		StreamID:          streamID,
+		StreamID:          nameOrID,
 		StartOffset:       attrs.GetStartOffset(),
 		AlreadySubscribed: already,
 		Event: wf.ReserveStreamSubscribedEvent(
-			streamID, opts.WorkflowTaskCompletedEventID),
+			nameOrID, opts.WorkflowTaskCompletedEventID),
 	})
 	return nil
 }
@@ -295,8 +295,8 @@ func (streamRecordsAppendedEvent) CherryPick(
 // RecordStreamRecordsAppended writes the event for one published batch.
 func (w *Workflow) RecordStreamRecordsAppended(
 	streamID string,
-	firstOffset int64,
-	count int64,
+	fromOffset int64,
+	toOffset int64,
 	workflowTaskCompletedEventID int64,
 ) {
 	eventType := enumspb.EVENT_TYPE_WORKFLOW_STREAM_RECORDS_APPENDED
@@ -304,8 +304,8 @@ func (w *Workflow) RecordStreamRecordsAppended(
 		attrs := &historypb.WorkflowStreamRecordsAppendedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			StreamId:                     streamID,
-			FirstOffset:                  firstOffset,
-			RecordCount:                  count,
+			FromOffset:                   fromOffset,
+			ToOffset:                     toOffset,
 		}
 		e.Attributes = &historypb.HistoryEvent_WorkflowStreamRecordsAppendedEventAttributes{
 			WorkflowStreamRecordsAppendedEventAttributes: attrs,
