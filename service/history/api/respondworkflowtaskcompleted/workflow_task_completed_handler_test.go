@@ -81,6 +81,9 @@ func TestCommandProtocolMessage(t *testing.T) {
 		out.ms.EXPECT().VisitUpdates(gomock.Any()).AnyTimes()
 		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
 		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion(tests.WorkflowID)).AnyTimes()
+		out.ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+			WorkflowTaskAttempt: 1,
+		}).AnyTimes()
 
 		dcClient := dynamicconfig.StaticClient(nil)
 		if opts.chasmEnabled {
