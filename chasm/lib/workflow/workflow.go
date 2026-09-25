@@ -277,6 +277,12 @@ func (w *Workflow) AdvanceKnownHead(mctx chasm.MutableContext, streamID string, 
 	return nil
 }
 
+// HasStreamCursors reports whether this workflow consumes any stream at all,
+// which is a different question from whether one is behind.
+func (w *Workflow) HasStreamCursors() bool {
+	return len(w.StreamCursors) > 0
+}
+
 // StreamCursorsBehind reports whether any subscription still has offsets it has
 // not been given.
 //

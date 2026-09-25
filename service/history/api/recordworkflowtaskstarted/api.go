@@ -110,7 +110,7 @@ func Invoke(
 					// Redelivers whatever range is already staged, so a
 					// duplicate of the same request hands back the same slice.
 					resp.StreamSlices, streamAddresses, err = deliverStreamSlices(
-						ctx, shardContext, mutableState)
+						ctx, shardContext, mutableState, workflowTask)
 					if errors.As(err, &streamFailure) {
 						if err := failTaskForStreams(mutableState, workflowTask, streamFailure); err != nil {
 							return nil, err
@@ -257,7 +257,7 @@ func Invoke(
 			}
 
 			resp.StreamSlices, streamAddresses, err = deliverStreamSlices(
-				ctx, shardContext, mutableState)
+				ctx, shardContext, mutableState, workflowTask)
 			if errors.As(err, &streamFailure) {
 				if err := failTaskForStreams(mutableState, workflowTask, streamFailure); err != nil {
 					return nil, err
@@ -303,7 +303,8 @@ func Invoke(
 
 	// After the history is attached, because the ranges to re-supply are read
 	// out of the events being sent.
-	err = attachReplaySlices(ctx, shardContext, workflowKey, streamAddresses, maxHistoryPageSize, resp)
+	err = attachReplaySlices(ctx, shardContext, workflowKey, namespaceEntry.Name().String(),
+		streamAddresses, maxHistoryPageSize, resp)
 	if errors.As(err, &streamFailure) {
 		// The task is already started and its lock released, so failing it is
 		// a transaction of its own.

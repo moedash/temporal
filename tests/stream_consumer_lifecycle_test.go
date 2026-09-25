@@ -91,9 +91,9 @@ func subscribeConsumeAndComplete(
 }
 
 // A consumer that completed can never replay, so the floor it held is a leak.
-// The stream learns a consumer is gone when it next tries to tell it the
-// frontier moved, and releases the pin then.
-func TestACompletedConsumerReleasesItsFloor(t *testing.T) {
+// An append is what makes the stream go and ask whether its consumers are
+// still there, and it releases the pin on the answer.
+func TestACompletedConsumerReleasesItsFloorOnTheNextAppend(t *testing.T) {
 	env := testcore.NewEnv(t)
 	s := newStreamTestEnvFrom(t, env)
 	streamID := "released-stream-" + uuid.NewString()
@@ -101,16 +101,7 @@ func TestACompletedConsumerReleasesItsFloor(t *testing.T) {
 
 	subscribeConsumeAndComplete(t, s, streamID, "stream-wf-released-")
 
-	_, err := s.client.TruncateStream(s.ctx(), &streamlib.TruncateStreamRequest{
-		FrontendRequest: &streamlib.TruncateStreamInput{
-			Namespace: s.ns, StreamId: streamID, NewBaseOffset: 2,
-		},
-	})
-	require.ErrorContains(t, err, "still depends on offset 0",
-		"the pin holds until the stream finds out")
-
-	// The append is what makes the stream go and ask.
-	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
+	_, err := s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
 		FrontendRequest: &streamlib.AddMessagesInput{
 			Namespace: s.ns, StreamId: streamID, Records: streamMsgs("tokens", "three"),
 		},
@@ -126,6 +117,27 @@ func TestACompletedConsumerReleasesItsFloor(t *testing.T) {
 		},
 	})
 	require.NoError(t, err, "nothing holds the floor once the consumer is gone")
+}
+
+// A stream nobody appends to any more never asks, so a pin left by a finished
+// run would hold its records for good. The truncate that the pin refuses is
+// the other place that can find out, so it probes the runs holding it and
+// tries again.
+func TestARefusedTruncateProbesThePinsItWasRefusedFor(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+	streamID := "probed-stream-" + uuid.NewString()
+	s.create(s.ctx(), t, streamID)
+
+	subscribeConsumeAndComplete(t, s, streamID, "stream-wf-probed-")
+
+	_, err := s.client.TruncateStream(s.ctx(), &streamlib.TruncateStreamRequest{
+		FrontendRequest: &streamlib.TruncateStreamInput{
+			Namespace: s.ns, StreamId: streamID, NewBaseOffset: 2,
+		},
+	})
+	require.NoError(t, err, "the probe found the run finished, so nothing holds the floor")
+	require.Empty(t, describeStream(t, s, streamID).GetConsumers())
 }
 
 // A new run of the same workflow id is a new consumer. It subscribes at its

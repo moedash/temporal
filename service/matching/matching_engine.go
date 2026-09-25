@@ -759,7 +759,8 @@ pollLoop:
 			// re-supplied. Read the other way round a task could complete in
 			// between and the worker would see a recorded range with no bytes.
 			streamSlices, err := e.getStreamSlicesForQueryTask(
-				ctx, req.GetNamespaceId(), task, isStickyEnabled)
+				ctx, req.GetNamespaceId(), task, isStickyEnabled,
+				mutableStateResp.GetConsumesStreams())
 			if err != nil {
 				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
 				return emptyPollWorkflowTaskQueueResponse, nil
@@ -882,13 +883,19 @@ pollLoop:
 // delivery that attaches those ranges to an ordinary task never runs for it.
 // Only a non-sticky query needs them: a sticky one goes to a worker that still
 // holds the execution and has nothing to replay.
+//
+// Gated on what the mutable state already fetched says. The call takes a
+// workflow lease on the history side, and almost no workflow consumes a
+// stream, so without the gate every query on every workflow would pay for it
+// and inherit a new way to fail.
 func (e *matchingEngineImpl) getStreamSlicesForQueryTask(
 	ctx context.Context,
 	namespaceID string,
 	task *internalTask,
 	isStickyEnabled bool,
+	consumesStreams bool,
 ) ([]*streampb.StreamSlice, error) {
-	if isStickyEnabled {
+	if isStickyEnabled || !consumesStreams {
 		return nil, nil
 	}
 	resp, err := e.historyClient.GetStreamReplaySlices(ctx,

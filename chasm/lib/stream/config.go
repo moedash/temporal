@@ -102,6 +102,19 @@ const (
 	// lock held, so the count is what bounds the lock hold.
 	MaxSubscriptionsPerWorkflow = 100
 
+	// A cold replay re-reads every range the consumer's completed tasks
+	// recorded, because History holds offsets and never payloads. That cost
+	// grows with the workflow's whole life rather than with the task being
+	// started, so one response has a bound on records, on bytes, and on the
+	// pages of history walked to find the ranges.
+	//
+	// A consumer past any of them cannot be replayed by this path. There is no
+	// bounded paged re-supply yet, so it is terminated with the cause rather
+	// than left failing the same task forever.
+	ReplayMaxRecords = 100_000
+	ReplayMaxBytes   = 64 << 20
+	ReplayMaxPages   = 256
+
 	// OwnedStreamsMaxBytesPerWorkflow bounds every stream one execution owns
 	// taken together. The per-stream budget multiplied by the stream count
 	// comes to far more than limit.mutableStateSize.error, so without this an
@@ -169,6 +182,23 @@ under limit.mutableStateSize.error, which would otherwise terminate the workflow
 		OwnedStreamMaxItems,
 		`Message budget of a stream a workflow owns. Appends past it are refused.`,
 	)
+	ReplayMaxRecordsSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.replayMaxRecords",
+		ReplayMaxRecords,
+		`Most stream records one cold replay re-supplies. A consumer whose recorded ranges
+come to more than this cannot be replayed and is terminated with the cause.`,
+	)
+	ReplayMaxBytesSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.replayMaxBytes",
+		ReplayMaxBytes,
+		`Most stream record bytes one cold replay re-supplies.`,
+	)
+	ReplayMaxPagesSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.replayMaxPages",
+		ReplayMaxPages,
+		`Most pages of history one cold replay walks to find the ranges its completed tasks
+consumed.`,
+	)
 	MaxSubscriptionsPerWorkflowSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.maxSubscriptionsPerWorkflow",
 		MaxSubscriptionsPerWorkflow,
@@ -209,6 +239,9 @@ type Config struct {
 	// per-stream budget cannot do.
 	OwnedStreamsMaxBytesPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxSubscriptionsPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ReplayMaxRecords                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ReplayMaxBytes                  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ReplayMaxPages                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func NewConfig(dc *dynamicconfig.Collection) *Config {
@@ -228,6 +261,9 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 
 		OwnedStreamsMaxBytesPerWorkflow: OwnedStreamsMaxBytesPerWorkflowSetting.Get(dc),
 		MaxSubscriptionsPerWorkflow:     MaxSubscriptionsPerWorkflowSetting.Get(dc),
+		ReplayMaxRecords:                ReplayMaxRecordsSetting.Get(dc),
+		ReplayMaxBytes:                  ReplayMaxBytesSetting.Get(dc),
+		ReplayMaxPages:                  ReplayMaxPagesSetting.Get(dc),
 	}
 }
 
@@ -246,6 +282,9 @@ type Limits struct {
 
 	OwnedStreamsMaxBytesPerWorkflow int
 	MaxSubscriptionsPerWorkflow     int
+	ReplayMaxRecords                int
+	ReplayMaxBytes                  int
+	ReplayMaxPages                  int
 }
 
 // LimitsFor resolves the limits for a namespace. A nil Config, which is what
@@ -267,6 +306,9 @@ func (c *Config) LimitsFor(namespaceName string) Limits {
 
 		OwnedStreamsMaxBytesPerWorkflow: c.OwnedStreamsMaxBytesPerWorkflow(namespaceName),
 		MaxSubscriptionsPerWorkflow:     c.MaxSubscriptionsPerWorkflow(namespaceName),
+		ReplayMaxRecords:                c.ReplayMaxRecords(namespaceName),
+		ReplayMaxBytes:                  c.ReplayMaxBytes(namespaceName),
+		ReplayMaxPages:                  c.ReplayMaxPages(namespaceName),
 	}.withDefaults()
 }
 
@@ -312,5 +354,8 @@ func (l Limits) withDefaults() Limits {
 	fill(&l.OwnedStreamMaxItems, OwnedStreamMaxItems)
 	fill(&l.OwnedStreamsMaxBytesPerWorkflow, OwnedStreamsMaxBytesPerWorkflow)
 	fill(&l.MaxSubscriptionsPerWorkflow, MaxSubscriptionsPerWorkflow)
+	fill(&l.ReplayMaxRecords, ReplayMaxRecords)
+	fill(&l.ReplayMaxBytes, ReplayMaxBytes)
+	fill(&l.ReplayMaxPages, ReplayMaxPages)
 	return l
 }

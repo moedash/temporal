@@ -10,14 +10,18 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
 	streampb "go.temporal.io/api/stream/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -1110,4 +1114,280 @@ func TestMessagesAppendedWithoutAKindReachTheWorkflow(t *testing.T) {
 	require.Equal(t, int64(2), got.GetToOffset())
 	require.Equal(t, []string{"no-kind-1", "no-kind-2"}, apiBodies(got.GetRecords()),
 		"the slice must carry the messages, not just advance past them")
+}
+
+// A speculative workflow task must not consume a range.
+//
+// It can be thrown away, and a discarded one writes no completed event, so
+// nothing commits the cursor. Handing it the range would leave the staged
+// range in place: the worker's in-memory workflow has already consumed those
+// records, and the next task would deliver them again, so live execution would
+// see the batch twice where replay sees it once.
+func TestSpeculativeTaskConsumesNoStreamRange(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	streamID := "speculative-stream-" + uuid.NewString()
+	s.create(s.ctx(), t, streamID)
+
+	id := "stream-wf-speculative-" + uuid.NewString()
+	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	_, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
+	require.NoError(t, err)
+
+	var delivered [][]*streampb.StreamSlice
+	var sawUpdate []bool
+
+	//nolint:staticcheck // SA1019: consistent with the other stream tests.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
+			delivered = append(delivered, resp.GetStreamSlices())
+			sawUpdate = append(sawUpdate, len(resp.GetMessages()) > 0)
+			return nil, nil
+		},
+		// Every update is rejected, which is what makes the speculative task
+		// discardable: it writes no events at all.
+		MessageHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*protocolpb.Message, error) {
+			var out []*protocolpb.Message
+			for _, m := range resp.GetMessages() {
+				request := &updatepb.Request{}
+				require.NoError(t, m.GetBody().UnmarshalTo(request))
+				rejection, err := anypb.New(&updatepb.Rejection{
+					RejectedRequestMessageId: m.GetId(),
+					RejectedRequest:          request,
+					Failure:                  &failurepb.Failure{Message: "not this run"},
+				})
+				require.NoError(t, err)
+				out = append(out, &protocolpb.Message{
+					Id:                 uuid.NewString(),
+					ProtocolInstanceId: request.GetMeta().GetUpdateId(),
+					SequencingId:       nil,
+					Body:               rejection,
+				})
+			}
+			return out, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+
+	// Drain the first task and subscribe, so the cursor is caught up and the
+	// workflow owes no task.
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	_, err = s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: s.ns, WorkflowId: id, StreamId: streamID, StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+
+	// An update with no task pending gets a speculative one.
+	updateDone := make(chan struct{})
+	go func() {
+		defer close(updateDone)
+		_, _ = env.FrontendClient().UpdateWorkflowExecution(context.Background(),
+			&workflowservice.UpdateWorkflowExecutionRequest{
+				Namespace:         s.ns,
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: id},
+				Request: &updatepb.Request{
+					Meta:  &updatepb.Meta{UpdateId: uuid.NewString(), Identity: "tester"},
+					Input: &updatepb.Input{Name: "rejected"},
+				},
+				WaitPolicy: &updatepb.WaitPolicy{
+					LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
+				},
+			})
+	}()
+
+	// Records land while the speculative task is scheduled, which is the one
+	// window where delivery could hand them to it.
+	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
+		FrontendRequest: &streamlib.AddMessagesInput{
+			Namespace: s.ns, StreamId: streamID,
+			Records: []*streamlib.StreamRecord{
+				{Body: &commonpb.Payload{Data: []byte("m0")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	<-updateDone
+
+	// Whichever task carried the update carried no records.
+	require.Contains(t, sawUpdate, true, "the update has to have reached a workflow task")
+	for i, sawIt := range sawUpdate {
+		if !sawIt {
+			continue
+		}
+		for _, slice := range delivered[i] {
+			require.Empty(t, slice.GetRecords(),
+				"a task carrying an update may be discarded, so it consumes nothing")
+		}
+	}
+
+	// The record still arrives, exactly once, on a task that can commit it.
+	await.RequireTruef(t, func() bool {
+		_, err := poller.PollAndProcessWorkflowTask()
+		if err != nil {
+			return false
+		}
+		for _, slice := range delivered[len(delivered)-1] {
+			if len(slice.GetRecords()) == 1 &&
+				string(slice.GetRecords()[0].GetBody().GetData()) == "m0" {
+				return true
+			}
+		}
+		return false
+	}, 20*time.Second, 200*time.Millisecond, "the record has to reach a task that commits it")
+
+	// And it is not handed out a second time.
+	events := env.GetHistory(s.ns, &commonpb.WorkflowExecution{WorkflowId: id})
+	consumed := 0
+	for _, e := range events {
+		for _, c := range e.GetWorkflowTaskCompletedEventAttributes().GetConsumedStreamRanges() {
+			consumed += int(c.GetToOffset() - c.GetFromOffset())
+		}
+	}
+	require.Equal(t, 1, consumed, "the range is recorded once")
+}
+
+// A subscription to a stream the workflow owns ends at a continue-as-new.
+//
+// The stream lives in the execution, and the execution does not survive the
+// run transition, so the successor gets a new stream of the same name starting
+// at offset zero. Characterized rather than fixed: carrying the stream itself
+// is a design decision, and until it is made this is what a reader following
+// the workflow id sees.
+func TestOwnedStreamSubscriptionEndsAtContinueAsNew(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+
+	id := "stream-wf-owned-can-" + uuid.NewString()
+	tq := &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	_, err := env.FrontendClient().StartWorkflowExecution(
+		s.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           s.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+			TaskQueue:           tq,
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		},
+	)
+	require.NoError(t, err)
+
+	var delivered [][]*streampb.StreamSlice
+	task := 0
+
+	//nolint:staticcheck // SA1019: consistent with the other stream tests.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
+			delivered = append(delivered, resp.GetStreamSlices())
+			task++
+			if task == 2 {
+				return []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+						ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.
+							ContinueAsNewWorkflowExecutionCommandAttributes{
+							WorkflowType:        &commonpb.WorkflowType{Name: "stream-consumer"},
+							TaskQueue:           tq,
+							WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+							WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+						},
+					},
+				}}, nil
+			}
+			return nil, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	// Subscribed to a stream of its own, by name, with no standalone stream in
+	// the picture.
+	_, err = s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: s.ns, WorkflowId: id, StreamName: "output", StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = s.client.AddWorkflowMessages(s.ctx(), &streamlib.AddWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.AddWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: id, StreamName: "output",
+			Records: []*streamlib.StreamRecord{
+				{Body: &commonpb.Payload{Data: []byte("before-can")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Task 2 consumes it and continues as new.
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	consumed := currentSlice(t, delivered[1])
+	require.Equal(t, int64(1), consumed.GetToOffset())
+
+	// The successor holds no cursor, so a write to its stream of the same name
+	// starts a new offset space and reaches no subscription.
+	_, err = s.client.AddWorkflowMessages(s.ctx(), &streamlib.AddWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.AddWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: id, StreamName: "output",
+			Records: []*streamlib.StreamRecord{
+				{Body: &commonpb.Payload{Data: []byte("after-can")}, Kind: streampb.STREAM_RECORD_KIND_DATA},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	read, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: id, StreamName: "output", FromOffset: 0, MaxMessages: 10,
+		},
+	})
+	require.NoError(t, err)
+	records := read.GetFrontendResponse().GetRecords()
+	require.Len(t, records, 1, "the successor's stream is a new one")
+	require.Equal(t, "after-can", string(records[0].GetBody().GetData()))
+	require.Equal(t, int64(0), records[0].GetOffset(),
+		"the offset space restarts, so a reader following the workflow id sees it rewind")
 }
