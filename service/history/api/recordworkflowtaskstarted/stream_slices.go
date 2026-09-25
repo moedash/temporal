@@ -324,6 +324,12 @@ func deliverStreamSlices(
 	maxItems := limits.MaxConsumeItemsPerTask
 	consumer := ms.GetWorkflowKey()
 
+	// One budget over every routed read this task makes, since a workflow may
+	// consume as many streams as the subscription limit allows and the lock is
+	// held throughout.
+	ctx, cancelBudget := WithRoutedBudget(ctx)
+	defer cancelBudget()
+
 	slicesOut := make([]*streampb.StreamSlice, 0, len(names))
 	addresses := make(map[string]streamOrigin, len(names))
 	for _, name := range names {

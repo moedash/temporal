@@ -34,6 +34,18 @@ func WithRoutedDeadline(ctx context.Context) (context.Context, context.CancelFun
 	return context.WithTimeout(ctx, stream.RoutedCallTimeout)
 }
 
+// WithRoutedBudget bounds a whole set of routed calls made under one workflow
+// lock.
+//
+// Each call has a deadline of its own, but a task can carry as many of them as
+// the subscription limit allows, and per-call deadlines multiplied by that
+// count is how long the lock could be held. One budget over the set is what
+// actually bounds it: a call that runs out of it fails, and the workflow task
+// fails with it rather than the lock being held for minutes.
+func WithRoutedBudget(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, stream.RoutedSetBudget)
+}
+
 func readExternalWindow(
 	ctx context.Context,
 	namespaceID, streamID string,
