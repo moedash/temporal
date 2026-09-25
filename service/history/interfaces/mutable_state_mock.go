@@ -1894,6 +1894,20 @@ func (mr *MockMutableStateMockRecorder) CloseTransactionAsSnapshot(ctx, transact
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsSnapshot", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsSnapshot), ctx, transactionPolicy)
 }
 
+// ConsumesStreams mocks base method.
+func (m *MockMutableState) ConsumesStreams() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConsumesStreams")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// ConsumesStreams indicates an expected call of ConsumesStreams.
+func (mr *MockMutableStateMockRecorder) ConsumesStreams() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConsumesStreams", reflect.TypeOf((*MockMutableState)(nil).ConsumesStreams))
+}
+
 // ContinueAsNewMinBackoff mocks base method.
 func (m *MockMutableState) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	m.ctrl.T.Helper()
@@ -3092,20 +3106,6 @@ func (m *MockMutableState) HasParentExecution() bool {
 func (mr *MockMutableStateMockRecorder) HasParentExecution() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasParentExecution", reflect.TypeOf((*MockMutableState)(nil).HasParentExecution))
-}
-
-// ConsumesStreams mocks base method.
-func (m *MockMutableState) ConsumesStreams() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConsumesStreams")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// ConsumesStreams indicates an expected call of ConsumesStreams.
-func (mr *MockMutableStateMockRecorder) ConsumesStreams() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConsumesStreams", reflect.TypeOf((*MockMutableState)(nil).ConsumesStreams))
 }
 
 // HasPendingStreamData mocks base method.
