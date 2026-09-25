@@ -68,7 +68,7 @@ func TestToAPIRecordsCarriesTheRecordAsWritten(t *testing.T) {
 			Kind:       streampb.STREAM_RECORD_KIND_FINISH,
 			ProducerId: "model-call",
 			Attempt:    2,
-			Sequence:   -1,
+			Sequence:   8,
 			Offset:     42,
 		},
 	}
@@ -87,5 +87,5 @@ func TestToAPIRecordsCarriesTheRecordAsWritten(t *testing.T) {
 	require.Equal(t, streampb.STREAM_RECORD_KIND_FINISH, got[1].GetKind())
 	require.Nil(t, got[1].GetBody())
 	require.Equal(t, "model-call", got[1].GetProducerId())
-	require.Equal(t, int64(-1), got[1].GetSequence())
+	require.Equal(t, int64(8), got[1].GetSequence())
 }
