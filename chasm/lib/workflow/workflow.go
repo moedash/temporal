@@ -229,6 +229,164 @@ func (w *Workflow) ImportStreamSubscriptions(
 	return nil
 }
 
+// ApplyConsumedStreamRanges puts the cursors where the completed event says
+// they stood, for a run being rebuilt from its history.
+//
+// A range for a stream with no cursor belongs to a subscription made out of
+// band, through the service rather than by a command, which leaves no event of
+// its own. The range is proof the subscription was live, so the cursor is
+// created from it: the first range a subscription records begins where it
+// started reading.
+func (w *Workflow) ApplyConsumedStreamRanges(
+	mctx chasm.MutableContext,
+	ranges []*streampb.StreamRange,
+) error {
+	for _, recorded := range ranges {
+		field, ok := w.StreamCursors[recorded.GetStreamId()]
+		if !ok {
+			cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
+				StreamID:    recorded.GetStreamId(),
+				StartOffset: recorded.GetFromOffset(),
+			})
+			if err != nil {
+				return err
+			}
+			if w.StreamCursors == nil {
+				w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
+			}
+			field = chasm.NewComponentField(mctx, cursor)
+			w.StreamCursors[recorded.GetStreamId()] = field
+		}
+		field.Get(mctx).Restore(mctx, recorded.GetToOffset())
+	}
+	return nil
+}
+
+// InheritStreamsOnReset finishes the cursors a reset run rebuilt from its
+// history with what the events could not say, read from the run it was reset
+// from.
+//
+// Every subscription the base run held is carried. One the rebuild recreated
+// keeps the position its events gave it; one the events never mentioned, made
+// out of band and never delivered to before the reset point, starts where it
+// started in the base run. A cursor on a stream in another execution keeps
+// reading that stream; it is marked so and given the frontier the base run
+// last knew. A cursor on a stream the base run owned gets a stream of this
+// run's own, starting at the offset the cursor stands at: the ranges below it
+// are in the base run's stream, which is where replay re-reads them, and
+// everything from here on is this run's. Continuing the offset space is what
+// keeps a range in this run's History unambiguous about which run holds it.
+func (w *Workflow) InheritStreamsOnReset(
+	mctx chasm.MutableContext,
+	base *Workflow,
+	baseCtx chasm.Context,
+	limits stream.Limits,
+) error {
+	if w.StreamCursors == nil {
+		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
+	}
+	if err := w.carryBaseCursors(mctx, base, baseCtx); err != nil {
+		return err
+	}
+
+	names := make([]string, 0, len(w.StreamCursors))
+	for name := range w.StreamCursors {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	for _, name := range names {
+		cursor := w.StreamCursors[name].Get(mctx)
+		if baseCursor := cursorNamed(base, baseCtx, name); baseCursor != nil && baseCursor.IsExternal() {
+			cursor.MarkExternal(mctx, baseCursor.KnownHead())
+			continue
+		}
+		if err := w.ownStreamFrom(mctx, name, cursor.Offset(), limits); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// cursorNamed returns a workflow's cursor by stream name, or nil when the
+// workflow is absent or holds none by that name.
+func cursorNamed(w *Workflow, ctx chasm.Context, name string) *stream.Cursor {
+	if w == nil {
+		return nil
+	}
+	field, ok := w.StreamCursors[name]
+	if !ok {
+		return nil
+	}
+	return field.Get(ctx)
+}
+
+// carryBaseCursors creates a cursor for every subscription the base run held
+// that the rebuild did not recreate, starting where it started in the base run.
+func (w *Workflow) carryBaseCursors(
+	mctx chasm.MutableContext,
+	base *Workflow,
+	baseCtx chasm.Context,
+) error {
+	if base == nil {
+		return nil
+	}
+	for name, field := range base.StreamCursors {
+		if _, ok := w.StreamCursors[name]; ok {
+			continue
+		}
+		baseCursor := field.Get(baseCtx)
+		cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
+			StreamID:    baseCursor.StreamID(),
+			StartOffset: baseCursor.StartOffset(),
+		})
+		if err != nil {
+			return err
+		}
+		w.StreamCursors[name] = chasm.NewComponentField(mctx, cursor)
+	}
+	return nil
+}
+
+// ownStreamFrom gives this run a stream of its own by that name, beginning at
+// the given offset and pinned by this run's consumer there, unless it has one.
+func (w *Workflow) ownStreamFrom(
+	mctx chasm.MutableContext,
+	name string,
+	offset int64,
+	limits stream.Limits,
+) error {
+	if _, ok := w.Streams[name]; ok {
+		return nil
+	}
+	if w.Streams == nil {
+		w.Streams = make(chasm.Map[string, *stream.Stream])
+	}
+	created, err := stream.NewStream(mctx, stream.NewStreamRequest{
+		Attached:    true,
+		StartOffset: offset,
+		Budget: &streamlib.StreamBudget{
+			MaxItems: int64(limits.OwnedStreamMaxItems),
+			MaxBytes: int64(limits.OwnedStreamMaxBytes),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	key := mctx.ExecutionKey()
+	if _, err := created.RegisterConsumer(mctx, stream.ConsumerRegistration{
+		ConsumerID:   streamConsumerID(name),
+		WorkflowID:   key.BusinessID,
+		RunID:        key.RunID,
+		Offset:       offset,
+		MaxConsumers: limits.MaxConsumersPerStream,
+	}); err != nil {
+		return err
+	}
+	w.Streams[name] = chasm.NewComponentField(mctx, created)
+	return nil
+}
+
 // AdvanceKnownHead records how far a stream in another execution has moved.
 //
 // A workflow cannot read that frontier itself while closing its own

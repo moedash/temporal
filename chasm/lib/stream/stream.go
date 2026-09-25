@@ -56,6 +56,12 @@ type NewStreamRequest struct {
 	// child of the root, so an attached stream carries none and is found
 	// through its owner instead of through ListStreams.
 	Attached bool
+
+	// StartOffset is where the stream's offsets begin. Zero for a new stream.
+	// A run created by a reset inherits a cursor whose position is written in
+	// its History, so the stream it goes on reading has to continue that
+	// offset space rather than start over at zero.
+	StartOffset int64
 }
 
 type AddMessagesRequest struct {
@@ -87,6 +93,9 @@ type AddMessagesResult struct {
 }
 
 func NewStream(ctx chasm.MutableContext, req NewStreamRequest) (*Stream, error) {
+	if req.StartOffset < 0 {
+		return nil, serviceerror.NewInvalidArgument("start offset cannot be negative")
+	}
 	visibility := chasm.NewEmptyField[*chasm.Visibility]()
 	if !req.Attached {
 		visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
@@ -95,10 +104,12 @@ func NewStream(ctx chasm.MutableContext, req NewStreamRequest) (*Stream, error) 
 		Visibility: visibility,
 		Batches:    make(chasm.Map[int64, *commonpb.DataBlob]),
 		State: &streamlib.StreamState{
-			Lifecycle: req.Lifecycle,
-			Budget:    req.Budget,
-			Producers: make(map[string]*streamlib.ProducerCursor),
-			Consumers: make(map[string]*streamlib.ConsumerCursor),
+			HeadOffset: req.StartOffset,
+			BaseOffset: req.StartOffset,
+			Lifecycle:  req.Lifecycle,
+			Budget:     req.Budget,
+			Producers:  make(map[string]*streamlib.ProducerCursor),
+			Consumers:  make(map[string]*streamlib.ConsumerCursor),
 		},
 	}, nil
 }

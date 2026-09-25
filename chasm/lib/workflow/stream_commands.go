@@ -300,6 +300,13 @@ func (w *Workflow) RecordStreamRecordsAppended(
 // streamNamed returns the workflow's stream of that name, creating it on first
 // use. Implicit creation is deliberate: a workflow publishing to its own output
 // should not have to coordinate with anyone about who creates it.
+//
+// The stream belongs to this run. After a reset the new run publishes to and
+// subscribes on streams of its own, created here on first use, and the run it
+// was reset from keeps the records its own history refers to. A stream the
+// reset run inherited a subscription to is created by the reset itself, at the
+// offset that subscription stood at, so it is already here by the time a
+// command names it.
 func (w *Workflow) streamNamed(
 	ctx chasm.MutableContext,
 	name string,

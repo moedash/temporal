@@ -254,6 +254,10 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	defer func() { resetWorkflow.GetReleaseFn()(retError) }()
 
 	resetMS := resetWorkflow.GetMutableState()
+	err = r.inheritStreams(ctx, namespaceEntry, baseWorkflow.GetMutableState(), resetMS)
+	if err != nil {
+		return err
+	}
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}
@@ -285,6 +289,45 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	}
 
 	return nil
+}
+
+// inheritStreams completes the stream cursors the rebuild recreated from the
+// reset run's events with what only the base run's state can say: which
+// streams live in other executions, and the frontier those last pushed. A
+// cursor on a stream the base run owned gets a stream of the reset run's own,
+// continuing the offset space from where the cursor stands.
+func (r *workflowResetterImpl) inheritStreams(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	baseMS historyi.MutableState,
+	resetMS historyi.MutableState,
+) error {
+	if !resetMS.HasChasmWorkflowComponent() {
+		return nil
+	}
+	// Read-only first: a reset run with no subscription should not pay a node
+	// in its first transaction for a check that finds nothing.
+	readOnly, _, err := resetMS.ChasmWorkflowComponentReadOnly(ctx)
+	if err != nil {
+		return err
+	}
+	if len(readOnly.StreamCursors) == 0 {
+		return nil
+	}
+
+	var base *chasmworkflow.Workflow
+	var baseCtx chasm.Context
+	if baseMS.HasChasmWorkflowComponent() {
+		if base, baseCtx, err = baseMS.ChasmWorkflowComponentReadOnly(ctx); err != nil {
+			return err
+		}
+	}
+	reset, resetCtx, err := resetMS.ChasmWorkflowComponent(ctx)
+	if err != nil {
+		return err
+	}
+	limits := r.shardContext.GetConfig().Stream.LimitsFor(namespaceEntry.Name().String())
+	return reset.InheritStreamsOnReset(resetCtx, base, baseCtx, limits)
 }
 
 func (r *workflowResetterImpl) prepareResetWorkflow(
