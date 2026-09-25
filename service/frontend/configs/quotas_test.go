@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
@@ -121,6 +123,9 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 			apiToPriority[apiName] = VisibilityAPIToPriority[apiName]
 		}
 	}
+	// The one stream method answered from visibility.
+	listStreams := streamServicePrefix + "ListStreams"
+	apiToPriority[listStreams] = VisibilityAPIToPriority[listStreams]
 	s.Equal(apiToPriority, VisibilityAPIToPriority)
 }
 
@@ -169,6 +174,27 @@ func (s *quotasSuite) TestAllAPIs() {
 	s.Truef(ok, "missing priority for API: %q", DispatchNexusTaskByEndpointAPIName)
 	_, ok = apisWithPriority[CompleteNexusOperation]
 	s.Truef(ok, "missing priority for API: %q", CompleteNexusOperation)
+}
+
+// Every stream method has a priority, the two polls are counted as
+// long-running, and the one list is a visibility read.
+func (s *quotasSuite) TestStreamServiceAPIs() {
+	var service streampb.StreamServiceServer
+	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
+		apiName := streamServicePrefix + m.Name
+		_, inExecution := APIToPriority[apiName]
+		_, inVisibility := VisibilityAPIToPriority[apiName]
+		s.Truef(inExecution || inVisibility, "missing priority for API: %v", m.Name)
+		s.Falsef(inExecution && inVisibility, "API in two limiters: %v", m.Name)
+	})
+
+	for _, poll := range []string{"PollMessages", "PollWorkflowMessages"} {
+		_, ok := ExecutionAPICountLimitOverride[streamServicePrefix+poll]
+		s.Truef(ok, "%s can block, so it counts against concurrent long polls", poll)
+	}
+	s.Equal(1, VisibilityAPIToPriority[streamServicePrefix+"ListStreams"])
+	s.Equal(streamServicePrefix, api.StreamServicePrefix,
+		"the quota table and the authorization table have to agree on the service name")
 }
 
 func (s *quotasSuite) TestOperatorPriority_Execution() {

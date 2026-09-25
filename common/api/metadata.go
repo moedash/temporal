@@ -64,6 +64,9 @@ const (
 	MatchingServicePrefix = "/temporal.server.api.matchingservice.v1.MatchingService/"
 	// Technically not a gRPC service, but still using this format for metadata.
 	NexusServicePrefix = "/temporal.api.nexusservice.v1.NexusService/"
+	// The stream service is served on the frontend next to the workflow
+	// service, so its methods need the same authorization metadata.
+	StreamServicePrefix = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/"
 )
 
 var (
@@ -213,10 +216,46 @@ var (
 		"CompleteNexusOperation":          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"CompleteNexusOperationChasm":     {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 	}
+	// Every stream request carries its namespace inside `frontend_request`,
+	// exposed through a hand-written `GetNamespace()`, which is what namespace
+	// scope needs. Closing, truncating and deleting a stream are ordinary
+	// writes here; whether they should need an operator is a policy call this
+	// table does not make. The two internal calls History makes on itself are
+	// admin so that no namespace-level role can reach them through a frontend.
+	streamServiceMetadata = map[string]MethodMetadata{
+		"CreateStream":           namespaceWrite,
+		"AddMessages":            namespaceWrite,
+		"FinishWriting":          namespaceWrite,
+		"SubscribeWorkflow":      namespaceWrite,
+		"PollMessages":           namespaceReadPoll,
+		"DescribeStream":         namespaceRead,
+		"PollWorkflowMessages":   namespaceReadPoll,
+		"DescribeWorkflowStream": namespaceRead,
+		"AddWorkflowMessages":    namespaceWrite,
+		"RegisterStreamConsumer": namespaceAdmin,
+		"AdvanceConsumerHead":    namespaceAdmin,
+		"CloseStream":            namespaceWrite,
+		"TruncateStream":         namespaceWrite,
+		"ListStreams":            namespaceRead,
+		"DeleteStream":           namespaceWrite,
+	}
+
+	namespaceRead = MethodMetadata{
+		Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone,
+	}
+	namespaceReadPoll = MethodMetadata{
+		Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingCapable,
+	}
+	namespaceWrite = MethodMetadata{
+		Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone,
+	}
+	namespaceAdmin = MethodMetadata{
+		Scope: ScopeNamespace, Access: AccessAdmin, Polling: PollingNone,
+	}
 )
 
 // GetMethodMetadata gets metadata for a given API method in one of the services exported by
-// frontend (WorkflowService, OperatorService, AdminService).
+// frontend (WorkflowService, OperatorService, AdminService, StreamService).
 func GetMethodMetadata(fullApiName string) MethodMetadata {
 	switch {
 	case strings.HasPrefix(fullApiName, WorkflowServicePrefix):
@@ -225,6 +264,8 @@ func GetMethodMetadata(fullApiName string) MethodMetadata {
 		return operatorServiceMetadata[MethodName(fullApiName)]
 	case strings.HasPrefix(fullApiName, NexusServicePrefix):
 		return nexusServiceMetadata[MethodName(fullApiName)]
+	case strings.HasPrefix(fullApiName, StreamServicePrefix):
+		return streamServiceMetadata[MethodName(fullApiName)]
 	case strings.HasPrefix(fullApiName, AdminServicePrefix):
 		return MethodMetadata{Scope: ScopeCluster, Access: AccessAdmin}
 	default:
