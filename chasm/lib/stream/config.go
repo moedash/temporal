@@ -30,6 +30,12 @@ const LongPollBuffer = 3 * time.Second
 // shard would otherwise stretch the lock hold to match it.
 const RoutedCallTimeout = 5 * time.Second
 
+// RoutedSetBudget bounds every routed call one workflow task makes while the
+// execution's lock is held, taken together. RoutedCallTimeout bounds one of
+// them, and a task can carry as many as the subscription limit allows, so
+// without this the lock hold grows with that count.
+const RoutedSetBudget = 15 * time.Second
+
 // MaxListPageSize bounds a visibility page when the caller does not.
 const MaxListPageSize = 1000
 

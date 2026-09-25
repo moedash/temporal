@@ -52,6 +52,12 @@ func resolveStagedStreamSubscriptions(
 		return err
 	}
 
+	// One budget over the whole set. Each pin is a routed call with a deadline
+	// of its own, nothing bounds how many a task carries beyond the
+	// subscription limit, and the execution's lock is held for all of them.
+	ctx, cancelBudget := recordworkflowtaskstarted.WithRoutedBudget(ctx)
+	defer cancelBudget()
+
 	for _, pending := range staged {
 		// Already subscribed, so only the event is owed. Re-registering would
 		// re-run the pin write with the original start offset, which would drag
