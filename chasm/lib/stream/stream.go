@@ -76,6 +76,11 @@ type AddMessagesRequest struct {
 	// The namespace's limits, resolved by the caller. A zero value means the
 	// defaults.
 	Limits Limits
+
+	// What the other streams of the same owner already hold, so the per-owner
+	// aggregate can be checked here alongside this stream's own budget. Zero
+	// for a standalone stream, which has no siblings.
+	SiblingBytes int64
 }
 
 type AddMessagesResult struct {
@@ -180,7 +185,8 @@ func (s *Stream) AddMessages(
 	if err := s.checkProducerRoom(req.ProducerID, limits.MaxProducersPerStream); err != nil {
 		return AddMessagesResult{}, err
 	}
-	if err := s.checkBudget(int64(len(req.Records)), int64(len(blob.Data))); err != nil {
+	if err := s.checkBudget(
+		limits, req.SiblingBytes, int64(len(req.Records)), int64(len(blob.Data))); err != nil {
 		return AddMessagesResult{}, err
 	}
 
@@ -309,10 +315,21 @@ func (s *Stream) held() int64 {
 // mutable state of the execution that owns the stream, and the alternative to
 // refusing here is the execution size limit terminating that workflow later,
 // with nothing naming the stream as the cause.
-func (s *Stream) checkBudget(count int64, size int64) error {
+func (s *Stream) checkBudget(limits Limits, siblingBytes, count, size int64) error {
 	budget := s.State.GetBudget()
 	if budget == nil {
 		return nil
+	}
+	// The per-stream budget bounds one stream, and one execution can own many.
+	// Multiplied out they come to far more than the execution size limit, so
+	// the aggregate is what keeps that limit from terminating the workflow.
+	if limit := int64(limits.OwnedStreamsMaxBytesPerWorkflow); limit > 0 &&
+		siblingBytes+s.State.AppendedBytes+size > limit {
+		return serviceerror.NewResourceExhaustedf(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT,
+			"the workflow's streams hold %d of their shared budget of %d bytes; the append "+
+				"of %d does not fit",
+			siblingBytes+s.State.AppendedBytes, limit, size)
 	}
 	if limit := budget.GetMaxItems(); limit > 0 && s.held()+count > limit {
 		return serviceerror.NewResourceExhaustedf(
