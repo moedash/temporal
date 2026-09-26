@@ -193,9 +193,14 @@ func TestMeter(t *testing.T) {
 		cmpopts.SortSlices(func(x, y metricdata.Metrics) bool {
 			return x.Name < y.Name
 		}),
-		cmpopts.IgnoreFields(metricdata.DataPoint[int64]{}, "StartTime", "Time"),
-		cmpopts.IgnoreFields(metricdata.DataPoint[float64]{}, "StartTime", "Time"),
-		cmpopts.IgnoreFields(metricdata.HistogramDataPoint[int64]{}, "StartTime", "Time", "Bounds"),
+		// Exemplars are ignored rather than equated empty: the SDK hands back
+		// either a nil or an allocated-but-empty slice depending on whether
+		// its reservoir was ever touched, and equating empty globally would
+		// also hide a nil-versus-empty attribute set or data point.
+		cmpopts.IgnoreFields(metricdata.DataPoint[int64]{}, "StartTime", "Time", "Exemplars"),
+		cmpopts.IgnoreFields(metricdata.DataPoint[float64]{}, "StartTime", "Time", "Exemplars"),
+		cmpopts.IgnoreFields(
+			metricdata.HistogramDataPoint[int64]{}, "StartTime", "Time", "Bounds", "Exemplars"),
 	); diff != "" {
 		t.Errorf("mismatch (-want, +got):\n%s", diff)
 	}
@@ -264,7 +269,8 @@ func TestMeter_TimerInSeconds(t *testing.T) {
 		cmp.Comparer(func(a1, a2 attribute.Set) bool {
 			return a1.Equals(&a2)
 		}),
-		cmpopts.IgnoreFields(metricdata.HistogramDataPoint[float64]{}, "StartTime", "Time", "Bounds"),
+		cmpopts.IgnoreFields(
+			metricdata.HistogramDataPoint[float64]{}, "StartTime", "Time", "Bounds", "Exemplars"),
 	); diff != "" {
 		t.Errorf("mismatch (-want, +got):\n%s", diff)
 	}
