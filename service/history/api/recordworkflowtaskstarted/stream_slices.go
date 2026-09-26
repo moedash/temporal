@@ -402,13 +402,16 @@ type ownedRange struct {
 
 // readRecordedRange re-supplies a range a completed task recorded.
 //
-// It runs after the execution lock is released, so the consumer's own component
-// is read back through the engine. Standalone sources use the routed service
-// client, since their shards can belong to a different history host.
+// It runs after the execution lock is released, so an owned stream is read
+// back through the engine, from the run that holds it: the consumer itself, or
+// the run the consumer was reset from for a range recorded before the reset.
+// Standalone sources use the routed service client, since their shards can
+// belong to a different history host.
 func readRecordedRange(
 	ctx context.Context,
 	consumer definition.WorkflowKey,
 	origin streamOrigin,
+	ownerRunID string,
 	streamID string,
 	from, to int64,
 ) (stream.Window, error) {
@@ -420,7 +423,7 @@ func readRecordedRange(
 		chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
 			NamespaceID: consumer.NamespaceID,
 			BusinessID:  consumer.WorkflowID,
-			RunID:       consumer.RunID,
+			RunID:       ownerRunID,
 		}),
 		func(wf *chasmworkflow.Workflow, cctx chasm.Context, r ownedRange) (stream.Window, error) {
 			s := wf.OwnedStream(cctx, r.name)
@@ -447,6 +450,20 @@ type replaySupply struct {
 	// can tell a complete re-supply from a short one.
 	reached map[string]int64
 	slices  []*streampb.StreamSlice
+
+	// Ranges recorded since the last reset point, waiting to learn which run's
+	// stream holds them. A reset copies the base run's history into the new
+	// run, so the ranges before the reset point were consumed from the base
+	// run's owned streams, and the run they belong to is only named by the
+	// event that marks the reset point, after them in the history. Ranges
+	// after the last reset point belong to the consumer itself.
+	pending []recordedRange
+}
+
+// recordedRange is one consumed range and the completion that recorded it.
+type recordedRange struct {
+	eventID  int64
+	recorded *streampb.StreamRange
 }
 
 // attachReplaySlices re-supplies the payloads for ranges that earlier workflow
@@ -553,6 +570,9 @@ func attachReplaySlices(
 		}
 	}
 
+	if err := supply.finish(); err != nil {
+		return err
+	}
 	if err := supply.checkCoverage(); err != nil {
 		return err
 	}
@@ -640,6 +660,9 @@ func ReplaySlicesForQuery(
 		}
 		token = next
 	}
+	if err := supply.finish(); err != nil {
+		return nil, err
+	}
 	if err := supply.checkCoverage(); err != nil {
 		return nil, err
 	}
@@ -655,49 +678,75 @@ func AsRefusal(err error) error {
 	return err
 }
 
-// collect re-reads every range the events on one page recorded.
+// collect gathers every range the events on one page recorded and re-reads the
+// ones whose run it can name. A reset point names the run for everything
+// gathered before it.
 func (s *replaySupply) collect(events []*historypb.HistoryEvent) error {
 	for _, event := range events {
+		if attrs := event.GetWorkflowTaskFailedEventAttributes(); attrs != nil &&
+			attrs.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW &&
+			attrs.GetBaseRunId() != "" {
+			if err := s.flush(attrs.GetBaseRunId()); err != nil {
+				return err
+			}
+			continue
+		}
 		for _, recorded := range event.GetWorkflowTaskCompletedEventAttributes().GetConsumedStreamRanges() {
-			address, ok := s.addresses[recorded.GetStreamId()]
-			if !ok {
+			if _, ok := s.addresses[recorded.GetStreamId()]; !ok {
 				// A subscription the workflow has since dropped. The range is
 				// still part of its history, but nothing is consuming it now.
 				continue
 			}
-
-			records, ownerRunID, err := s.recordsFor(address, recorded)
-			if err != nil {
-				return err
-			}
-
-			if to := recorded.GetToOffset(); to > s.reached[recorded.GetStreamId()] {
-				s.reached[recorded.GetStreamId()] = to
-			}
-
-			// Attached even when empty: the task observed nothing, and replay
-			// has to reproduce that rather than infer it from an absence.
-			s.slices = append(s.slices, &streampb.StreamSlice{
-				StreamId:                     recorded.GetStreamId(),
-				RunId:                        ownerRunID,
-				FromOffset:                   recorded.GetFromOffset(),
-				ToOffset:                     recorded.GetToOffset(),
-				Records:                      records,
-				WorkflowTaskCompletedEventId: event.GetEventId(),
-			})
+			s.pending = append(s.pending, recordedRange{eventID: event.GetEventId(), recorded: recorded})
 		}
 	}
 	return nil
 }
 
+// finish re-reads the ranges recorded after the last reset point, which the
+// consumer's own streams hold. Called once every page has been walked.
+func (s *replaySupply) finish() error {
+	return s.flush(s.consumer.RunID)
+}
+
+// flush re-reads every range gathered since the last reset point from the run
+// named for it, in the order the tasks recorded them.
+func (s *replaySupply) flush(ownerRunID string) error {
+	for _, r := range s.pending {
+		address := s.addresses[r.recorded.GetStreamId()]
+		records, runID, err := s.recordsFor(address, ownerRunID, r.recorded)
+		if err != nil {
+			return err
+		}
+
+		if to := r.recorded.GetToOffset(); to > s.reached[r.recorded.GetStreamId()] {
+			s.reached[r.recorded.GetStreamId()] = to
+		}
+
+		// Attached even when empty: the task observed nothing, and replay
+		// has to reproduce that rather than infer it from an absence.
+		s.slices = append(s.slices, &streampb.StreamSlice{
+			StreamId:                     r.recorded.GetStreamId(),
+			RunId:                        runID,
+			FromOffset:                   r.recorded.GetFromOffset(),
+			ToOffset:                     r.recorded.GetToOffset(),
+			Records:                      records,
+			WorkflowTaskCompletedEventId: r.eventID,
+		})
+	}
+	s.pending = nil
+	return nil
+}
+
 // recordsFor re-reads one recorded range, or returns nothing for a range that
 // recorded an empty observation. The run id is the execution holding the
-// stream, which for an owned stream is the consumer itself.
+// stream: for an owned stream the run named for the range, for a standalone
+// one whatever run the read reports.
 func (s *replaySupply) recordsFor(
 	address streamOrigin,
+	ownerRunID string,
 	recorded *streampb.StreamRange,
 ) ([]*streampb.StreamRecord, string, error) {
-	ownerRunID := s.consumer.RunID
 	if recorded.GetToOffset() <= recorded.GetFromOffset() {
 		if address.external {
 			ownerRunID = ""
@@ -705,7 +754,7 @@ func (s *replaySupply) recordsFor(
 		return nil, ownerRunID, nil
 	}
 
-	w, err := readRecordedRange(s.ctx, s.consumer, address,
+	w, err := readRecordedRange(s.ctx, s.consumer, address, ownerRunID,
 		recorded.GetStreamId(), recorded.GetFromOffset(), recorded.GetToOffset())
 	if err != nil {
 		// Truncation and deletion are the reachable causes, and neither is
