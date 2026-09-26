@@ -649,8 +649,7 @@ func ReplaySlicesForQuery(
 // AsRefusal turns a range that cannot be served into the error a caller with
 // no task to fail should return. Any other error is handed back unchanged.
 func AsRefusal(err error) error {
-	var unavailable *rangeUnavailable
-	if errors.As(err, &unavailable) {
+	if unavailable, ok := errors.AsType[*rangeUnavailable](err); ok {
 		return serviceerror.NewFailedPrecondition(unavailable.Error())
 	}
 	return err
