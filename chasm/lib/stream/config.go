@@ -30,6 +30,12 @@ const LongPollBuffer = 3 * time.Second
 // shard would otherwise stretch the lock hold to match it.
 const RoutedCallTimeout = 5 * time.Second
 
+// RoutedSetBudget bounds every routed call one workflow task makes while the
+// execution's lock is held, taken together. RoutedCallTimeout bounds one of
+// them, and a task can carry as many as the subscription limit allows, so
+// without this the lock hold grows with that count.
+const RoutedSetBudget = 15 * time.Second
+
 // MaxListPageSize bounds a visibility page when the caller does not.
 const MaxListPageSize = 1000
 
@@ -95,6 +101,12 @@ const (
 	// the same reason: each batch is a node, and many small ones cost state
 	// that the byte budget alone does not see.
 	OwnedStreamMaxItems = 10_000
+
+	// MaxSubscriptionsPerWorkflow bounds how many streams one execution
+	// consumes. Each subscription costs a routed call on the completion path
+	// that made it and another on every task start, both with the execution's
+	// lock held, so the count is what bounds the lock hold.
+	MaxSubscriptionsPerWorkflow = 100
 
 	// OwnedStreamsMaxBytesPerWorkflow bounds every stream one execution owns
 	// taken together. The per-stream budget multiplied by the stream count
@@ -163,6 +175,11 @@ under limit.mutableStateSize.error, which would otherwise terminate the workflow
 		OwnedStreamMaxItems,
 		`Message budget of a stream a workflow owns. Appends past it are refused.`,
 	)
+	MaxSubscriptionsPerWorkflowSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.maxSubscriptionsPerWorkflow",
+		MaxSubscriptionsPerWorkflow,
+		`Most streams one workflow execution can consume.`,
+	)
 	OwnedStreamsMaxBytesPerWorkflowSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.ownedStreamsMaxBytesPerWorkflow",
 		OwnedStreamsMaxBytesPerWorkflow,
@@ -197,6 +214,7 @@ type Config struct {
 	// Bounds every stream one execution owns taken together, which the
 	// per-stream budget cannot do.
 	OwnedStreamsMaxBytesPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxSubscriptionsPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func NewConfig(dc *dynamicconfig.Collection) *Config {
@@ -215,6 +233,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		OwnedStreamMaxItems:        OwnedStreamMaxItemsSetting.Get(dc),
 
 		OwnedStreamsMaxBytesPerWorkflow: OwnedStreamsMaxBytesPerWorkflowSetting.Get(dc),
+		MaxSubscriptionsPerWorkflow:     MaxSubscriptionsPerWorkflowSetting.Get(dc),
 	}
 }
 
@@ -232,6 +251,7 @@ type Limits struct {
 	OwnedStreamMaxItems        int
 
 	OwnedStreamsMaxBytesPerWorkflow int
+	MaxSubscriptionsPerWorkflow     int
 }
 
 // LimitsFor resolves the limits for a namespace. A nil Config, which is what
@@ -252,6 +272,7 @@ func (c *Config) LimitsFor(namespaceName string) Limits {
 		OwnedStreamMaxItems:        c.OwnedStreamMaxItems(namespaceName),
 
 		OwnedStreamsMaxBytesPerWorkflow: c.OwnedStreamsMaxBytesPerWorkflow(namespaceName),
+		MaxSubscriptionsPerWorkflow:     c.MaxSubscriptionsPerWorkflow(namespaceName),
 	}.withDefaults()
 }
 
@@ -296,5 +317,6 @@ func (l Limits) withDefaults() Limits {
 	fill(&l.OwnedStreamMaxBytes, OwnedStreamMaxBytes)
 	fill(&l.OwnedStreamMaxItems, OwnedStreamMaxItems)
 	fill(&l.OwnedStreamsMaxBytesPerWorkflow, OwnedStreamsMaxBytesPerWorkflow)
+	fill(&l.MaxSubscriptionsPerWorkflow, MaxSubscriptionsPerWorkflow)
 	return l
 }

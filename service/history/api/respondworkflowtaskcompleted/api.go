@@ -453,6 +453,34 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			return nil, err
 		}
 
+		// Subscriptions to streams in other executions, resolved here for the
+		// same reason: the command handler has nowhere to look the addressing
+		// up from, and by delivery time the cursor has to already exist.
+		//
+		// Skipped once the task has failed. Registering a consumer is a durable
+		// write on the stream's own execution, and this workflow's side of it
+		// is about to be rolled back, which would leave a pin on someone else's
+		// stream with no cursor behind it and nothing to release it. A failed
+		// command does not return an error, so this has to be checked here
+		// rather than inferred from err.
+		if workflowTaskHandler.workflowTaskFailedCause == nil && !workflowTaskHandler.stopProcessing {
+			err = resolveStagedStreamSubscriptions(
+				ctx,
+				ms,
+				ms.GetWorkflowKey().NamespaceID,
+				handler.config.Stream.LimitsFor(namespaceEntry.Name().String()),
+				workflowTaskHandler.stagedStreamSubscriptions,
+			)
+			if failWFTErr, ok := errors.AsType[chasmworkflow.FailWorkflowTaskError](err); ok {
+				// A refused subscription fails the task the way a refused
+				// command does, so the cause lands in History.
+				err = workflowTaskHandler.failWorkflowTask(failWFTErr.Cause, failWFTErr)
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		// Worker must respond with Update Accepted or Update Rejected message on every Update Requested
 		// message that were delivered on specific WT, when completing this WT.
 		// If worker ignored the update request (old SDK or SDK bug), then server rejects this update.

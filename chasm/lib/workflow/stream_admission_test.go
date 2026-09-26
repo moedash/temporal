@@ -4,7 +4,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
@@ -113,4 +116,49 @@ func TestKnownHeadIsOnlyPushedIntoAnExternalCursor(t *testing.T) {
 	err = w.AdvanceKnownHead(ctx, "x", 42)
 	var notFound *serviceerror.NotFound
 	require.ErrorAs(t, err, &notFound)
+}
+
+// Each subscription costs a routed call on the completion path that made it,
+// with this execution's lock held, and another on every task start. Nothing
+// else bounds how many a workflow may hold or how many one task may carry.
+func TestSubscriptionsPerWorkflowAreBounded(t *testing.T) {
+	ctx := newStreamBudgetTestContext()
+	backend := &chasm.MockNodeBackend{
+		HandleAddHistoryEvent: func(
+			eventType enumspb.EventType, set func(*historypb.HistoryEvent),
+		) *historypb.HistoryEvent {
+			e := &historypb.HistoryEvent{EventType: eventType}
+			set(e)
+			return e
+		},
+	}
+	w := &Workflow{MSPointer: chasm.NewMSPointer(backend)}
+	opts := CommandHandlerOptions{WorkflowTaskCompletedEventID: 10}
+	limits := stream.Limits{MaxSubscriptionsPerWorkflow: 2}
+
+	subscribe := func(id string) error {
+		return handleSubscribeStreamCommand(ctx, w, nil, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM,
+			Attributes: &commandpb.Command_SubscribeStreamCommandAttributes{
+				SubscribeStreamCommandAttributes: &commandpb.SubscribeStreamCommandAttributes{
+					StreamNameOrId: id,
+				},
+			},
+		}, opts, limits)
+	}
+
+	require.NoError(t, subscribe("a"))
+	require.NoError(t, subscribe("b"))
+
+	// Counted against what this task has already staged, so one task cannot
+	// carry an unbounded set of them either.
+	err := subscribe("c")
+	var failTask FailWorkflowTaskError
+	require.ErrorAs(t, err, &failTask)
+	require.Equal(t,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, failTask.Cause)
+
+	// Subscribing again to one already staged registers nothing new, so it is
+	// not refused for room.
+	require.NoError(t, subscribe("a"))
 }

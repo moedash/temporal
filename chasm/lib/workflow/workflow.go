@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -55,6 +57,38 @@ type Workflow struct {
 	// would collide with the other origin under the same key is refused rather
 	// than silently handed the wrong cursor.
 	StreamCursors chasm.Map[string, *stream.Cursor]
+
+	// Subscribe commands whose stream is in another execution, so the addressing
+	// has to be looked up before a cursor can be made. In memory only, drained
+	// by the flush before commit.
+	pendingStreamSubscriptions []PendingStreamSubscription
+}
+
+// PendingStreamSubscription is a subscribe command whose stream lives in
+// another execution, waiting for the flush to look up its addressing.
+type PendingStreamSubscription struct {
+	StreamID    string
+	StartOffset int64
+	// The workflow already holds a cursor for this stream. The subscription
+	// itself is done, but the command still needs its event, because that is
+	// what a replaying worker matches the re-issued command against.
+	AlreadySubscribed bool
+
+	// The event this command already wrote, waiting on its start offset. In
+	// memory only, like the rest of this struct.
+	Event *historypb.HistoryEvent
+}
+
+// StagePendingSubscription records a subscription for the flush to resolve.
+func (w *Workflow) StagePendingSubscription(sub PendingStreamSubscription) {
+	w.pendingStreamSubscriptions = append(w.pendingStreamSubscriptions, sub)
+}
+
+// DrainStreamSubscriptions returns and clears the staged subscriptions.
+func (w *Workflow) DrainStreamSubscriptions() []PendingStreamSubscription {
+	out := w.pendingStreamSubscriptions
+	w.pendingStreamSubscriptions = nil
+	return out
 }
 
 // streamConsumerID names this workflow's pin on a stream it owns. An attached
@@ -169,6 +203,58 @@ func (w *Workflow) SubscribeToExternalStream(
 	cursor.AdvanceKnownHead(mctx, req.KnownHead)
 	w.StreamCursors[req.StreamID] = chasm.NewComponentField(mctx, cursor)
 	return req.StartOffset, nil
+}
+
+// ExportStreamSubscriptions returns the subscriptions a successor run has to
+// inherit.
+//
+// Only subscriptions to streams in other executions are exported. A stream this
+// workflow owns lives in this execution and does not survive the run
+// transition, so carrying a cursor for one would leave the successor pointing
+// at a stream it cannot reach.
+//
+// So a subscription to a stream the workflow owns ends at a continue-as-new.
+// The successor's stream of the same name is a new one starting at offset
+// zero, an outside producer addressing the workflow with no run id reaches
+// that one, and records written to the predecessor's stream between the
+// commit and the successor's re-subscribe are not carried. A workflow that
+// wants its own output to continue across runs has to republish; a stream in
+// another execution, which is what the offsets of a long-lived reader belong
+// to, does carry.
+func (w *Workflow) ExportStreamSubscriptions(ctx chasm.Context) []ExternalStreamSubscription {
+	var out []ExternalStreamSubscription
+	for _, field := range w.StreamCursors {
+		cursor := field.Get(ctx)
+		if !cursor.IsExternal() {
+			continue
+		}
+		out = append(out, ExternalStreamSubscription{
+			StreamID:    cursor.StreamID(),
+			StartOffset: cursor.Offset(),
+			KnownHead:   cursor.KnownHead(),
+		})
+	}
+	// Stable order, so a successor's state does not depend on map iteration.
+	slices.SortFunc(out, func(a, b ExternalStreamSubscription) int {
+		return strings.Compare(a.StreamID, b.StreamID)
+	})
+	return out
+}
+
+// ImportStreamSubscriptions installs subscriptions inherited from the run this
+// one continues. The offset carries over unchanged: offsets are global to the
+// stream, so the successor resumes exactly where its predecessor stopped and
+// the stream itself is untouched.
+func (w *Workflow) ImportStreamSubscriptions(
+	mctx chasm.MutableContext,
+	subscriptions []ExternalStreamSubscription,
+) error {
+	for _, sub := range subscriptions {
+		if _, err := w.SubscribeToExternalStream(mctx, sub); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // AdvanceKnownHead records how far a stream in another execution has moved.

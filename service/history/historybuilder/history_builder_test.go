@@ -2272,6 +2272,8 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:                         true,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED:                            true,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED:                     true,
+		enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED:                           true,
+		enumspb.EVENT_TYPE_WORKFLOW_STREAM_RECORDS_APPENDED:                     true,
 	}
 
 	// events corresponding to message from client will be assigned an event ID immediately
@@ -2321,7 +2323,8 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		commandType := enumspb.CommandType(ct)
 		// Unspecified is not counted.
 		// ProtocolMessage command doesn't have corresponding event.
-		if commandType == enumspb.COMMAND_TYPE_UNSPECIFIED || commandType == enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE {
+		if commandType == enumspb.COMMAND_TYPE_UNSPECIFIED ||
+			commandType == enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE {
 			continue
 		}
 		commandsWithEventsCount++

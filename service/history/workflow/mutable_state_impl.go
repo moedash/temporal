@@ -670,6 +670,43 @@ func (ms *MutableStateImpl) mustInitHSM() {
 	ms.stateMachineNode = stateMachineNode
 }
 
+// carryStreamSubscriptionsTo hands this run's subscriptions to the run that
+// continues it.
+//
+// A cursor is workflow state, so without this a continue-as-new would silently
+// end a subscription the workflow never cancelled: the stream would keep its
+// consumer pin and keep pushing to the workflow id, and the successor would
+// have nowhere to put it.
+func (ms *MutableStateImpl) carryStreamSubscriptionsTo(newMutableState *MutableStateImpl) error {
+	if !ms.HasChasmWorkflowComponent() {
+		return nil
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return err
+	}
+	subscriptions := wf.ExportStreamSubscriptions(chasmCtx)
+	if len(subscriptions) == 0 {
+		return nil
+	}
+
+	newMutableState.EnsureChasmWorkflowComponent(context.Background())
+	newWorkflow, newChasmCtx, err := newMutableState.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+	return newWorkflow.ImportStreamSubscriptions(newChasmCtx, subscriptions)
+}
+
+func (ms *MutableStateImpl) HasChasmWorkflowComponent() bool {
+	node, ok := ms.chasmTree.(*chasm.Node)
+	if !ok {
+		return false
+	}
+	_, err := node.ComponentByPath(chasm.NewContext(context.Background(), node), nil)
+	return err == nil
+}
+
 func (ms *MutableStateImpl) IsWorkflow() bool {
 	return ms.chasmTree.ArchetypeID() == chasm.WorkflowArchetypeID
 }
@@ -6397,6 +6434,10 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 		newMutableState.executionInfo.WorkflowRunTimeout,
 		newRunID,
 	); err != nil {
+		return nil, nil, err
+	}
+
+	if err = ms.carryStreamSubscriptionsTo(newMutableState); err != nil {
 		return nil, nil, err
 	}
 
