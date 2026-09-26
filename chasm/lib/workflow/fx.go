@@ -4,6 +4,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/stream"
 	"go.uber.org/fx"
 )
 
@@ -12,6 +13,9 @@ var Module = fx.Module(
 	fx.Provide(NewConfig),
 	fx.Provide(NewRegistry),
 	fx.Provide(newLibrary),
+	// Provided here rather than by the stream service module, because the
+	// command handlers need it in every service that runs this library.
+	fx.Provide(stream.NewConfig),
 	fx.Invoke(func(
 		chasmRegistry *chasm.Registry,
 		library *library,

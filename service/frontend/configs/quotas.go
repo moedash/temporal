@@ -23,6 +23,10 @@ const (
 	PollWorkflowHistoryAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionHistory"
 	// PollActivityExecutionAPIName is used instead of DescribeActivityExecution if LongPollToken is set in request.
 	PollActivityExecutionAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecutionDescription"
+
+	// The stream service is served on the same frontend server as the workflow
+	// service and shares its rate limiters.
+	streamServicePrefix = "/temporal.server.chasm.lib.stream.proto.v1.StreamService/"
 )
 
 var (
@@ -62,6 +66,10 @@ var (
 		// Dispatching a Nexus task is a potentially long running RPC, it's classified in the same bucket as QueryWorkflow.
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName: 1,
 		DispatchNexusTaskByEndpointAPIName:              1,
+
+		// Stream reads block only when asked to wait for new records.
+		streamServicePrefix + "PollMessages":         1,
+		streamServicePrefix + "PollWorkflowMessages": 1,
 	}
 
 	// PollTaskAPISet is the set of API methods for which NamespaceRateLimitInterceptor will
@@ -209,6 +217,26 @@ var (
 		// Informational API that aren't required for the temporal service to function
 		OpenAPIV3APIName: 5,
 		OpenAPIV2APIName: 5,
+
+		// Stream service. Appends and subscriptions are external events like a
+		// signal; closing, truncating and deleting change state; describes are
+		// status reads; the two polls sit with the other polls.
+		streamServicePrefix + "CreateStream":           1,
+		streamServicePrefix + "AddMessages":            1,
+		streamServicePrefix + "FinishWriting":          1,
+		streamServicePrefix + "SubscribeWorkflow":      1,
+		streamServicePrefix + "AddWorkflowMessages":    1,
+		streamServicePrefix + "CloseStream":            2,
+		streamServicePrefix + "TruncateStream":         2,
+		streamServicePrefix + "DeleteStream":           2,
+		streamServicePrefix + "DescribeStream":         3,
+		streamServicePrefix + "DescribeWorkflowStream": 3,
+		streamServicePrefix + "PollMessages":           4,
+		streamServicePrefix + "PollWorkflowMessages":   4,
+		// History calls these on itself; the frontend answers them with
+		// Unimplemented, so they only ever cost a refusal.
+		streamServicePrefix + "RegisterStreamConsumer": 5,
+		streamServicePrefix + "AdvanceConsumerHead":    5,
 	}
 
 	ExecutionAPIPrioritiesOrdered = []int{0, 1, 2, 3, 4, 5}
@@ -234,6 +262,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":             1,
+
+		// Answered from visibility on the frontend, like the other lists.
+		streamServicePrefix + "ListStreams": 1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
