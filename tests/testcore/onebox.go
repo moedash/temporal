@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -346,8 +347,8 @@ func (c *temporalImpl) Start() (retErr error) {
 
 func (c *temporalImpl) Stop() error {
 	var errs []error
-	for index := len(c.servers) - 1; index >= 0; index-- {
-		errs = append(errs, c.servers[index].Stop())
+	for _, v := range slices.Backward(c.servers) {
+		errs = append(errs, v.Stop())
 	}
 	c.servers = nil
 	errs = append(errs, c.close()...)
