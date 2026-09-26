@@ -826,6 +826,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	wftDeployment := worker_versioning.DeploymentOrVersion(request.Deployment, wftDeploymentVersion)
 
+	streamCursors, err := m.ms.commitStreamCursors()
+	if err != nil {
+		return nil, err
+	}
+
 	// Now write the completed event
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
 		workflowTask.ScheduledEventID,
@@ -838,6 +843,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		deploymentName,
 		wftDeployment,
 		vb,
+		streamCursors,
 	)
 
 	override := m.ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
@@ -849,7 +855,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	}
 
 	wftScheduleToClose := event.GetEventTime().AsTime().Sub(workflowTask.ScheduledTime)
-	err := m.afterAddWorkflowTaskCompletedEvent(event, limits, wftScheduleToClose)
+	err = m.afterAddWorkflowTaskCompletedEvent(event, limits, wftScheduleToClose)
 	if err != nil {
 		return nil, err
 	}

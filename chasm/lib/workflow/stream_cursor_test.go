@@ -109,6 +109,56 @@ func TestSubscribeCreatesTheStreamItNames(t *testing.T) {
 	require.Len(t, state.GetConsumers(), 1, "the subscription pinned the new stream")
 }
 
+// Committing a delivered range moves the consumer's cursor on the stream, so
+// the stream knows how far this reader has got.
+func TestCommitStreamCursorsAdvancesTheConsumer(t *testing.T) {
+	ctx := newStreamCursorTestContext()
+	w := &Workflow{}
+	owned := newAttachedStream(t, ctx, 4)
+	w.Streams = chasm.Map[string, *stream.Stream]{
+		DefaultStreamName: chasm.NewComponentField(ctx, owned),
+	}
+
+	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0, stream.DefaultLimits())
+	require.NoError(t, err)
+
+	cursor := w.StreamCursors[DefaultStreamName].Get(ctx)
+	require.NoError(t, cursor.StagePending(ctx, 0, 3))
+
+	recorded := w.CommitStreamCursors(ctx)
+	require.Len(t, recorded, 1)
+	require.Equal(t, int64(0), recorded[0].GetFromOffset())
+	require.Equal(t, int64(3), recorded[0].GetToOffset())
+
+	require.Equal(t, int64(3),
+		owned.State.GetConsumers()[streamConsumerID(DefaultStreamName)].GetOffset(),
+		"the stream must see how far the consumer has read")
+}
+
+// An idle task records an empty range, which must leave the consumer alone.
+func TestCommitStreamCursorsWithAnEmptyRangeHoldsTheConsumer(t *testing.T) {
+	ctx := newStreamCursorTestContext()
+	w := &Workflow{}
+	owned := newAttachedStream(t, ctx, 4)
+	w.Streams = chasm.Map[string, *stream.Stream]{
+		DefaultStreamName: chasm.NewComponentField(ctx, owned),
+	}
+
+	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0, stream.DefaultLimits())
+	require.NoError(t, err)
+
+	cursor := w.StreamCursors[DefaultStreamName].Get(ctx)
+	require.NoError(t, cursor.StagePending(ctx, 0, 0))
+
+	recorded := w.CommitStreamCursors(ctx)
+	require.Len(t, recorded, 1, "an empty range is still recorded")
+	require.Equal(t, recorded[0].GetFromOffset(), recorded[0].GetToOffset())
+
+	require.Equal(t, int64(0),
+		owned.State.GetConsumers()[streamConsumerID(DefaultStreamName)].GetOffset(),
+		"consuming nothing must not move the consumer")
+}
+
 // Two publishes in one workflow task each write their own batch, keyed by the
 // offset it starts at, so neither collides with the other and a retry of
 // either addresses the same key it wrote before.

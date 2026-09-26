@@ -9,6 +9,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -274,6 +275,91 @@ func (w *Workflow) AdvanceKnownHead(mctx chasm.MutableContext, streamID string, 
 	}
 	field.Get(mctx).AdvanceKnownHead(mctx, head)
 	return nil
+}
+
+// HasStreamCursors reports whether this workflow consumes any stream at all,
+// which is a different question from whether one is behind.
+func (w *Workflow) HasStreamCursors() bool {
+	return len(w.StreamCursors) > 0
+}
+
+// StreamCursorsBehind reports whether any subscription still has offsets it has
+// not been given.
+//
+// This is the one place a stream wakes a workflow. Publishing deliberately
+// never does, because a stream item is data produced by an execution rather
+// than a decision input to it. An active subscription is different: the
+// workflow asked to be told, so leaving it to wait for some unrelated task
+// would make delivery depend on traffic that has nothing to do with the stream.
+func (w *Workflow) StreamCursorsBehind(ctx chasm.Context) bool {
+	for name, field := range w.StreamCursors {
+		cursor := field.Get(ctx)
+
+		// An external stream's frontier is whatever it last pushed here: this
+		// execution cannot read the real one without reaching into another.
+		if cursor.IsExternal() {
+			if cursor.Offset() < cursor.KnownHead() {
+				return true
+			}
+			continue
+		}
+
+		owned, ok := w.Streams[name]
+		if !ok {
+			continue
+		}
+		state, err := owned.Get(ctx).Snapshot(ctx, struct{}{})
+		if err != nil {
+			continue
+		}
+		if cursor.Offset() < state.GetHeadOffset() {
+			return true
+		}
+	}
+	return false
+}
+
+// CommitStreamCursors folds every staged range into its cursor and returns the
+// ranges to record. Called while the workflow task's transaction is open, so
+// the advance and the event that carries the range land together.
+//
+// A cursor with nothing staged is skipped, but a cursor staged with an empty
+// range is not: replay has to see that the subscription was live and observed
+// nothing.
+func (w *Workflow) CommitStreamCursors(mctx chasm.MutableContext) []*streampb.StreamRange {
+	if w.StreamCursors == nil {
+		return nil
+	}
+
+	names := make([]string, 0, len(w.StreamCursors))
+	for name := range w.StreamCursors {
+		names = append(names, name)
+	}
+	// Recorded order has to be stable, or replay compares against a different
+	// event than the one the original execution wrote.
+	slices.Sort(names)
+
+	var recorded []*streampb.StreamRange
+	for _, name := range names {
+		cursor := w.StreamCursors[name].Get(mctx)
+		from, to, ok := cursor.Commit(mctx)
+		if !ok {
+			continue
+		}
+
+		// Let the floor follow the cursor. Anything below it is recorded as
+		// consumed, so nothing needs to re-read it.
+		if field, ok := w.Streams[name]; ok {
+			field.Get(mctx).AdvanceConsumer(mctx, streamConsumerID(name), to)
+		}
+
+		recorded = append(recorded, &streampb.StreamRange{
+			StreamId:   cursor.StreamID(),
+			FromOffset: from,
+			ToOffset:   to,
+		})
+	}
+	return recorded
 }
 
 func NewWorkflow(

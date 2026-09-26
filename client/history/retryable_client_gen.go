@@ -356,6 +356,21 @@ func (c *retryableClient) GetShard(
 	return resp, err
 }
 
+func (c *retryableClient) GetStreamReplaySlices(
+	ctx context.Context,
+	request *historyservice.GetStreamReplaySlicesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetStreamReplaySlicesResponse, error) {
+	var resp *historyservice.GetStreamReplaySlicesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetStreamReplaySlices(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,

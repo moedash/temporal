@@ -32,6 +32,13 @@ service HistoryService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
   }
 
+  // Returns the stream ranges the workflow's completed tasks recorded, re-read
+  // from their streams and tagged with the event that recorded each, so a task
+  // built without RecordWorkflowTaskStarted can still replay a consumer.
+  rpc GetStreamReplaySlices(GetStreamReplaySlicesRequest) returns (GetStreamReplaySlicesResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   // Reset the sticky task queue related information in mutable state of a given workflow.
   // Things cleared are:
   // 1. StickyTaskQueue

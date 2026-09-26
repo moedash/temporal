@@ -22,6 +22,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/api/stream/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -670,6 +671,37 @@ func (ms *MutableStateImpl) mustInitHSM() {
 	ms.stateMachineNode = stateMachineNode
 }
 
+// commitStreamCursors folds each staged range into its cursor and returns the
+// ranges to record. Called as the completed event is built, so the advance and
+// the event carrying the range are in one transaction: split apart, a crash
+// between them would either redeliver a range or skip it with nothing in
+// History to say so.
+func (ms *MutableStateImpl) commitStreamCursors() ([]*streampb.StreamRange, error) {
+	if !ms.HasChasmWorkflowComponent() {
+		return nil, nil
+	}
+	// Reaching the component through a mutable context marks it dirty, which
+	// would add a node to the transaction of every workflow that has no
+	// subscription at all. Ask read-only first, and take the write path only
+	// when there is something to fold in.
+	//
+	// The background context matches EnsureChasmWorkflowComponent: it only
+	// reaches components already in memory.
+	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	if len(wf.StreamCursors) == 0 {
+		return nil, nil
+	}
+
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return wf.CommitStreamCursors(chasmCtx), nil
+}
+
 // carryStreamSubscriptionsTo hands this run's subscriptions to the run that
 // continues it.
 //
@@ -696,6 +728,55 @@ func (ms *MutableStateImpl) carryStreamSubscriptionsTo(newMutableState *MutableS
 		return err
 	}
 	return newWorkflow.ImportStreamSubscriptions(newChasmCtx, subscriptions)
+}
+
+// HasPendingStreamData reports whether a subscription of this workflow has
+// offsets left to deliver, which is the one condition under which stream
+// traffic schedules a workflow task.
+//
+// Called on every transaction close for every workflow, almost none of which
+// have a subscription, so it resolves the root component once rather than
+// asking whether it exists and then asking for it.
+func (ms *MutableStateImpl) HasPendingStreamData() bool {
+	node, ok := ms.chasmTree.(*chasm.Node)
+	if !ok {
+		return false
+	}
+	chasmCtx := chasm.NewContext(context.Background(), node)
+	rootComponent, err := node.ComponentByPath(chasmCtx, nil)
+	if err != nil {
+		return false
+	}
+	wf, ok := rootComponent.(*chasmworkflow.Workflow)
+	if !ok {
+		return false
+	}
+	return wf.StreamCursorsBehind(chasmCtx)
+}
+
+// ConsumesStreams reports whether this workflow holds a cursor into any
+// stream.
+//
+// Matching builds a query task without RecordWorkflowTaskStarted, so it has to
+// ask History separately for the ranges to re-supply, and that call takes a
+// workflow lease. Almost no workflow consumes a stream, so this rides the
+// mutable state matching already fetched and keeps the call off every other
+// query.
+func (ms *MutableStateImpl) ConsumesStreams() bool {
+	node, ok := ms.chasmTree.(*chasm.Node)
+	if !ok {
+		return false
+	}
+	chasmCtx := chasm.NewContext(context.Background(), node)
+	rootComponent, err := node.ComponentByPath(chasmCtx, nil)
+	if err != nil {
+		return false
+	}
+	wf, ok := rootComponent.(*chasmworkflow.Workflow)
+	if !ok {
+		return false
+	}
+	return wf.HasStreamCursors()
 }
 
 func (ms *MutableStateImpl) HasChasmWorkflowComponent() bool {
@@ -7985,6 +8066,25 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 				}
 			}
 			break
+		}
+	}
+
+	// A stream subscription with offsets left to deliver. Handled here rather
+	// than at workflow task completion so it also covers the transaction that
+	// registers a subscription against a stream that already has data, which
+	// completes no workflow task of its own.
+	//
+	// The pending-task check comes first because it is cheap: a workflow that
+	// already owes a task needs no further reason to run, so the subscription
+	// state is only consulted when the answer could change something.
+	if !ms.HasPendingWorkflowTask() &&
+		!ms.IsWorkflowExecutionStatusPaused() &&
+		ms.HasPendingStreamData() {
+		if _, err := ms.AddWorkflowTaskScheduledEvent(
+			false,
+			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		); err != nil {
+			return err
 		}
 	}
 

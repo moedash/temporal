@@ -399,6 +399,26 @@ func (c *clientImpl) GetShard(
 	return response, nil
 }
 
+func (c *clientImpl) GetStreamReplaySlices(
+	ctx context.Context,
+	request *historyservice.GetStreamReplaySlicesRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetStreamReplaySlicesResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
+	var response *historyservice.GetStreamReplaySlicesResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.GetStreamReplaySlices(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
