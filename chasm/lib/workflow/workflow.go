@@ -9,6 +9,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -100,13 +101,13 @@ func streamConsumerID(streamName string) string {
 // SubscribeToOwnedStream registers this workflow as a consumer of a stream it
 // owns, returning the offset the subscription actually starts from.
 //
-// A negative start offset means "from wherever the stream is now". That is
-// resolved here and stored, so the first recorded range begins at a fact rather
-// than at a reading that would land somewhere else on replay.
+// The start position is resolved here and the offset stored, so the first
+// recorded range begins at a fact rather than at a reading that would land
+// somewhere else on replay.
 func (w *Workflow) SubscribeToOwnedStream(
 	mctx chasm.MutableContext,
 	name string,
-	startOffset int64,
+	start *streampb.StreamStartPosition,
 	limits stream.Limits,
 ) (int64, error) {
 	// Created here as well as on first write, so a workflow can start reading a
@@ -136,11 +137,11 @@ func (w *Workflow) SubscribeToOwnedStream(
 	// separately it could be lost while the cursor survived, and truncation
 	// would then be free to take a range the cursor still points at.
 	key := mctx.ExecutionKey()
-	startOffset, err = owned.RegisterConsumer(mctx, stream.ConsumerRegistration{
+	startOffset, err := owned.RegisterConsumer(mctx, stream.ConsumerRegistration{
 		ConsumerID:   streamConsumerID(name),
 		WorkflowID:   key.BusinessID,
 		RunID:        key.RunID,
-		Offset:       startOffset,
+		Start:        start,
 		MaxConsumers: limits.MaxConsumersPerStream,
 	})
 	if err != nil {

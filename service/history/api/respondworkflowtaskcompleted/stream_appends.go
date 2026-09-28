@@ -73,11 +73,17 @@ func resolveStagedStreamSubscriptions(
 			continue
 		}
 
+		start, err := stream.RequestedStart(nil, "start_offset", pending.StartOffset)
+		if err != nil {
+			return chasmworkflow.StreamAdmissionFailure(
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
+		}
+
 		// A stream this workflow owns needs no lookup and no pin registration:
 		// it is in this execution, and its cursor commits with everything else.
 		if _, owned := wf.Streams[pending.StreamID]; owned {
 			startOffset, err := wf.SubscribeToOwnedStream(
-				chasmCtx, pending.StreamID, pending.StartOffset, limits)
+				chasmCtx, pending.StreamID, start, limits)
 			if err != nil {
 				return chasmworkflow.StreamAdmissionFailure(
 					enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
@@ -104,7 +110,7 @@ func resolveStagedStreamSubscriptions(
 			// the workflow to different, empty data with a History event that
 			// looks exactly like the intended subscription.
 			startOffset, err := wf.SubscribeToOwnedStream(
-				chasmCtx, pending.StreamID, pending.StartOffset, limits)
+				chasmCtx, pending.StreamID, start, limits)
 			if err != nil {
 				return chasmworkflow.StreamAdmissionFailure(
 					enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
