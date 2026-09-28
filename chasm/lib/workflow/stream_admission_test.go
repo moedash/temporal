@@ -82,7 +82,7 @@ func TestSubscriptionsOfBothOriginsCannotShareOneKey(t *testing.T) {
 	limits := stream.Limits{MaxOwnedStreamsPerWorkflow: 10, OwnedStreamMaxItems: 100}
 
 	owned := &Workflow{}
-	_, err := owned.SubscribeToOwnedStream(ctx, "x", 0, limits)
+	_, err := owned.SubscribeToOwnedStream(ctx, "x", stream.AtOffset(0), limits)
 	require.NoError(t, err)
 	_, err = owned.SubscribeToExternalStream(ctx, ExternalStreamSubscription{
 		StreamID: "x", StartOffset: 7, KnownHead: 9,
@@ -95,7 +95,7 @@ func TestSubscriptionsOfBothOriginsCannotShareOneKey(t *testing.T) {
 		StreamID: "x", StartOffset: 7, KnownHead: 9,
 	})
 	require.NoError(t, err)
-	_, err = external.SubscribeToOwnedStream(ctx, "x", 0, limits)
+	_, err = external.SubscribeToOwnedStream(ctx, "x", stream.AtOffset(0), limits)
 	require.ErrorAs(t, err, &refused)
 }
 
@@ -107,7 +107,8 @@ func TestKnownHeadIsOnlyPushedIntoAnExternalCursor(t *testing.T) {
 	ctx := newStreamBudgetTestContext()
 	w := &Workflow{}
 	_, err := w.SubscribeToOwnedStream(
-		ctx, "x", 0, stream.Limits{MaxOwnedStreamsPerWorkflow: 10, OwnedStreamMaxItems: 100})
+		ctx, "x", stream.AtOffset(0),
+		stream.Limits{MaxOwnedStreamsPerWorkflow: 10, OwnedStreamMaxItems: 100})
 	require.NoError(t, err)
 
 	err = w.AdvanceKnownHead(ctx, "x", 42)
