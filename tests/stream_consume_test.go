@@ -17,6 +17,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	chasmstream "go.temporal.io/server/chasm/lib/stream"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/testing/await"
@@ -260,7 +261,7 @@ func TestStreamSubscriptionSchedulesItsOwnWorkflowTask(t *testing.T) {
 	sub, err := s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
 		FrontendRequest: &streamlib.SubscribeWorkflowInput{
 			Namespace: s.ns, WorkflowId: id,
-			StreamName: chasmworkflow.DefaultStreamName, StartOffset: -1,
+			StreamName: chasmworkflow.DefaultStreamName, StartPosition: chasmstream.Tail(),
 		},
 	})
 	require.NoError(t, err)
