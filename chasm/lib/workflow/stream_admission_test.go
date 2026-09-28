@@ -194,3 +194,38 @@ func TestWorkflowCannotNameAnActivityStream(t *testing.T) {
 		w.OwnedStream(ctx, key).State.GetAppendedBytes())
 	require.Len(t, w.Streams, 1)
 }
+
+// An activity's streams end when it reaches a terminal status, while the
+// workflow's own streams and another activity's stay open.
+func TestCloseActivityStreamsEndsOnlyThatActivity(t *testing.T) {
+	ctx := newStreamBudgetTestContext()
+	w := &Workflow{}
+	limits := stream.Limits{MaxOwnedStreamsPerWorkflow: 10}
+	for _, key := range []string{
+		DefaultStreamName,
+		ActivityStreamKey("act", DefaultStreamName),
+		ActivityStreamKey("act", "reasoning"),
+		ActivityStreamKey("act-2", DefaultStreamName),
+	} {
+		_, err := w.AppendToOwnedStream(ctx, key, stream.AddMessagesRequest{
+			Records: budgetTestRecords(1), Limits: limits,
+		})
+		require.NoError(t, err)
+	}
+
+	require.True(t, w.HasOpenActivityStreams(ctx, "act"))
+	require.False(t, w.HasOpenActivityStreams(ctx, "never-wrote"))
+	require.NoError(t, w.CloseActivityStreams(ctx, "act"))
+	require.False(t, w.HasOpenActivityStreams(ctx, "act"))
+
+	closed := func(key string) bool { return w.OwnedStream(ctx, key).State.GetClosed() }
+	require.True(t, closed(ActivityStreamKey("act", DefaultStreamName)))
+	require.True(t, closed(ActivityStreamKey("act", "reasoning")))
+	require.False(t, closed(ActivityStreamKey("act-2", DefaultStreamName)))
+	require.False(t, closed(DefaultStreamName))
+
+	_, err := w.AppendToOwnedStream(ctx, ActivityStreamKey("act", DefaultStreamName),
+		stream.AddMessagesRequest{Records: budgetTestRecords(1), Limits: limits})
+	var precondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &precondition, "an ended activity's stream takes no more records")
+}

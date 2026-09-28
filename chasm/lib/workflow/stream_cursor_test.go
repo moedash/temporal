@@ -192,3 +192,26 @@ func TestConsumerOutrunByTruncationIsToldSo(t *testing.T) {
 	require.Equal(t, int64(3), state.GetBaseOffset(),
 		"the floor moved, which is what the consumer has to find out about")
 }
+
+// A publish command naming the part of the map activities use fails the task
+// with a cause, instead of writing into a stream an activity owns.
+func TestPublishCommandCannotReachAnActivityStream(t *testing.T) {
+	ctx := newStreamBudgetTestContext()
+	w := &Workflow{}
+	publish := &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+		Attributes: &commandpb.Command_AppendStreamRecordsCommandAttributes{
+			AppendStreamRecordsCommandAttributes: &commandpb.AppendStreamRecordsCommandAttributes{
+				StreamName: ActivityStreamKey("act", DefaultStreamName),
+				Records:    []*streampb.StreamRecord{{Body: &commonpb.Payload{Data: []byte("x")}}},
+			},
+		},
+	}
+	err := handleAppendStreamRecordsCommand(ctx, w, allowAnySize{}, publish,
+		CommandHandlerOptions{}, stream.DefaultLimits())
+	var failTask FailWorkflowTaskError
+	require.ErrorAs(t, err, &failTask)
+	require.Equal(t,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_APPEND_STREAM_RECORDS_ATTRIBUTES, failTask.Cause)
+	require.Empty(t, w.Streams)
+}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -38,6 +39,45 @@ func ActivityStreamKey(activityID, name string) string {
 // map, which only the activity addressing may reach.
 func IsActivityStreamKey(name string) bool {
 	return strings.HasPrefix(name, activityStreamPrefix)
+}
+
+// activityStreamKeys returns the keys of the streams one activity owns, in a
+// stable order. Only the keys are read, so no stream is loaded.
+func (w *Workflow) activityStreamKeys(activityID string) []string {
+	prefix := ActivityStreamKey(activityID, "")
+	var keys []string
+	for key := range w.Streams {
+		if strings.HasPrefix(key, prefix) {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+// HasOpenActivityStreams reports whether the activity owns a stream that is
+// not closed yet.
+func (w *Workflow) HasOpenActivityStreams(ctx chasm.Context, activityID string) bool {
+	for _, key := range w.activityStreamKeys(activityID) {
+		if !w.Streams[key].Get(ctx).State.GetClosed() {
+			return true
+		}
+	}
+	return false
+}
+
+// CloseActivityStreams ends every stream the activity owns. Called when the
+// activity reaches a terminal status, which is when a reader tailing it has to
+// be released: the workflow is still running, so the rule that ends a stream
+// with its execution does not reach these. A retry is not terminal, so the
+// next attempt keeps writing to the same streams.
+func (w *Workflow) CloseActivityStreams(mctx chasm.MutableContext, activityID string) error {
+	for _, key := range w.activityStreamKeys(activityID) {
+		if err := w.Streams[key].Get(mctx).CloseAndSchedule(mctx, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // CheckWorkflowStreamName refuses a name the workflow itself may not use,
