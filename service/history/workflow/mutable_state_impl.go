@@ -779,6 +779,42 @@ func (ms *MutableStateImpl) ConsumesStreams() bool {
 	return wf.HasStreamCursors()
 }
 
+// closeActivityStreams ends the streams an activity owns once it reaches a
+// terminal status.
+//
+// An activity a workflow scheduled keeps its streams in the workflow's map, and
+// the workflow is still running, so nothing else tells a reader tailing the
+// activity that it is over. The read-only check comes first because taking the
+// component for writing persists it, and most activities own no streams.
+func (ms *MutableStateImpl) closeActivityStreams(activityID string) error {
+	if !ms.HasChasmWorkflowComponent() {
+		return nil
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return err
+	}
+	if !wf.HasOpenActivityStreams(chasmCtx, activityID) {
+		return nil
+	}
+	wf, mutableCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+	return wf.CloseActivityStreams(mutableCtx, activityID)
+}
+
+// deleteTerminalActivity deletes an activity that reached a terminal status,
+// ending the streams it owns first.
+func (ms *MutableStateImpl) deleteTerminalActivity(scheduledEventID int64) error {
+	if ai, ok := ms.pendingActivityInfoIDs[scheduledEventID]; ok {
+		if err := ms.closeActivityStreams(ai.GetActivityId()); err != nil {
+			return err
+		}
+	}
+	return ms.DeleteActivity(scheduledEventID)
+}
+
 func (ms *MutableStateImpl) HasChasmWorkflowComponent() bool {
 	node, ok := ms.chasmTree.(*chasm.Node)
 	if !ok {
@@ -4748,7 +4784,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskCompletedEvent(
 	attributes := event.GetActivityTaskCompletedEventAttributes()
 	scheduledEventID := attributes.GetScheduledEventId()
 
-	return ms.DeleteActivity(scheduledEventID)
+	return ms.deleteTerminalActivity(scheduledEventID)
 }
 
 func (ms *MutableStateImpl) AddActivityTaskFailedEvent(
@@ -4798,7 +4834,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskFailedEvent(
 	attributes := event.GetActivityTaskFailedEventAttributes()
 	scheduledEventID := attributes.GetScheduledEventId()
 
-	return ms.DeleteActivity(scheduledEventID)
+	return ms.deleteTerminalActivity(scheduledEventID)
 }
 
 func (ms *MutableStateImpl) AddActivityTaskTimedOutEvent(
@@ -4850,7 +4886,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskTimedOutEvent(
 	attributes := event.GetActivityTaskTimedOutEventAttributes()
 	scheduledEventID := attributes.GetScheduledEventId()
 
-	return ms.DeleteActivity(scheduledEventID)
+	return ms.deleteTerminalActivity(scheduledEventID)
 }
 
 func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
@@ -5062,7 +5098,7 @@ func (ms *MutableStateImpl) ApplyActivityTaskCanceledEvent(
 	attributes := event.GetActivityTaskCanceledEventAttributes()
 	scheduledEventID := attributes.GetScheduledEventId()
 
-	return ms.DeleteActivity(scheduledEventID)
+	return ms.deleteTerminalActivity(scheduledEventID)
 }
 
 func (ms *MutableStateImpl) AddCompletedWorkflowEvent(

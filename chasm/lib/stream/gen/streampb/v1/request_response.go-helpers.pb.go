@@ -2,6 +2,8 @@
 package streampb
 
 import (
+	"fmt"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -404,6 +406,43 @@ func (this *DescribeStreamInput) Equal(that interface{}) bool {
 	case *DescribeStreamInput:
 		that1 = t
 	case DescribeStreamInput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type StreamOwner to the protobuf v3 wire format
+func (val *StreamOwner) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type StreamOwner from the protobuf v3 wire format
+func (val *StreamOwner) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *StreamOwner) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two StreamOwner values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *StreamOwner) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *StreamOwner
+	switch t := that.(type) {
+	case *StreamOwner:
+		that1 = t
+	case StreamOwner:
 		that1 = &t
 	default:
 		return false
@@ -2149,4 +2188,24 @@ func (this *DeleteStreamResponse) Equal(that interface{}) bool {
 	}
 
 	return proto.Equal(this, that1)
+}
+
+var (
+	StreamOwnerKind_shorthandValue = map[string]int32{
+		"Unspecified":      0,
+		"Workflow":         1,
+		"Activity":         2,
+		"WorkflowActivity": 3,
+	}
+)
+
+// StreamOwnerKindFromString parses a StreamOwnerKind value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to StreamOwnerKind
+func StreamOwnerKindFromString(s string) (StreamOwnerKind, error) {
+	if v, ok := StreamOwnerKind_value[s]; ok {
+		return StreamOwnerKind(v), nil
+	} else if v, ok := StreamOwnerKind_shorthandValue[s]; ok {
+		return StreamOwnerKind(v), nil
+	}
+	return StreamOwnerKind(0), fmt.Errorf("%s is not a valid StreamOwnerKind", s)
 }
