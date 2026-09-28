@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/stream"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
@@ -74,6 +75,11 @@ type Activity struct {
 	// Callbacks holds completion callbacks to be invoked when this standalone activity reaches a terminal state. Nil
 	// for workflow-embedded activities as the workflow handles its own callbacks.
 	Callbacks chasm.Map[string, *callback.Callback]
+
+	// Streams this activity owns, keyed by stream name. One map per execution
+	// rather than per attempt, so a retry keeps writing to the stream its
+	// earlier attempts wrote to.
+	Streams chasm.Map[string, *stream.Stream]
 }
 
 // WithToken wraps a request with its deserialized task token.

@@ -12,7 +12,6 @@ import (
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/stream"
-	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -459,58 +458,39 @@ func (w *Workflow) WorkflowTypeName() string {
 	return w.GetWorkflowTypeName()
 }
 
-// OwnedStreamState returns the state of a stream this workflow owns, or nil if
-// it owns none by that name.
-//
-// An attached stream has no id of its own, so this is the only way to see its
-// frontier from outside the execution. Reading it needs the owner's component,
-// which is why it lives here rather than on the stream.
-//
-// Absent is not an error. An owned stream is created by the first publish to
-// it, so a reader that arrives before the workflow has published anything is
-// the ordinary case rather than a mistake, and from outside the execution
-// "not created yet" and "never will be" are the same observation.
-func (w *Workflow) OwnedStreamState(
-	ctx chasm.Context,
-	name string,
-) (*streamlib.StreamState, error) {
-	field, ok := w.Streams[name]
-	if !ok {
-		return nil, nil
-	}
-	return field.Get(ctx).Snapshot(ctx, struct{}{})
-}
+var _ stream.Owner = (*Workflow)(nil)
 
-// OwnedStream returns the attached stream itself, or nil when the workflow has
-// not created it yet. Reads that need the payload and not just the frontier go
+// OwnedStream returns the attached stream under key, or nil when nothing has
+// created it yet. Reads that need the payload and not just the frontier go
 // through here, so both come from one view of the component.
 func (w *Workflow) OwnedStream(
 	ctx chasm.Context,
-	name string,
+	key string,
 ) *stream.Stream {
-	field, ok := w.Streams[name]
-	if !ok {
-		return nil
-	}
-	return field.Get(ctx)
+	return w.ownedStreams().Get(ctx, key)
 }
 
-// AppendToOwnedStream appends to a stream this workflow owns on behalf of a
-// writer outside the execution.
+// OwnedStreamEnded reports that the workflow is closed. A closed execution can
+// take no more publishes, from its own Workflow Task or from anywhere else, so
+// every stream it holds is finished whether or not a producer said so.
+func (w *Workflow) OwnedStreamEnded(ctx chasm.Context, _ string) bool {
+	return !ctx.ExecutionInfo().CloseTime.IsZero()
+}
+
+// AppendToOwnedStream appends under key on behalf of a writer outside the
+// execution.
 //
 // The workflow's own publishes go through the command handler, which advances
 // the frontier inside the Workflow Task's commit. This is the other producer:
 // it advances the same frontier in a transition of its own, so the two are
 // serialized by the execution rather than by anything the stream does.
+//
+// The key is already resolved, and checked, by the caller: it is either a
+// name the workflow may use or the reserved key of one of its activities.
 func (w *Workflow) AppendToOwnedStream(
 	mctx chasm.MutableContext,
-	name string,
+	key string,
 	req stream.AddMessagesRequest,
 ) (stream.AddMessagesResult, error) {
-	s, err := w.streamNamed(mctx, name, req.Limits)
-	if err != nil {
-		return stream.AddMessagesResult{}, err
-	}
-	req.SiblingBytes = w.siblingStreamBytes(mctx, name)
-	return s.AddMessages(mctx, req)
+	return w.ownedStreams().Append(mctx, key, req)
 }

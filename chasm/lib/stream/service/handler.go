@@ -7,6 +7,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -105,14 +106,99 @@ func workflowRef(namespaceID, workflowID, runID string) chasm.ComponentRef {
 	})
 }
 
+// activityRef builds a reference to a standalone activity, which is an
+// execution of its own and so owns its streams the way a workflow does.
+func activityRef(namespaceID, activityID, runID string) chasm.ComponentRef {
+	return chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
+		NamespaceID: namespaceID,
+		BusinessID:  activityID,
+		RunID:       runID,
+	})
+}
+
 // ownedStreamName resolves a name the caller left empty the same way a publish
 // command does, so a reader addresses the default stream by omission just as a
 // writer creates it by omission.
 func ownedStreamName(name string) string {
 	if name == "" {
-		return chasmworkflow.DefaultStreamName
+		return stream.DefaultStreamName
 	}
 	return name
+}
+
+// ownedTarget is an owned stream resolved from the caller's reference: the
+// execution that holds it and the key it is held under there.
+type ownedTarget struct {
+	ref chasm.ComponentRef
+	key string
+}
+
+// resolveOwned turns an owner and a stream name into where the stream lives.
+//
+// A workflow's activity is not an execution of its own, so its streams are held
+// in the workflow's map under a reserved key and reached through the workflow.
+// A workflow may not name that part of its map itself, or it could write into
+// a stream its activity owns.
+func resolveOwned(
+	namespaceID string,
+	owner *streampb.StreamOwner,
+	name string,
+) (ownedTarget, error) {
+	if err := checkOwner(owner); err != nil {
+		return ownedTarget{}, err
+	}
+	name = ownedStreamName(name)
+	switch owner.GetKind() {
+	case streampb.STREAM_OWNER_KIND_WORKFLOW:
+		if err := chasmworkflow.CheckWorkflowStreamName(name); err != nil {
+			return ownedTarget{}, err
+		}
+		return ownedTarget{
+			ref: workflowRef(namespaceID, owner.GetId(), owner.GetRunId()),
+			key: name,
+		}, nil
+	case streampb.STREAM_OWNER_KIND_ACTIVITY:
+		if err := stream.CheckStreamName(name); err != nil {
+			return ownedTarget{}, err
+		}
+		return ownedTarget{
+			ref: activityRef(namespaceID, owner.GetId(), owner.GetRunId()),
+			key: name,
+		}, nil
+	case streampb.STREAM_OWNER_KIND_WORKFLOW_ACTIVITY:
+		if err := stream.CheckStreamName(name); err != nil {
+			return ownedTarget{}, err
+		}
+		return ownedTarget{
+			ref: workflowRef(namespaceID, owner.GetId(), owner.GetRunId()),
+			key: chasmworkflow.ActivityStreamKey(owner.GetActivityId(), name),
+		}, nil
+	}
+	return ownedTarget{}, serviceerror.NewInvalidArgument("owner kind is required")
+}
+
+// checkOwner refuses an owner reference that names no execution, or names one
+// in a way its kind does not allow.
+func checkOwner(owner *streampb.StreamOwner) error {
+	if owner.GetId() == "" {
+		return serviceerror.NewInvalidArgument("owner id is required")
+	}
+	switch owner.GetKind() {
+	case streampb.STREAM_OWNER_KIND_WORKFLOW, streampb.STREAM_OWNER_KIND_ACTIVITY:
+		if owner.GetActivityId() != "" {
+			return serviceerror.NewInvalidArgumentf(
+				"owner activity id is only for a workflow's activity, not for kind %v",
+				owner.GetKind())
+		}
+	case streampb.STREAM_OWNER_KIND_WORKFLOW_ACTIVITY:
+		if owner.GetActivityId() == "" {
+			return serviceerror.NewInvalidArgument(
+				"owner activity id is required for a workflow's activity")
+		}
+	default:
+		return serviceerror.NewInvalidArgument("owner kind is required")
+	}
+	return nil
 }
 
 func (h *handler) CreateStream(
@@ -183,8 +269,9 @@ func (h *handler) AddMessages(
 	}, nil
 }
 
-// AddWorkflowMessages appends to a stream a workflow owns, from outside that
-// workflow.
+// AddWorkflowMessages appends to a stream an execution owns, from outside that
+// execution. The owner is a workflow, a standalone activity, or an activity a
+// workflow scheduled.
 //
 // The workflow's own publishes ride its Workflow Task and cost no transition of
 // their own. This producer is off-shard, so it pays one transition on the
@@ -205,21 +292,24 @@ func (h *handler) AddWorkflowMessages(
 	}
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
+	target, err := resolveOwned(req.GetNamespaceId(), in.GetOwner(), in.GetStreamName())
+	if err != nil {
+		return nil, err
+	}
+
 	// The records go in as sent, producer identity included. Who is writing is
 	// the caller's claim to make; the store only answers whether it fits.
-	name := ownedStreamName(in.GetStreamName())
 	addReq := stream.AddMessagesRequest{
 		Records:    in.GetRecords(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
 		Limits:     h.limitsFor(req.GetNamespaceId()),
 	}
-	result, _, err := chasm.UpdateComponent(ctx,
-		workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId()),
+	result, _, err := chasm.UpdateComponent(ctx, target.ref,
 		func(
-			wf *chasmworkflow.Workflow, mctx chasm.MutableContext, r stream.AddMessagesRequest,
+			owner stream.Owner, mctx chasm.MutableContext, r stream.AddMessagesRequest,
 		) (stream.AddMessagesResult, error) {
-			return wf.AppendToOwnedStream(mctx, name, r)
+			return owner.AppendToOwnedStream(mctx, target.key, r)
 		}, addReq)
 	if err != nil {
 		return nil, err
@@ -592,10 +682,10 @@ func (h *handler) PollMessages(
 	return &streampb.PollMessagesResponse{FrontendResponse: out}, nil
 }
 
-// PollWorkflowMessages reads a stream a workflow owns.
+// PollWorkflowMessages reads a stream an execution owns.
 //
 // An attached stream is reached through its owner, so this call routes on the
-// workflow id and both the frontier and the batches come out of the owner's
+// owner and both the frontier and the batches come out of the owner's
 // component.
 func (h *handler) PollWorkflowMessages(
 	ctx context.Context,
@@ -604,24 +694,26 @@ func (h *handler) PollWorkflowMessages(
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	ref := workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId())
-	name := ownedStreamName(in.GetStreamName())
+	target, err := resolveOwned(req.GetNamespaceId(), in.GetOwner(), in.GetStreamName())
+	if err != nil {
+		return nil, err
+	}
 	from := in.GetFromOffset()
 
-	state, err := h.ownedStreamState(ctx, ref, name)
+	state, err := h.ownedStreamState(ctx, target)
 	if err != nil {
 		return nil, err
 	}
 
 	if in.GetWaitNewMessages() && from == state.GetHeadOffset() && !state.GetClosed() {
-		if _, err := h.waitForOwnedMessages(ctx, ref, name, from, state); err != nil {
+		if _, err := h.waitForOwnedMessages(ctx, target, from, state); err != nil {
 			return nil, err
 		}
 	}
 
 	wreq := stream.WindowRequest{From: from, MaxMessages: in.GetMaxMessages(), Topics: in.GetTopics()}
-	w, err := chasm.ReadComponent(ctx, ref, readOwnedWindow,
-		ownedWindowRequest{Name: name, Window: wreq})
+	w, err := chasm.ReadComponent(ctx, target.ref, readOwnedWindow,
+		ownedWindowRequest{Key: target.key, Window: wreq})
 	if err != nil {
 		return nil, err
 	}
@@ -664,26 +756,27 @@ func formatWindow(w stream.Window, req stream.WindowRequest) (*streampb.PollMess
 
 // ownedWindowRequest names which attached stream to read and what to read.
 type ownedWindowRequest struct {
-	Name   string
+	Key    string
 	Window stream.WindowRequest
 }
 
-// readOwnedWindow reads a stream attached to a workflow.
+// readOwnedWindow reads a stream attached to an owner.
 //
-// A closed execution can take no more publishes, from its own Workflow Task or
-// from anywhere else, so its stream is finished whether or not a producer said
-// so. Without that a reader tailing a workflow that ended stays parked forever.
+// An owner that has ended can take no more records, so its stream is finished
+// whether or not a producer said so. Without that a reader tailing a workflow
+// or an activity that ended stays parked forever.
 func readOwnedWindow(
-	wf *chasmworkflow.Workflow,
+	owner stream.Owner,
 	cctx chasm.Context,
 	req ownedWindowRequest,
 ) (stream.Window, error) {
-	s := wf.OwnedStream(cctx, req.Name)
+	ended := owner.OwnedStreamEnded(cctx, req.Key)
+	s := owner.OwnedStream(cctx, req.Key)
 	if s == nil {
 		// Nothing published yet, which reads as an empty stream so a reader can
 		// attach before the first append.
 		return stream.Window{
-			State: &streampb.StreamState{Closed: !cctx.ExecutionInfo().CloseTime.IsZero()},
+			State: &streampb.StreamState{Closed: ended},
 			To:    req.Window.From,
 		}, nil
 	}
@@ -691,46 +784,37 @@ func readOwnedWindow(
 	if err != nil {
 		return stream.Window{}, err
 	}
-	if !cctx.ExecutionInfo().CloseTime.IsZero() {
+	if ended {
 		w.State.Closed = true
 	}
 	return w, nil
 }
 
 // ownedStreamState snapshots an attached stream through the component that
-// owns it. A stream the workflow has not published to yet reads as an empty
-// one, so a reader may attach before the first event.
+// owns it. A stream nothing has published to yet reads as an empty one, so a
+// reader may attach before the first record.
 func (h *handler) ownedStreamState(
 	ctx context.Context,
-	ref chasm.ComponentRef,
-	name string,
+	target ownedTarget,
 ) (*streampb.StreamState, error) {
-	state, err := chasm.ReadComponent(ctx, ref, readOwnedStream, name)
-	if err != nil {
-		return nil, err
-	}
-	return state, nil
+	return chasm.ReadComponent(ctx, target.ref, readOwnedStream, target.key)
 }
 
 // readOwnedStream snapshots an attached stream and reports whether anything
-// can still be added to it.
-//
-// A closed execution can take no more publishes, from its own Workflow Task or
-// from anywhere else, so its stream is finished whether or not a producer said
-// so. Without this a reader tailing a workflow that ended stays parked forever.
+// can still be added to it, which is not the case once its owner has ended.
 func readOwnedStream(
-	wf *chasmworkflow.Workflow,
+	owner stream.Owner,
 	cctx chasm.Context,
-	name string,
+	key string,
 ) (*streampb.StreamState, error) {
-	state, err := wf.OwnedStreamState(cctx, name)
-	if err != nil {
-		return nil, err
+	state := &streampb.StreamState{}
+	if s := owner.OwnedStream(cctx, key); s != nil {
+		var err error
+		if state, err = s.Snapshot(cctx, struct{}{}); err != nil {
+			return nil, err
+		}
 	}
-	if state == nil {
-		state = &streampb.StreamState{}
-	}
-	if !cctx.ExecutionInfo().CloseTime.IsZero() {
+	if owner.OwnedStreamEnded(cctx, key) {
 		state.Closed = true
 	}
 	return state, nil
@@ -767,8 +851,7 @@ func (h *handler) waitForMessages(
 // because what the poll observes is the owning execution.
 func (h *handler) waitForOwnedMessages(
 	ctx context.Context,
-	ref chasm.ComponentRef,
-	name string,
+	target ownedTarget,
 	from int64,
 	current *streampb.StreamState,
 ) (*streampb.StreamState, error) {
@@ -776,11 +859,11 @@ func (h *handler) waitForOwnedMessages(
 		ctx, stream.LongPollTimeout, stream.LongPollBuffer)
 	defer cancel()
 
-	state, _, err := chasm.PollComponent(pollCtx, ref,
+	state, _, err := chasm.PollComponent(pollCtx, target.ref,
 		func(
-			wf *chasmworkflow.Workflow, cctx chasm.Context, offset int64,
+			owner stream.Owner, cctx chasm.Context, offset int64,
 		) (*streampb.StreamState, bool, error) {
-			owned, err := readOwnedStream(wf, cctx, name)
+			owned, err := readOwnedStream(owner, cctx, target.key)
 			if err != nil {
 				return nil, false, err
 			}
@@ -838,7 +921,7 @@ func (h *handler) DescribeStream(
 	}, nil
 }
 
-// DescribeWorkflowStream reports the frontier of a stream a workflow owns. A
+// DescribeWorkflowStream reports the frontier of a stream an execution owns. A
 // reader needs it to start at the tail rather than at the beginning, which an
 // attached stream offers no other way to find.
 func (h *handler) DescribeWorkflowStream(
@@ -848,9 +931,11 @@ func (h *handler) DescribeWorkflowStream(
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
-	state, err := h.ownedStreamState(ctx,
-		workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId()),
-		ownedStreamName(in.GetStreamName()))
+	target, err := resolveOwned(req.GetNamespaceId(), in.GetOwner(), in.GetStreamName())
+	if err != nil {
+		return nil, err
+	}
+	state, err := h.ownedStreamState(ctx, target)
 	if err != nil {
 		return nil, err
 	}
