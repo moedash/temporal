@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"go.temporal.io/api/serviceerror"
+	apistreampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
@@ -213,6 +214,16 @@ func checkOffset(field string, value int64) error {
 	return nil
 }
 
+// checkFirstPoll refuses a start position the history side could not resolve,
+// or one sent by a reader that already has an offset.
+func checkFirstPoll(pos *apistreampb.StreamStartPosition, from int64) error {
+	if pos == nil {
+		return nil
+	}
+	_, err := stream.RequestedStart(pos, "from_offset", from)
+	return err
+}
+
 // clampMaxMessages bounds a page the way the history side does, so a caller
 // asking for more sees the same page size it would have been given anyway.
 func clampMaxMessages(requested int32) int32 {
@@ -301,6 +312,10 @@ func (h *FrontendHandler) SubscribeWorkflow(
 	if err := h.checkID("workflow id", in.GetWorkflowId()); err != nil {
 		return nil, err
 	}
+	if _, err := stream.RequestedStart(
+		in.GetStartPosition(), "start_offset", in.GetStartOffset()); err != nil {
+		return nil, err
+	}
 	return h.client.SubscribeWorkflow(ctx, &streampb.SubscribeWorkflowRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
@@ -318,6 +333,9 @@ func (h *FrontendHandler) PollMessages(
 		return nil, err
 	}
 	if err := checkOffset("from offset", in.GetFromOffset()); err != nil {
+		return nil, err
+	}
+	if err := checkFirstPoll(in.GetStartPosition(), in.GetFromOffset()); err != nil {
 		return nil, err
 	}
 	in.MaxMessages = clampMaxMessages(in.GetMaxMessages())
@@ -338,6 +356,9 @@ func (h *FrontendHandler) PollWorkflowMessages(
 		return nil, err
 	}
 	if err := checkOffset("from offset", in.GetFromOffset()); err != nil {
+		return nil, err
+	}
+	if err := checkFirstPoll(in.GetStartPosition(), in.GetFromOffset()); err != nil {
 		return nil, err
 	}
 	owner, err := h.ownerOf(in.GetOwner(), in.GetWorkflowId(), in.GetOwnerRunId())

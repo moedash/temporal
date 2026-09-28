@@ -234,12 +234,18 @@ func handleSubscribeStreamCommand(
 		}
 	}
 
+	start, err := stream.RequestedStart(
+		attrs.GetStartPosition(), "start_offset", attrs.GetStartOffset())
+	if err != nil {
+		return FailWorkflowTaskError{Cause: badAttributes, Message: err.Error()}
+	}
+
 	// Everything is staged, including a stream this workflow owns, so that the
 	// resolved start offset and the event recording it are produced in one
 	// place rather than two.
 	wf.StagePendingSubscription(PendingStreamSubscription{
 		StreamID:          nameOrID,
-		StartOffset:       attrs.GetStartOffset(),
+		Start:             start,
 		AlreadySubscribed: already,
 		Event: wf.ReserveStreamSubscribedEvent(
 			nameOrID, opts.WorkflowTaskCompletedEventID),

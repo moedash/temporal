@@ -143,7 +143,7 @@ func rekeyConsumer(
 		ConsumerID: externalConsumerID(consumer.GetWorkflowId(), out.GetSuccessorRunId()),
 		WorkflowID: consumer.GetWorkflowId(),
 		RunID:      out.GetSuccessorRunId(),
-		Offset:     out.GetSuccessorStartOffset(),
+		Start:      stream.AtOffset(out.GetSuccessorStartOffset()),
 		External:   true,
 	}
 	_, _, err := chasm.UpdateComponent(ctx, ref,

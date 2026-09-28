@@ -5,6 +5,7 @@ package temporal.server.chasm.lib.stream.proto.v1;
 import "chasm/lib/stream/proto/v1/message.proto";
 import "chasm/lib/stream/proto/v1/stream_state.proto";
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/stream/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/stream/gen/streampb;streampb";
 
@@ -75,9 +76,13 @@ message SubscribeWorkflowInput {
   // Id of a standalone stream in another execution. Exactly one of this and
   // stream_name is set.
   string stream_id = 5;
-  // Where to start. Resolved here rather than at delivery, so the first
-  // recorded range starts from a fact instead of a reading.
+  // Where to start, as an absolute offset. Read only when start_position is
+  // unset, and a negative value means the head.
   int64 start_offset = 4;
+  // Where to start. Resolved here rather than at delivery, so the first
+  // recorded range starts from a fact instead of a reading. Refused alongside a
+  // non-zero start_offset.
+  temporal.api.stream.v1.StreamStartPosition start_position = 7;
 }
 
 message SubscribeWorkflowOutput {
@@ -90,6 +95,11 @@ message PollMessagesInput {
   // Optional, as on AddMessagesInput.
   string run_id = 7;
   int64 from_offset = 3;
+  // Where a first poll starts, when the reader has no offset yet. Resolved in
+  // the same read that serves the records, so it cannot race with truncation,
+  // and next_offset carries the result for the polls after it. Refused
+  // alongside a non-zero from_offset.
+  temporal.api.stream.v1.StreamStartPosition start_position = 8;
   int32 max_messages = 4;
   // Filters by exact topic. Offsets are assigned over the unfiltered stream, so
   // next_offset advances past filtered-out records too.
@@ -156,6 +166,8 @@ message PollWorkflowMessagesInput {
   // Empty means the owner's default output stream.
   string stream_name = 3;
   int64 from_offset = 4;
+  // As on PollMessagesInput.
+  temporal.api.stream.v1.StreamStartPosition start_position = 10;
   int32 max_messages = 5;
   // Filters as on PollMessagesInput.
   repeated string topics = 6;
@@ -296,9 +308,12 @@ message RegisterStreamConsumerInput {
   // inheriting a closed run's floor.
   string consumer_workflow_id = 3;
   string consumer_run_id = 5;
-  // Negative means from wherever the stream is when the pin is taken. Resolved
-  // here, where the frontier is, and returned so the cursor records a fact.
+  // Negative means from wherever the stream is when the pin is taken. Read
+  // only when start_position is unset.
   int64 start_offset = 4;
+  // Resolved here, where the frontier is, and returned as start_offset on the
+  // output so the cursor records a fact.
+  temporal.api.stream.v1.StreamStartPosition start_position = 6;
 }
 
 message RegisterStreamConsumerOutput {
