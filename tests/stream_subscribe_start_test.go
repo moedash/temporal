@@ -106,6 +106,8 @@ func TestStreamSubscribeCommandRefusesAStartItCannotResolve(t *testing.T) {
 		subscribeFromCommand("inputs", 1, chasmstream.Earliest()),
 		subscribeFromCommand("inputs", 0, chasmstream.LastN(0)),
 		subscribeFromCommand("inputs", 0, &streampb.StreamStartPosition{}),
+		// The old sentinel for the head is refused rather than reinterpreted.
+		subscribeFromCommand("inputs", -1, nil),
 	} {
 		execution, tq := startConsumer(t, s, "stream-sub-start-refused-")
 		//nolint:staticcheck // SA1019: only the deprecated poller can emit this command type.

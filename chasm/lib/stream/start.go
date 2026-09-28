@@ -37,6 +37,10 @@ func LastN(n int64) *streampb.StreamStartPosition {
 // RequestedStart reads where a caller asked to start from the two fields a
 // request can say it in. Setting both is refused rather than ranked, because
 // the two could disagree and neither is obviously the one the caller meant.
+//
+// A negative offset once meant the head. It is refused rather than
+// reinterpreted, so a caller still sending it finds out instead of reading
+// from somewhere it did not ask for.
 func RequestedStart(
 	pos *streampb.StreamStartPosition, offsetField string, offset int64,
 ) (*streampb.StreamStartPosition, error) {
@@ -48,7 +52,9 @@ func RequestedStart(
 		return pos, CheckStart(pos)
 	}
 	if offset < 0 {
-		return Tail(), nil
+		return nil, serviceerror.NewInvalidArgumentf(
+			"%s cannot be negative, got %d: ask for the head with start_position.tail",
+			offsetField, offset)
 	}
 	return AtOffset(offset), nil
 }
