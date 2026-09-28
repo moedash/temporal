@@ -272,4 +272,9 @@ func TestStreamSubscribeWorkflowResolvesItsStartPosition(t *testing.T) {
 		StreamName: "other", StartOffset: 1, StartPosition: chasmstream.Tail(),
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err), "%v", err)
+
+	// The negative offset that used to mean the head names the field to use.
+	_, err = subscribe(&streamlib.SubscribeWorkflowInput{StreamName: "other", StartOffset: -1})
+	require.Equal(t, codes.InvalidArgument, status.Code(err), "%v", err)
+	require.ErrorContains(t, err, "start_position.tail")
 }
