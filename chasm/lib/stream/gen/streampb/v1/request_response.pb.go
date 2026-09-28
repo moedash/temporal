@@ -485,7 +485,7 @@ type SubscribeWorkflowInput struct {
 	// stream_name is set.
 	StreamId string `protobuf:"bytes,5,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
 	// Where to start, as an absolute offset. Read only when start_position is
-	// unset, and a negative value means the head.
+	// unset. A negative value is refused.
 	StartOffset int64 `protobuf:"varint,4,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
 	// Where to start. Resolved here rather than at delivery, so the first
 	// recorded range starts from a fact instead of a reading. Refused alongside a
@@ -2363,8 +2363,8 @@ type RegisterStreamConsumerInput struct {
 	// inheriting a closed run's floor.
 	ConsumerWorkflowId string `protobuf:"bytes,3,opt,name=consumer_workflow_id,json=consumerWorkflowId,proto3" json:"consumer_workflow_id,omitempty"`
 	ConsumerRunId      string `protobuf:"bytes,5,opt,name=consumer_run_id,json=consumerRunId,proto3" json:"consumer_run_id,omitempty"`
-	// Negative means from wherever the stream is when the pin is taken. Read
-	// only when start_position is unset.
+	// An absolute offset, read only when start_position is unset. A negative
+	// value is refused.
 	StartOffset int64 `protobuf:"varint,4,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
 	// Resolved here, where the frontier is, and returned as start_offset on the
 	// output so the cursor records a fact.

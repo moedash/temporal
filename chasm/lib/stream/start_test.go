@@ -82,6 +82,10 @@ func TestRequestedStartReadsEitherField(t *testing.T) {
 	require.True(t, got.GetEarliest())
 
 	var invalid *serviceerror.InvalidArgument
+	_, err = RequestedStart(nil, "start_offset", -1)
+	require.ErrorAs(t, err, &invalid, "a negative offset is refused, not read as the head")
+	require.ErrorContains(t, err, "start_position.tail")
+
 	_, err = RequestedStart(Earliest(), "start_offset", 2)
 	require.ErrorAs(t, err, &invalid, "both fields set could disagree")
 	require.ErrorContains(t, err, "start_offset")
