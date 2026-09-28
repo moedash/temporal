@@ -219,3 +219,57 @@ func TestStreamWorkflowActivityStreamStartPositions(t *testing.T) {
 	require.Equal(t, []string{"a", "b", "c"},
 		bodies(s.pollOwnedFrom(t, owner, "", chasmstream.Earliest()).GetRecords()))
 }
+
+// A subscription records the offset its position resolved to, so the first
+// range a workflow task carries starts from a fact.
+func TestStreamSubscribeWorkflowResolvesItsStartPosition(t *testing.T) {
+	env, s := newStreamActivityEnv(t)
+	ctx := streamCtx(t)
+	workflowID := "stream-start-sub-" + uuid.NewString()
+	scheduleStreamingActivity(t, env, s, workflowID, "unused", nil)
+
+	workflowOwner := &streamlib.StreamOwner{Kind: streamlib.STREAM_OWNER_KIND_WORKFLOW, Id: workflowID}
+	_, err := s.addOwned(t, workflowOwner, "inputs", &streamlib.AddWorkflowMessagesInput{
+		Records: streamMsgs("", "a", "b", "c", "d"),
+	})
+	require.NoError(t, err)
+
+	subscribe := func(in *streamlib.SubscribeWorkflowInput) (int64, error) {
+		in.Namespace, in.WorkflowId = s.ns, workflowID
+		resp, err := s.client.SubscribeWorkflow(ctx, &streamlib.SubscribeWorkflowRequest{
+			FrontendRequest: in,
+		})
+		return resp.GetFrontendResponse().GetStartOffset(), err
+	}
+
+	start, err := subscribe(&streamlib.SubscribeWorkflowInput{
+		StreamName: "inputs", StartPosition: chasmstream.LastN(1),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), start)
+
+	// A standalone stream truncated below its head: earliest is its floor,
+	// where offset zero is refused.
+	const id = "stream-start-sub-standalone"
+	s.create(ctx, t, id)
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "x", "y", "z")})
+	require.NoError(t, err)
+	_, err = s.client.TruncateStream(ctx, &streamlib.TruncateStreamRequest{
+		FrontendRequest: &streamlib.TruncateStreamInput{
+			Namespace: s.ns, StreamId: id, NewBaseOffset: 2,
+		},
+	})
+	require.NoError(t, err)
+	_, err = subscribe(&streamlib.SubscribeWorkflowInput{StreamId: id})
+	require.ErrorContains(t, err, "below the stream's floor")
+	start, err = subscribe(&streamlib.SubscribeWorkflowInput{
+		StreamId: id, StartPosition: chasmstream.Earliest(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), start)
+
+	_, err = subscribe(&streamlib.SubscribeWorkflowInput{
+		StreamName: "other", StartOffset: 1, StartPosition: chasmstream.Tail(),
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err), "%v", err)
+}
