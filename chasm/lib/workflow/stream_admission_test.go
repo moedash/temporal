@@ -162,3 +162,35 @@ func TestSubscriptionsPerWorkflowAreBounded(t *testing.T) {
 	// not refused for room.
 	require.NoError(t, subscribe("a"))
 }
+
+// An activity id may contain a slash, so the reserved key escapes it. Without
+// that two different (activity, name) pairs would land on one stream.
+func TestActivityStreamKeysDoNotCollide(t *testing.T) {
+	require.NotEqual(t, ActivityStreamKey("a/b", "c"), ActivityStreamKey("a", "b/c"))
+	require.True(t, IsActivityStreamKey(ActivityStreamKey("act", DefaultStreamName)))
+	require.False(t, IsActivityStreamKey(DefaultStreamName))
+}
+
+// The workflow may not name the reserved part of its own map, or it could
+// write into, or subscribe to, a stream one of its activities owns.
+func TestWorkflowCannotNameAnActivityStream(t *testing.T) {
+	ctx := newStreamBudgetTestContext()
+	w := &Workflow{}
+	limits := stream.Limits{MaxOwnedStreamsPerWorkflow: 10}
+
+	key := ActivityStreamKey("act", DefaultStreamName)
+	_, err := w.streamNamed(ctx, key, limits)
+	var invalid *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalid)
+
+	// The activity addressing reaches it, and it counts against the workflow's
+	// stream count and shared byte budget because it lives in the same state.
+	_, err = w.AppendToOwnedStream(ctx, key, stream.AddMessagesRequest{
+		Records: budgetTestRecords(10), Limits: limits,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, w.OwnedStream(ctx, key))
+	require.Positive(t, w.siblingStreamBytes(ctx, DefaultStreamName)+
+		w.OwnedStream(ctx, key).State.GetAppendedBytes())
+	require.Len(t, w.Streams, 1)
+}

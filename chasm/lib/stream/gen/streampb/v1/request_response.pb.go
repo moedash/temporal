@@ -8,6 +8,7 @@ package streampb
 
 import (
 	reflect "reflect"
+	"strconv"
 	sync "sync"
 	unsafe "unsafe"
 
@@ -22,6 +23,74 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+// The kind of execution an owned stream lives in.
+type StreamOwnerKind int32
+
+const (
+	STREAM_OWNER_KIND_UNSPECIFIED StreamOwnerKind = 0
+	STREAM_OWNER_KIND_WORKFLOW    StreamOwnerKind = 1
+	// A standalone activity, which is an execution of its own.
+	STREAM_OWNER_KIND_ACTIVITY StreamOwnerKind = 2
+	// An activity a workflow scheduled. It is not an execution of its own, so
+	// its streams are reached through the workflow and routed on it.
+	STREAM_OWNER_KIND_WORKFLOW_ACTIVITY StreamOwnerKind = 3
+)
+
+// Enum value maps for StreamOwnerKind.
+var (
+	StreamOwnerKind_name = map[int32]string{
+		0: "STREAM_OWNER_KIND_UNSPECIFIED",
+		1: "STREAM_OWNER_KIND_WORKFLOW",
+		2: "STREAM_OWNER_KIND_ACTIVITY",
+		3: "STREAM_OWNER_KIND_WORKFLOW_ACTIVITY",
+	}
+	StreamOwnerKind_value = map[string]int32{
+		"STREAM_OWNER_KIND_UNSPECIFIED":       0,
+		"STREAM_OWNER_KIND_WORKFLOW":          1,
+		"STREAM_OWNER_KIND_ACTIVITY":          2,
+		"STREAM_OWNER_KIND_WORKFLOW_ACTIVITY": 3,
+	}
+)
+
+func (x StreamOwnerKind) Enum() *StreamOwnerKind {
+	p := new(StreamOwnerKind)
+	*p = x
+	return p
+}
+
+func (x StreamOwnerKind) String() string {
+	switch x {
+	case STREAM_OWNER_KIND_UNSPECIFIED:
+		return "Unspecified"
+	case STREAM_OWNER_KIND_WORKFLOW:
+		return "Workflow"
+	case STREAM_OWNER_KIND_ACTIVITY:
+		return "Activity"
+	case STREAM_OWNER_KIND_WORKFLOW_ACTIVITY:
+		return "WorkflowActivity"
+	default:
+		return strconv.Itoa(int(x))
+	}
+
+}
+
+func (StreamOwnerKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_enumTypes[0].Descriptor()
+}
+
+func (StreamOwnerKind) Type() protoreflect.EnumType {
+	return &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_enumTypes[0]
+}
+
+func (x StreamOwnerKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use StreamOwnerKind.Descriptor instead.
+func (StreamOwnerKind) EnumDescriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{0}
+}
 
 type CreateStreamInput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -773,18 +842,93 @@ func (x *DescribeStreamInput) GetStreamId() string {
 	return ""
 }
 
-// A stream a workflow owns lives inside that workflow's execution, so it has
-// no standalone id to address it by. It is named by its owner and its name
-// instead, and routed on the owner.
-type PollWorkflowMessagesInput struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	WorkflowId string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// Optional. Pins to one run, so a caller that has continued as new is not
-	// silently redirected to the successor's stream, which starts empty and at
+// The execution that owns a stream. An attached stream has no id of its own,
+// so it is named by this and a stream name, and routed on id.
+type StreamOwner struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  StreamOwnerKind        `protobuf:"varint,1,opt,name=kind,proto3,enum=temporal.server.chasm.lib.stream.proto.v1.StreamOwnerKind" json:"kind,omitempty"`
+	// The workflow id for WORKFLOW and WORKFLOW_ACTIVITY, the activity id for
+	// ACTIVITY.
+	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	// Optional. Pins to one run of the execution named by id, so a caller is not
+	// silently redirected to a later run's stream, which starts empty and at
 	// offset zero. Empty means whichever run is current.
+	RunId string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// The activity within the workflow, for WORKFLOW_ACTIVITY only.
+	ActivityId    string `protobuf:"bytes,4,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamOwner) Reset() {
+	*x = StreamOwner{}
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamOwner) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamOwner) ProtoMessage() {}
+
+func (x *StreamOwner) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamOwner.ProtoReflect.Descriptor instead.
+func (*StreamOwner) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *StreamOwner) GetKind() StreamOwnerKind {
+	if x != nil {
+		return x.Kind
+	}
+	return STREAM_OWNER_KIND_UNSPECIFIED
+}
+
+func (x *StreamOwner) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *StreamOwner) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *StreamOwner) GetActivityId() string {
+	if x != nil {
+		return x.ActivityId
+	}
+	return ""
+}
+
+// A stream an execution owns lives inside it, so it has no standalone id to
+// address it by. It is named by its owner and its name instead, and routed on
+// the owner.
+type PollWorkflowMessagesInput struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Owner     *StreamOwner           `protobuf:"bytes,9,opt,name=owner,proto3" json:"owner,omitempty"`
+	// Shorthand for an owner of kind WORKFLOW, and refused alongside owner.
+	WorkflowId string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	OwnerRunId string `protobuf:"bytes,8,opt,name=owner_run_id,json=ownerRunId,proto3" json:"owner_run_id,omitempty"`
-	// Empty means the workflow's default output stream.
+	// Empty means the owner's default output stream.
 	StreamName  string `protobuf:"bytes,3,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
 	FromOffset  int64  `protobuf:"varint,4,opt,name=from_offset,json=fromOffset,proto3" json:"from_offset,omitempty"`
 	MaxMessages int32  `protobuf:"varint,5,opt,name=max_messages,json=maxMessages,proto3" json:"max_messages,omitempty"`
@@ -797,7 +941,7 @@ type PollWorkflowMessagesInput struct {
 
 func (x *PollWorkflowMessagesInput) Reset() {
 	*x = PollWorkflowMessagesInput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[11]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -809,7 +953,7 @@ func (x *PollWorkflowMessagesInput) String() string {
 func (*PollWorkflowMessagesInput) ProtoMessage() {}
 
 func (x *PollWorkflowMessagesInput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[11]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -822,7 +966,7 @@ func (x *PollWorkflowMessagesInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollWorkflowMessagesInput.ProtoReflect.Descriptor instead.
 func (*PollWorkflowMessagesInput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{11}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PollWorkflowMessagesInput) GetNamespace() string {
@@ -830,6 +974,13 @@ func (x *PollWorkflowMessagesInput) GetNamespace() string {
 		return x.Namespace
 	}
 	return ""
+}
+
+func (x *PollWorkflowMessagesInput) GetOwner() *StreamOwner {
+	if x != nil {
+		return x.Owner
+	}
+	return nil
 }
 
 func (x *PollWorkflowMessagesInput) GetWorkflowId() string {
@@ -882,12 +1033,11 @@ func (x *PollWorkflowMessagesInput) GetWaitNewMessages() bool {
 }
 
 type DescribeWorkflowStreamInput struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	WorkflowId string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// Optional. Pins to one run, so a caller that has continued as new is not
-	// silently redirected to the successor's stream, which starts empty and at
-	// offset zero. Empty means whichever run is current.
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Owner     *StreamOwner           `protobuf:"bytes,5,opt,name=owner,proto3" json:"owner,omitempty"`
+	// Shorthand for an owner of kind WORKFLOW, and refused alongside owner.
+	WorkflowId    string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	OwnerRunId    string `protobuf:"bytes,4,opt,name=owner_run_id,json=ownerRunId,proto3" json:"owner_run_id,omitempty"`
 	StreamName    string `protobuf:"bytes,3,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -896,7 +1046,7 @@ type DescribeWorkflowStreamInput struct {
 
 func (x *DescribeWorkflowStreamInput) Reset() {
 	*x = DescribeWorkflowStreamInput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[12]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -908,7 +1058,7 @@ func (x *DescribeWorkflowStreamInput) String() string {
 func (*DescribeWorkflowStreamInput) ProtoMessage() {}
 
 func (x *DescribeWorkflowStreamInput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[12]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -921,7 +1071,7 @@ func (x *DescribeWorkflowStreamInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeWorkflowStreamInput.ProtoReflect.Descriptor instead.
 func (*DescribeWorkflowStreamInput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{12}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DescribeWorkflowStreamInput) GetNamespace() string {
@@ -929,6 +1079,13 @@ func (x *DescribeWorkflowStreamInput) GetNamespace() string {
 		return x.Namespace
 	}
 	return ""
+}
+
+func (x *DescribeWorkflowStreamInput) GetOwner() *StreamOwner {
+	if x != nil {
+		return x.Owner
+	}
+	return nil
 }
 
 func (x *DescribeWorkflowStreamInput) GetWorkflowId() string {
@@ -952,17 +1109,16 @@ func (x *DescribeWorkflowStreamInput) GetStreamName() string {
 	return ""
 }
 
-// Appending to a stream a workflow owns, from outside that workflow. The
-// workflow's own publishes ride its Workflow Task instead.
+// Appending to an owned stream from outside its owner. A workflow's own
+// publishes ride its Workflow Task instead; an activity has no other path.
 type AddWorkflowMessagesInput struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	WorkflowId string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// Optional. Pins to one run, so a caller that has continued as new is not
-	// silently redirected to the successor's stream, which starts empty and at
-	// offset zero. Empty means whichever run is current.
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Owner     *StreamOwner           `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
+	// Shorthand for an owner of kind WORKFLOW, and refused alongside owner.
+	WorkflowId string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	OwnerRunId string `protobuf:"bytes,7,opt,name=owner_run_id,json=ownerRunId,proto3" json:"owner_run_id,omitempty"`
-	// Empty means the workflow's default output stream.
+	// Empty means the owner's default output stream.
 	StreamName string          `protobuf:"bytes,3,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
 	Records    []*StreamRecord `protobuf:"bytes,4,rep,name=records,proto3" json:"records,omitempty"`
 	// Optional idempotency, as on AddMessagesInput.
@@ -974,7 +1130,7 @@ type AddWorkflowMessagesInput struct {
 
 func (x *AddWorkflowMessagesInput) Reset() {
 	*x = AddWorkflowMessagesInput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[13]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -986,7 +1142,7 @@ func (x *AddWorkflowMessagesInput) String() string {
 func (*AddWorkflowMessagesInput) ProtoMessage() {}
 
 func (x *AddWorkflowMessagesInput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[13]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -999,7 +1155,7 @@ func (x *AddWorkflowMessagesInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddWorkflowMessagesInput.ProtoReflect.Descriptor instead.
 func (*AddWorkflowMessagesInput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{13}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AddWorkflowMessagesInput) GetNamespace() string {
@@ -1007,6 +1163,13 @@ func (x *AddWorkflowMessagesInput) GetNamespace() string {
 		return x.Namespace
 	}
 	return ""
+}
+
+func (x *AddWorkflowMessagesInput) GetOwner() *StreamOwner {
+	if x != nil {
+		return x.Owner
+	}
+	return nil
 }
 
 func (x *AddWorkflowMessagesInput) GetWorkflowId() string {
@@ -1060,7 +1223,7 @@ type DescribeStreamOutput struct {
 
 func (x *DescribeStreamOutput) Reset() {
 	*x = DescribeStreamOutput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[14]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1072,7 +1235,7 @@ func (x *DescribeStreamOutput) String() string {
 func (*DescribeStreamOutput) ProtoMessage() {}
 
 func (x *DescribeStreamOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[14]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1085,7 +1248,7 @@ func (x *DescribeStreamOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeStreamOutput.ProtoReflect.Descriptor instead.
 func (*DescribeStreamOutput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{14}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *DescribeStreamOutput) GetState() *StreamState {
@@ -1106,7 +1269,7 @@ type CloseStreamInput struct {
 
 func (x *CloseStreamInput) Reset() {
 	*x = CloseStreamInput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[15]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1118,7 +1281,7 @@ func (x *CloseStreamInput) String() string {
 func (*CloseStreamInput) ProtoMessage() {}
 
 func (x *CloseStreamInput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[15]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1131,7 +1294,7 @@ func (x *CloseStreamInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseStreamInput.ProtoReflect.Descriptor instead.
 func (*CloseStreamInput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{15}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CloseStreamInput) GetNamespace() string {
@@ -1163,7 +1326,7 @@ type CloseStreamOutput struct {
 
 func (x *CloseStreamOutput) Reset() {
 	*x = CloseStreamOutput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[16]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1175,7 +1338,7 @@ func (x *CloseStreamOutput) String() string {
 func (*CloseStreamOutput) ProtoMessage() {}
 
 func (x *CloseStreamOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[16]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1188,7 +1351,7 @@ func (x *CloseStreamOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseStreamOutput.ProtoReflect.Descriptor instead.
 func (*CloseStreamOutput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{16}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{17}
 }
 
 type TruncateStreamInput struct {
@@ -1202,7 +1365,7 @@ type TruncateStreamInput struct {
 
 func (x *TruncateStreamInput) Reset() {
 	*x = TruncateStreamInput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[17]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1214,7 +1377,7 @@ func (x *TruncateStreamInput) String() string {
 func (*TruncateStreamInput) ProtoMessage() {}
 
 func (x *TruncateStreamInput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[17]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1227,7 +1390,7 @@ func (x *TruncateStreamInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TruncateStreamInput.ProtoReflect.Descriptor instead.
 func (*TruncateStreamInput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{17}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TruncateStreamInput) GetNamespace() string {
@@ -1259,7 +1422,7 @@ type TruncateStreamOutput struct {
 
 func (x *TruncateStreamOutput) Reset() {
 	*x = TruncateStreamOutput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[18]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1271,7 +1434,7 @@ func (x *TruncateStreamOutput) String() string {
 func (*TruncateStreamOutput) ProtoMessage() {}
 
 func (x *TruncateStreamOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[18]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1284,7 +1447,7 @@ func (x *TruncateStreamOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TruncateStreamOutput.ProtoReflect.Descriptor instead.
 func (*TruncateStreamOutput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{18}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{19}
 }
 
 type DeleteStreamInput struct {
@@ -1301,7 +1464,7 @@ type DeleteStreamInput struct {
 
 func (x *DeleteStreamInput) Reset() {
 	*x = DeleteStreamInput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[19]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1313,7 +1476,7 @@ func (x *DeleteStreamInput) String() string {
 func (*DeleteStreamInput) ProtoMessage() {}
 
 func (x *DeleteStreamInput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[19]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1326,7 +1489,7 @@ func (x *DeleteStreamInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteStreamInput.ProtoReflect.Descriptor instead.
 func (*DeleteStreamInput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{19}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *DeleteStreamInput) GetNamespace() string {
@@ -1358,7 +1521,7 @@ type DeleteStreamOutput struct {
 
 func (x *DeleteStreamOutput) Reset() {
 	*x = DeleteStreamOutput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[20]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1370,7 +1533,7 @@ func (x *DeleteStreamOutput) String() string {
 func (*DeleteStreamOutput) ProtoMessage() {}
 
 func (x *DeleteStreamOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[20]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1383,7 +1546,7 @@ func (x *DeleteStreamOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteStreamOutput.ProtoReflect.Descriptor instead.
 func (*DeleteStreamOutput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{20}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{21}
 }
 
 type CreateStreamRequest struct {
@@ -1396,7 +1559,7 @@ type CreateStreamRequest struct {
 
 func (x *CreateStreamRequest) Reset() {
 	*x = CreateStreamRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[21]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1408,7 +1571,7 @@ func (x *CreateStreamRequest) String() string {
 func (*CreateStreamRequest) ProtoMessage() {}
 
 func (x *CreateStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[21]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1421,7 +1584,7 @@ func (x *CreateStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateStreamRequest.ProtoReflect.Descriptor instead.
 func (*CreateStreamRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{21}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CreateStreamRequest) GetNamespaceId() string {
@@ -1447,7 +1610,7 @@ type CreateStreamResponse struct {
 
 func (x *CreateStreamResponse) Reset() {
 	*x = CreateStreamResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[22]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1459,7 +1622,7 @@ func (x *CreateStreamResponse) String() string {
 func (*CreateStreamResponse) ProtoMessage() {}
 
 func (x *CreateStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[22]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1472,7 +1635,7 @@ func (x *CreateStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateStreamResponse.ProtoReflect.Descriptor instead.
 func (*CreateStreamResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{22}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CreateStreamResponse) GetFrontendResponse() *CreateStreamOutput {
@@ -1492,7 +1655,7 @@ type AddMessagesRequest struct {
 
 func (x *AddMessagesRequest) Reset() {
 	*x = AddMessagesRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[23]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1504,7 +1667,7 @@ func (x *AddMessagesRequest) String() string {
 func (*AddMessagesRequest) ProtoMessage() {}
 
 func (x *AddMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[23]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1517,7 +1680,7 @@ func (x *AddMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddMessagesRequest.ProtoReflect.Descriptor instead.
 func (*AddMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{23}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *AddMessagesRequest) GetNamespaceId() string {
@@ -1543,7 +1706,7 @@ type AddMessagesResponse struct {
 
 func (x *AddMessagesResponse) Reset() {
 	*x = AddMessagesResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[24]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1555,7 +1718,7 @@ func (x *AddMessagesResponse) String() string {
 func (*AddMessagesResponse) ProtoMessage() {}
 
 func (x *AddMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[24]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1568,7 +1731,7 @@ func (x *AddMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddMessagesResponse.ProtoReflect.Descriptor instead.
 func (*AddMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{24}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *AddMessagesResponse) GetFrontendResponse() *AddMessagesOutput {
@@ -1588,7 +1751,7 @@ type FinishWritingRequest struct {
 
 func (x *FinishWritingRequest) Reset() {
 	*x = FinishWritingRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[25]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1600,7 +1763,7 @@ func (x *FinishWritingRequest) String() string {
 func (*FinishWritingRequest) ProtoMessage() {}
 
 func (x *FinishWritingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[25]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1613,7 +1776,7 @@ func (x *FinishWritingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinishWritingRequest.ProtoReflect.Descriptor instead.
 func (*FinishWritingRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{25}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *FinishWritingRequest) GetNamespaceId() string {
@@ -1639,7 +1802,7 @@ type FinishWritingResponse struct {
 
 func (x *FinishWritingResponse) Reset() {
 	*x = FinishWritingResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[26]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1651,7 +1814,7 @@ func (x *FinishWritingResponse) String() string {
 func (*FinishWritingResponse) ProtoMessage() {}
 
 func (x *FinishWritingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[26]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1664,7 +1827,7 @@ func (x *FinishWritingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinishWritingResponse.ProtoReflect.Descriptor instead.
 func (*FinishWritingResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{26}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *FinishWritingResponse) GetFrontendResponse() *FinishWritingOutput {
@@ -1684,7 +1847,7 @@ type SubscribeWorkflowRequest struct {
 
 func (x *SubscribeWorkflowRequest) Reset() {
 	*x = SubscribeWorkflowRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[27]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1696,7 +1859,7 @@ func (x *SubscribeWorkflowRequest) String() string {
 func (*SubscribeWorkflowRequest) ProtoMessage() {}
 
 func (x *SubscribeWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[27]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1709,7 +1872,7 @@ func (x *SubscribeWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{27}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *SubscribeWorkflowRequest) GetNamespaceId() string {
@@ -1735,7 +1898,7 @@ type SubscribeWorkflowResponse struct {
 
 func (x *SubscribeWorkflowResponse) Reset() {
 	*x = SubscribeWorkflowResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[28]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1747,7 +1910,7 @@ func (x *SubscribeWorkflowResponse) String() string {
 func (*SubscribeWorkflowResponse) ProtoMessage() {}
 
 func (x *SubscribeWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[28]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1760,7 +1923,7 @@ func (x *SubscribeWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*SubscribeWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{28}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *SubscribeWorkflowResponse) GetFrontendResponse() *SubscribeWorkflowOutput {
@@ -1780,7 +1943,7 @@ type PollMessagesRequest struct {
 
 func (x *PollMessagesRequest) Reset() {
 	*x = PollMessagesRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[29]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1792,7 +1955,7 @@ func (x *PollMessagesRequest) String() string {
 func (*PollMessagesRequest) ProtoMessage() {}
 
 func (x *PollMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[29]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1805,7 +1968,7 @@ func (x *PollMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollMessagesRequest.ProtoReflect.Descriptor instead.
 func (*PollMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{29}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *PollMessagesRequest) GetNamespaceId() string {
@@ -1831,7 +1994,7 @@ type PollMessagesResponse struct {
 
 func (x *PollMessagesResponse) Reset() {
 	*x = PollMessagesResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[30]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1843,7 +2006,7 @@ func (x *PollMessagesResponse) String() string {
 func (*PollMessagesResponse) ProtoMessage() {}
 
 func (x *PollMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[30]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1856,7 +2019,7 @@ func (x *PollMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollMessagesResponse.ProtoReflect.Descriptor instead.
 func (*PollMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{30}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *PollMessagesResponse) GetFrontendResponse() *PollMessagesOutput {
@@ -1876,7 +2039,7 @@ type DescribeStreamRequest struct {
 
 func (x *DescribeStreamRequest) Reset() {
 	*x = DescribeStreamRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[31]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1888,7 +2051,7 @@ func (x *DescribeStreamRequest) String() string {
 func (*DescribeStreamRequest) ProtoMessage() {}
 
 func (x *DescribeStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[31]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1901,7 +2064,7 @@ func (x *DescribeStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeStreamRequest.ProtoReflect.Descriptor instead.
 func (*DescribeStreamRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{31}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *DescribeStreamRequest) GetNamespaceId() string {
@@ -1927,7 +2090,7 @@ type DescribeStreamResponse struct {
 
 func (x *DescribeStreamResponse) Reset() {
 	*x = DescribeStreamResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[32]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1939,7 +2102,7 @@ func (x *DescribeStreamResponse) String() string {
 func (*DescribeStreamResponse) ProtoMessage() {}
 
 func (x *DescribeStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[32]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1952,7 +2115,7 @@ func (x *DescribeStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeStreamResponse.ProtoReflect.Descriptor instead.
 func (*DescribeStreamResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{32}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *DescribeStreamResponse) GetFrontendResponse() *DescribeStreamOutput {
@@ -1972,7 +2135,7 @@ type PollWorkflowMessagesRequest struct {
 
 func (x *PollWorkflowMessagesRequest) Reset() {
 	*x = PollWorkflowMessagesRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[33]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1984,7 +2147,7 @@ func (x *PollWorkflowMessagesRequest) String() string {
 func (*PollWorkflowMessagesRequest) ProtoMessage() {}
 
 func (x *PollWorkflowMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[33]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1997,7 +2160,7 @@ func (x *PollWorkflowMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollWorkflowMessagesRequest.ProtoReflect.Descriptor instead.
 func (*PollWorkflowMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{33}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *PollWorkflowMessagesRequest) GetNamespaceId() string {
@@ -2023,7 +2186,7 @@ type PollWorkflowMessagesResponse struct {
 
 func (x *PollWorkflowMessagesResponse) Reset() {
 	*x = PollWorkflowMessagesResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[34]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2035,7 +2198,7 @@ func (x *PollWorkflowMessagesResponse) String() string {
 func (*PollWorkflowMessagesResponse) ProtoMessage() {}
 
 func (x *PollWorkflowMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[34]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2048,7 +2211,7 @@ func (x *PollWorkflowMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollWorkflowMessagesResponse.ProtoReflect.Descriptor instead.
 func (*PollWorkflowMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{34}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *PollWorkflowMessagesResponse) GetFrontendResponse() *PollMessagesOutput {
@@ -2068,7 +2231,7 @@ type DescribeWorkflowStreamRequest struct {
 
 func (x *DescribeWorkflowStreamRequest) Reset() {
 	*x = DescribeWorkflowStreamRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[35]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2080,7 +2243,7 @@ func (x *DescribeWorkflowStreamRequest) String() string {
 func (*DescribeWorkflowStreamRequest) ProtoMessage() {}
 
 func (x *DescribeWorkflowStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[35]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2093,7 +2256,7 @@ func (x *DescribeWorkflowStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeWorkflowStreamRequest.ProtoReflect.Descriptor instead.
 func (*DescribeWorkflowStreamRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{35}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *DescribeWorkflowStreamRequest) GetNamespaceId() string {
@@ -2119,7 +2282,7 @@ type DescribeWorkflowStreamResponse struct {
 
 func (x *DescribeWorkflowStreamResponse) Reset() {
 	*x = DescribeWorkflowStreamResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[36]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2131,7 +2294,7 @@ func (x *DescribeWorkflowStreamResponse) String() string {
 func (*DescribeWorkflowStreamResponse) ProtoMessage() {}
 
 func (x *DescribeWorkflowStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[36]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2144,7 +2307,7 @@ func (x *DescribeWorkflowStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeWorkflowStreamResponse.ProtoReflect.Descriptor instead.
 func (*DescribeWorkflowStreamResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{36}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *DescribeWorkflowStreamResponse) GetFrontendResponse() *DescribeStreamOutput {
@@ -2176,7 +2339,7 @@ type RegisterStreamConsumerInput struct {
 
 func (x *RegisterStreamConsumerInput) Reset() {
 	*x = RegisterStreamConsumerInput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[37]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2188,7 +2351,7 @@ func (x *RegisterStreamConsumerInput) String() string {
 func (*RegisterStreamConsumerInput) ProtoMessage() {}
 
 func (x *RegisterStreamConsumerInput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[37]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2201,7 +2364,7 @@ func (x *RegisterStreamConsumerInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterStreamConsumerInput.ProtoReflect.Descriptor instead.
 func (*RegisterStreamConsumerInput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{37}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *RegisterStreamConsumerInput) GetNamespace() string {
@@ -2258,7 +2421,7 @@ type RegisterStreamConsumerOutput struct {
 
 func (x *RegisterStreamConsumerOutput) Reset() {
 	*x = RegisterStreamConsumerOutput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[38]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2270,7 +2433,7 @@ func (x *RegisterStreamConsumerOutput) String() string {
 func (*RegisterStreamConsumerOutput) ProtoMessage() {}
 
 func (x *RegisterStreamConsumerOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[38]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2283,7 +2446,7 @@ func (x *RegisterStreamConsumerOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterStreamConsumerOutput.ProtoReflect.Descriptor instead.
 func (*RegisterStreamConsumerOutput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{38}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *RegisterStreamConsumerOutput) GetStartOffset() int64 {
@@ -2324,7 +2487,7 @@ type AdvanceConsumerHeadInput struct {
 
 func (x *AdvanceConsumerHeadInput) Reset() {
 	*x = AdvanceConsumerHeadInput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[39]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2336,7 +2499,7 @@ func (x *AdvanceConsumerHeadInput) String() string {
 func (*AdvanceConsumerHeadInput) ProtoMessage() {}
 
 func (x *AdvanceConsumerHeadInput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[39]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2349,7 +2512,7 @@ func (x *AdvanceConsumerHeadInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdvanceConsumerHeadInput.ProtoReflect.Descriptor instead.
 func (*AdvanceConsumerHeadInput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{39}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *AdvanceConsumerHeadInput) GetNamespace() string {
@@ -2403,7 +2566,7 @@ type AdvanceConsumerHeadOutput struct {
 
 func (x *AdvanceConsumerHeadOutput) Reset() {
 	*x = AdvanceConsumerHeadOutput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[40]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2415,7 +2578,7 @@ func (x *AdvanceConsumerHeadOutput) String() string {
 func (*AdvanceConsumerHeadOutput) ProtoMessage() {}
 
 func (x *AdvanceConsumerHeadOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[40]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2428,7 +2591,7 @@ func (x *AdvanceConsumerHeadOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdvanceConsumerHeadOutput.ProtoReflect.Descriptor instead.
 func (*AdvanceConsumerHeadOutput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{40}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *AdvanceConsumerHeadOutput) GetConsumerClosed() bool {
@@ -2462,7 +2625,7 @@ type AddWorkflowMessagesRequest struct {
 
 func (x *AddWorkflowMessagesRequest) Reset() {
 	*x = AddWorkflowMessagesRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[41]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2474,7 +2637,7 @@ func (x *AddWorkflowMessagesRequest) String() string {
 func (*AddWorkflowMessagesRequest) ProtoMessage() {}
 
 func (x *AddWorkflowMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[41]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2487,7 +2650,7 @@ func (x *AddWorkflowMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddWorkflowMessagesRequest.ProtoReflect.Descriptor instead.
 func (*AddWorkflowMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{41}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *AddWorkflowMessagesRequest) GetNamespaceId() string {
@@ -2513,7 +2676,7 @@ type AddWorkflowMessagesResponse struct {
 
 func (x *AddWorkflowMessagesResponse) Reset() {
 	*x = AddWorkflowMessagesResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[42]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2525,7 +2688,7 @@ func (x *AddWorkflowMessagesResponse) String() string {
 func (*AddWorkflowMessagesResponse) ProtoMessage() {}
 
 func (x *AddWorkflowMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[42]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2538,7 +2701,7 @@ func (x *AddWorkflowMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddWorkflowMessagesResponse.ProtoReflect.Descriptor instead.
 func (*AddWorkflowMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{42}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *AddWorkflowMessagesResponse) GetFrontendResponse() *AddMessagesOutput {
@@ -2558,7 +2721,7 @@ type RegisterStreamConsumerRequest struct {
 
 func (x *RegisterStreamConsumerRequest) Reset() {
 	*x = RegisterStreamConsumerRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[43]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2570,7 +2733,7 @@ func (x *RegisterStreamConsumerRequest) String() string {
 func (*RegisterStreamConsumerRequest) ProtoMessage() {}
 
 func (x *RegisterStreamConsumerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[43]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2583,7 +2746,7 @@ func (x *RegisterStreamConsumerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterStreamConsumerRequest.ProtoReflect.Descriptor instead.
 func (*RegisterStreamConsumerRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{43}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *RegisterStreamConsumerRequest) GetNamespaceId() string {
@@ -2609,7 +2772,7 @@ type RegisterStreamConsumerResponse struct {
 
 func (x *RegisterStreamConsumerResponse) Reset() {
 	*x = RegisterStreamConsumerResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[44]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2621,7 +2784,7 @@ func (x *RegisterStreamConsumerResponse) String() string {
 func (*RegisterStreamConsumerResponse) ProtoMessage() {}
 
 func (x *RegisterStreamConsumerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[44]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2634,7 +2797,7 @@ func (x *RegisterStreamConsumerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterStreamConsumerResponse.ProtoReflect.Descriptor instead.
 func (*RegisterStreamConsumerResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{44}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *RegisterStreamConsumerResponse) GetFrontendResponse() *RegisterStreamConsumerOutput {
@@ -2654,7 +2817,7 @@ type AdvanceConsumerHeadRequest struct {
 
 func (x *AdvanceConsumerHeadRequest) Reset() {
 	*x = AdvanceConsumerHeadRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[45]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2666,7 +2829,7 @@ func (x *AdvanceConsumerHeadRequest) String() string {
 func (*AdvanceConsumerHeadRequest) ProtoMessage() {}
 
 func (x *AdvanceConsumerHeadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[45]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2679,7 +2842,7 @@ func (x *AdvanceConsumerHeadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdvanceConsumerHeadRequest.ProtoReflect.Descriptor instead.
 func (*AdvanceConsumerHeadRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{45}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *AdvanceConsumerHeadRequest) GetNamespaceId() string {
@@ -2705,7 +2868,7 @@ type AdvanceConsumerHeadResponse struct {
 
 func (x *AdvanceConsumerHeadResponse) Reset() {
 	*x = AdvanceConsumerHeadResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[46]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2717,7 +2880,7 @@ func (x *AdvanceConsumerHeadResponse) String() string {
 func (*AdvanceConsumerHeadResponse) ProtoMessage() {}
 
 func (x *AdvanceConsumerHeadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[46]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2730,7 +2893,7 @@ func (x *AdvanceConsumerHeadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdvanceConsumerHeadResponse.ProtoReflect.Descriptor instead.
 func (*AdvanceConsumerHeadResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{46}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *AdvanceConsumerHeadResponse) GetFrontendResponse() *AdvanceConsumerHeadOutput {
@@ -2750,7 +2913,7 @@ type CloseStreamRequest struct {
 
 func (x *CloseStreamRequest) Reset() {
 	*x = CloseStreamRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[47]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2762,7 +2925,7 @@ func (x *CloseStreamRequest) String() string {
 func (*CloseStreamRequest) ProtoMessage() {}
 
 func (x *CloseStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[47]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2775,7 +2938,7 @@ func (x *CloseStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseStreamRequest.ProtoReflect.Descriptor instead.
 func (*CloseStreamRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{47}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *CloseStreamRequest) GetNamespaceId() string {
@@ -2801,7 +2964,7 @@ type CloseStreamResponse struct {
 
 func (x *CloseStreamResponse) Reset() {
 	*x = CloseStreamResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[48]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2813,7 +2976,7 @@ func (x *CloseStreamResponse) String() string {
 func (*CloseStreamResponse) ProtoMessage() {}
 
 func (x *CloseStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[48]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2826,7 +2989,7 @@ func (x *CloseStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseStreamResponse.ProtoReflect.Descriptor instead.
 func (*CloseStreamResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{48}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *CloseStreamResponse) GetFrontendResponse() *CloseStreamOutput {
@@ -2846,7 +3009,7 @@ type TruncateStreamRequest struct {
 
 func (x *TruncateStreamRequest) Reset() {
 	*x = TruncateStreamRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[49]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2858,7 +3021,7 @@ func (x *TruncateStreamRequest) String() string {
 func (*TruncateStreamRequest) ProtoMessage() {}
 
 func (x *TruncateStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[49]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2871,7 +3034,7 @@ func (x *TruncateStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TruncateStreamRequest.ProtoReflect.Descriptor instead.
 func (*TruncateStreamRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{49}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *TruncateStreamRequest) GetNamespaceId() string {
@@ -2897,7 +3060,7 @@ type TruncateStreamResponse struct {
 
 func (x *TruncateStreamResponse) Reset() {
 	*x = TruncateStreamResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[50]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2909,7 +3072,7 @@ func (x *TruncateStreamResponse) String() string {
 func (*TruncateStreamResponse) ProtoMessage() {}
 
 func (x *TruncateStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[50]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2922,7 +3085,7 @@ func (x *TruncateStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TruncateStreamResponse.ProtoReflect.Descriptor instead.
 func (*TruncateStreamResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{50}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *TruncateStreamResponse) GetFrontendResponse() *TruncateStreamOutput {
@@ -2944,7 +3107,7 @@ type ListStreamsInput struct {
 
 func (x *ListStreamsInput) Reset() {
 	*x = ListStreamsInput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[51]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2956,7 +3119,7 @@ func (x *ListStreamsInput) String() string {
 func (*ListStreamsInput) ProtoMessage() {}
 
 func (x *ListStreamsInput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[51]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2969,7 +3132,7 @@ func (x *ListStreamsInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStreamsInput.ProtoReflect.Descriptor instead.
 func (*ListStreamsInput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{51}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ListStreamsInput) GetNamespace() string {
@@ -3010,7 +3173,7 @@ type StreamListEntry struct {
 
 func (x *StreamListEntry) Reset() {
 	*x = StreamListEntry{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[52]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3022,7 +3185,7 @@ func (x *StreamListEntry) String() string {
 func (*StreamListEntry) ProtoMessage() {}
 
 func (x *StreamListEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[52]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3035,7 +3198,7 @@ func (x *StreamListEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamListEntry.ProtoReflect.Descriptor instead.
 func (*StreamListEntry) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{52}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *StreamListEntry) GetStreamId() string {
@@ -3062,7 +3225,7 @@ type ListStreamsOutput struct {
 
 func (x *ListStreamsOutput) Reset() {
 	*x = ListStreamsOutput{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[53]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3074,7 +3237,7 @@ func (x *ListStreamsOutput) String() string {
 func (*ListStreamsOutput) ProtoMessage() {}
 
 func (x *ListStreamsOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[53]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3087,7 +3250,7 @@ func (x *ListStreamsOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStreamsOutput.ProtoReflect.Descriptor instead.
 func (*ListStreamsOutput) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{53}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *ListStreamsOutput) GetStreams() []*StreamListEntry {
@@ -3114,7 +3277,7 @@ type ListStreamsRequest struct {
 
 func (x *ListStreamsRequest) Reset() {
 	*x = ListStreamsRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[54]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3126,7 +3289,7 @@ func (x *ListStreamsRequest) String() string {
 func (*ListStreamsRequest) ProtoMessage() {}
 
 func (x *ListStreamsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[54]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3139,7 +3302,7 @@ func (x *ListStreamsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStreamsRequest.ProtoReflect.Descriptor instead.
 func (*ListStreamsRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{54}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *ListStreamsRequest) GetNamespaceId() string {
@@ -3165,7 +3328,7 @@ type ListStreamsResponse struct {
 
 func (x *ListStreamsResponse) Reset() {
 	*x = ListStreamsResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[55]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3177,7 +3340,7 @@ func (x *ListStreamsResponse) String() string {
 func (*ListStreamsResponse) ProtoMessage() {}
 
 func (x *ListStreamsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[55]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3190,7 +3353,7 @@ func (x *ListStreamsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStreamsResponse.ProtoReflect.Descriptor instead.
 func (*ListStreamsResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{55}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ListStreamsResponse) GetFrontendResponse() *ListStreamsOutput {
@@ -3210,7 +3373,7 @@ type DeleteStreamRequest struct {
 
 func (x *DeleteStreamRequest) Reset() {
 	*x = DeleteStreamRequest{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[56]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3222,7 +3385,7 @@ func (x *DeleteStreamRequest) String() string {
 func (*DeleteStreamRequest) ProtoMessage() {}
 
 func (x *DeleteStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[56]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3235,7 +3398,7 @@ func (x *DeleteStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteStreamRequest.ProtoReflect.Descriptor instead.
 func (*DeleteStreamRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{56}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *DeleteStreamRequest) GetNamespaceId() string {
@@ -3261,7 +3424,7 @@ type DeleteStreamResponse struct {
 
 func (x *DeleteStreamResponse) Reset() {
 	*x = DeleteStreamResponse{}
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[57]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3273,7 +3436,7 @@ func (x *DeleteStreamResponse) String() string {
 func (*DeleteStreamResponse) ProtoMessage() {}
 
 func (x *DeleteStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[57]
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3286,7 +3449,7 @@ func (x *DeleteStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteStreamResponse.ProtoReflect.Descriptor instead.
 func (*DeleteStreamResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{57}
+	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *DeleteStreamResponse) GetFrontendResponse() *DeleteStreamOutput {
@@ -3361,9 +3524,16 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\x06run_id\x18\x06 \x01(\tR\x05runId\"P\n" +
 	"\x13DescribeStreamInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
-	"\tstream_id\x18\x02 \x01(\tR\bstreamId\"\xa5\x02\n" +
+	"\tstream_id\x18\x02 \x01(\tR\bstreamId\"\xa5\x01\n" +
+	"\vStreamOwner\x12N\n" +
+	"\x04kind\x18\x01 \x01(\x0e2:.temporal.server.chasm.lib.stream.proto.v1.StreamOwnerKindR\x04kind\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x15\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12\x1f\n" +
+	"\vactivity_id\x18\x04 \x01(\tR\n" +
+	"activityId\"\xf3\x02\n" +
 	"\x19PollWorkflowMessagesInput\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12L\n" +
+	"\x05owner\x18\t \x01(\v26.temporal.server.chasm.lib.stream.proto.v1.StreamOwnerR\x05owner\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12 \n" +
 	"\fowner_run_id\x18\b \x01(\tR\n" +
@@ -3374,17 +3544,19 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"fromOffset\x12!\n" +
 	"\fmax_messages\x18\x05 \x01(\x05R\vmaxMessages\x12\x16\n" +
 	"\x06topics\x18\x06 \x03(\tR\x06topics\x12*\n" +
-	"\x11wait_new_messages\x18\a \x01(\bR\x0fwaitNewMessages\"\x9f\x01\n" +
+	"\x11wait_new_messages\x18\a \x01(\bR\x0fwaitNewMessages\"\xed\x01\n" +
 	"\x1bDescribeWorkflowStreamInput\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12L\n" +
+	"\x05owner\x18\x05 \x01(\v26.temporal.server.chasm.lib.stream.proto.v1.StreamOwnerR\x05owner\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12 \n" +
 	"\fowner_run_id\x18\x04 \x01(\tR\n" +
 	"ownerRunId\x12\x1f\n" +
 	"\vstream_name\x18\x03 \x01(\tR\n" +
-	"streamName\"\xac\x02\n" +
+	"streamName\"\xfa\x02\n" +
 	"\x18AddWorkflowMessagesInput\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12L\n" +
+	"\x05owner\x18\b \x01(\v26.temporal.server.chasm.lib.stream.proto.v1.StreamOwnerR\x05owner\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12 \n" +
 	"\fowner_run_id\x18\a \x01(\tR\n" +
@@ -3521,7 +3693,12 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12g\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2<.temporal.server.chasm.lib.stream.proto.v1.DeleteStreamInputR\x0ffrontendRequest\"\x82\x01\n" +
 	"\x14DeleteStreamResponse\x12j\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2=.temporal.server.chasm.lib.stream.proto.v1.DeleteStreamOutputR\x10frontendResponseB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
+	"\x11frontend_response\x18\x01 \x01(\v2=.temporal.server.chasm.lib.stream.proto.v1.DeleteStreamOutputR\x10frontendResponse*\x9d\x01\n" +
+	"\x0fStreamOwnerKind\x12!\n" +
+	"\x1dSTREAM_OWNER_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aSTREAM_OWNER_KIND_WORKFLOW\x10\x01\x12\x1e\n" +
+	"\x1aSTREAM_OWNER_KIND_ACTIVITY\x10\x02\x12'\n" +
+	"#STREAM_OWNER_KIND_WORKFLOW_ACTIVITY\x10\x03B>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescOnce sync.Once
@@ -3535,115 +3712,122 @@ func file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDe
 	return file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 58)
+var file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
 var file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_goTypes = []any{
-	(*CreateStreamInput)(nil),              // 0: temporal.server.chasm.lib.stream.proto.v1.CreateStreamInput
-	(*CreateStreamOutput)(nil),             // 1: temporal.server.chasm.lib.stream.proto.v1.CreateStreamOutput
-	(*AddMessagesInput)(nil),               // 2: temporal.server.chasm.lib.stream.proto.v1.AddMessagesInput
-	(*AddMessagesOutput)(nil),              // 3: temporal.server.chasm.lib.stream.proto.v1.AddMessagesOutput
-	(*FinishWritingInput)(nil),             // 4: temporal.server.chasm.lib.stream.proto.v1.FinishWritingInput
-	(*FinishWritingOutput)(nil),            // 5: temporal.server.chasm.lib.stream.proto.v1.FinishWritingOutput
-	(*SubscribeWorkflowInput)(nil),         // 6: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowInput
-	(*SubscribeWorkflowOutput)(nil),        // 7: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowOutput
-	(*PollMessagesInput)(nil),              // 8: temporal.server.chasm.lib.stream.proto.v1.PollMessagesInput
-	(*PollMessagesOutput)(nil),             // 9: temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput
-	(*DescribeStreamInput)(nil),            // 10: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamInput
-	(*PollWorkflowMessagesInput)(nil),      // 11: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesInput
-	(*DescribeWorkflowStreamInput)(nil),    // 12: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamInput
-	(*AddWorkflowMessagesInput)(nil),       // 13: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput
-	(*DescribeStreamOutput)(nil),           // 14: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput
-	(*CloseStreamInput)(nil),               // 15: temporal.server.chasm.lib.stream.proto.v1.CloseStreamInput
-	(*CloseStreamOutput)(nil),              // 16: temporal.server.chasm.lib.stream.proto.v1.CloseStreamOutput
-	(*TruncateStreamInput)(nil),            // 17: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamInput
-	(*TruncateStreamOutput)(nil),           // 18: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamOutput
-	(*DeleteStreamInput)(nil),              // 19: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamInput
-	(*DeleteStreamOutput)(nil),             // 20: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamOutput
-	(*CreateStreamRequest)(nil),            // 21: temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest
-	(*CreateStreamResponse)(nil),           // 22: temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse
-	(*AddMessagesRequest)(nil),             // 23: temporal.server.chasm.lib.stream.proto.v1.AddMessagesRequest
-	(*AddMessagesResponse)(nil),            // 24: temporal.server.chasm.lib.stream.proto.v1.AddMessagesResponse
-	(*FinishWritingRequest)(nil),           // 25: temporal.server.chasm.lib.stream.proto.v1.FinishWritingRequest
-	(*FinishWritingResponse)(nil),          // 26: temporal.server.chasm.lib.stream.proto.v1.FinishWritingResponse
-	(*SubscribeWorkflowRequest)(nil),       // 27: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowRequest
-	(*SubscribeWorkflowResponse)(nil),      // 28: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowResponse
-	(*PollMessagesRequest)(nil),            // 29: temporal.server.chasm.lib.stream.proto.v1.PollMessagesRequest
-	(*PollMessagesResponse)(nil),           // 30: temporal.server.chasm.lib.stream.proto.v1.PollMessagesResponse
-	(*DescribeStreamRequest)(nil),          // 31: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamRequest
-	(*DescribeStreamResponse)(nil),         // 32: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse
-	(*PollWorkflowMessagesRequest)(nil),    // 33: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesRequest
-	(*PollWorkflowMessagesResponse)(nil),   // 34: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesResponse
-	(*DescribeWorkflowStreamRequest)(nil),  // 35: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamRequest
-	(*DescribeWorkflowStreamResponse)(nil), // 36: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamResponse
-	(*RegisterStreamConsumerInput)(nil),    // 37: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerInput
-	(*RegisterStreamConsumerOutput)(nil),   // 38: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerOutput
-	(*AdvanceConsumerHeadInput)(nil),       // 39: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadInput
-	(*AdvanceConsumerHeadOutput)(nil),      // 40: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadOutput
-	(*AddWorkflowMessagesRequest)(nil),     // 41: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesRequest
-	(*AddWorkflowMessagesResponse)(nil),    // 42: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesResponse
-	(*RegisterStreamConsumerRequest)(nil),  // 43: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerRequest
-	(*RegisterStreamConsumerResponse)(nil), // 44: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerResponse
-	(*AdvanceConsumerHeadRequest)(nil),     // 45: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadRequest
-	(*AdvanceConsumerHeadResponse)(nil),    // 46: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadResponse
-	(*CloseStreamRequest)(nil),             // 47: temporal.server.chasm.lib.stream.proto.v1.CloseStreamRequest
-	(*CloseStreamResponse)(nil),            // 48: temporal.server.chasm.lib.stream.proto.v1.CloseStreamResponse
-	(*TruncateStreamRequest)(nil),          // 49: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamRequest
-	(*TruncateStreamResponse)(nil),         // 50: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamResponse
-	(*ListStreamsInput)(nil),               // 51: temporal.server.chasm.lib.stream.proto.v1.ListStreamsInput
-	(*StreamListEntry)(nil),                // 52: temporal.server.chasm.lib.stream.proto.v1.StreamListEntry
-	(*ListStreamsOutput)(nil),              // 53: temporal.server.chasm.lib.stream.proto.v1.ListStreamsOutput
-	(*ListStreamsRequest)(nil),             // 54: temporal.server.chasm.lib.stream.proto.v1.ListStreamsRequest
-	(*ListStreamsResponse)(nil),            // 55: temporal.server.chasm.lib.stream.proto.v1.ListStreamsResponse
-	(*DeleteStreamRequest)(nil),            // 56: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamRequest
-	(*DeleteStreamResponse)(nil),           // 57: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse
-	(*StreamLifecycle)(nil),                // 58: temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
-	(*StreamRecord)(nil),                   // 59: temporal.server.chasm.lib.stream.proto.v1.StreamRecord
-	(*v1.Payload)(nil),                     // 60: temporal.api.common.v1.Payload
-	(*StreamState)(nil),                    // 61: temporal.server.chasm.lib.stream.proto.v1.StreamState
+	(StreamOwnerKind)(0),                   // 0: temporal.server.chasm.lib.stream.proto.v1.StreamOwnerKind
+	(*CreateStreamInput)(nil),              // 1: temporal.server.chasm.lib.stream.proto.v1.CreateStreamInput
+	(*CreateStreamOutput)(nil),             // 2: temporal.server.chasm.lib.stream.proto.v1.CreateStreamOutput
+	(*AddMessagesInput)(nil),               // 3: temporal.server.chasm.lib.stream.proto.v1.AddMessagesInput
+	(*AddMessagesOutput)(nil),              // 4: temporal.server.chasm.lib.stream.proto.v1.AddMessagesOutput
+	(*FinishWritingInput)(nil),             // 5: temporal.server.chasm.lib.stream.proto.v1.FinishWritingInput
+	(*FinishWritingOutput)(nil),            // 6: temporal.server.chasm.lib.stream.proto.v1.FinishWritingOutput
+	(*SubscribeWorkflowInput)(nil),         // 7: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowInput
+	(*SubscribeWorkflowOutput)(nil),        // 8: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowOutput
+	(*PollMessagesInput)(nil),              // 9: temporal.server.chasm.lib.stream.proto.v1.PollMessagesInput
+	(*PollMessagesOutput)(nil),             // 10: temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput
+	(*DescribeStreamInput)(nil),            // 11: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamInput
+	(*StreamOwner)(nil),                    // 12: temporal.server.chasm.lib.stream.proto.v1.StreamOwner
+	(*PollWorkflowMessagesInput)(nil),      // 13: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesInput
+	(*DescribeWorkflowStreamInput)(nil),    // 14: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamInput
+	(*AddWorkflowMessagesInput)(nil),       // 15: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput
+	(*DescribeStreamOutput)(nil),           // 16: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput
+	(*CloseStreamInput)(nil),               // 17: temporal.server.chasm.lib.stream.proto.v1.CloseStreamInput
+	(*CloseStreamOutput)(nil),              // 18: temporal.server.chasm.lib.stream.proto.v1.CloseStreamOutput
+	(*TruncateStreamInput)(nil),            // 19: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamInput
+	(*TruncateStreamOutput)(nil),           // 20: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamOutput
+	(*DeleteStreamInput)(nil),              // 21: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamInput
+	(*DeleteStreamOutput)(nil),             // 22: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamOutput
+	(*CreateStreamRequest)(nil),            // 23: temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest
+	(*CreateStreamResponse)(nil),           // 24: temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse
+	(*AddMessagesRequest)(nil),             // 25: temporal.server.chasm.lib.stream.proto.v1.AddMessagesRequest
+	(*AddMessagesResponse)(nil),            // 26: temporal.server.chasm.lib.stream.proto.v1.AddMessagesResponse
+	(*FinishWritingRequest)(nil),           // 27: temporal.server.chasm.lib.stream.proto.v1.FinishWritingRequest
+	(*FinishWritingResponse)(nil),          // 28: temporal.server.chasm.lib.stream.proto.v1.FinishWritingResponse
+	(*SubscribeWorkflowRequest)(nil),       // 29: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowRequest
+	(*SubscribeWorkflowResponse)(nil),      // 30: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowResponse
+	(*PollMessagesRequest)(nil),            // 31: temporal.server.chasm.lib.stream.proto.v1.PollMessagesRequest
+	(*PollMessagesResponse)(nil),           // 32: temporal.server.chasm.lib.stream.proto.v1.PollMessagesResponse
+	(*DescribeStreamRequest)(nil),          // 33: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamRequest
+	(*DescribeStreamResponse)(nil),         // 34: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse
+	(*PollWorkflowMessagesRequest)(nil),    // 35: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesRequest
+	(*PollWorkflowMessagesResponse)(nil),   // 36: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesResponse
+	(*DescribeWorkflowStreamRequest)(nil),  // 37: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamRequest
+	(*DescribeWorkflowStreamResponse)(nil), // 38: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamResponse
+	(*RegisterStreamConsumerInput)(nil),    // 39: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerInput
+	(*RegisterStreamConsumerOutput)(nil),   // 40: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerOutput
+	(*AdvanceConsumerHeadInput)(nil),       // 41: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadInput
+	(*AdvanceConsumerHeadOutput)(nil),      // 42: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadOutput
+	(*AddWorkflowMessagesRequest)(nil),     // 43: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesRequest
+	(*AddWorkflowMessagesResponse)(nil),    // 44: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesResponse
+	(*RegisterStreamConsumerRequest)(nil),  // 45: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerRequest
+	(*RegisterStreamConsumerResponse)(nil), // 46: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerResponse
+	(*AdvanceConsumerHeadRequest)(nil),     // 47: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadRequest
+	(*AdvanceConsumerHeadResponse)(nil),    // 48: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadResponse
+	(*CloseStreamRequest)(nil),             // 49: temporal.server.chasm.lib.stream.proto.v1.CloseStreamRequest
+	(*CloseStreamResponse)(nil),            // 50: temporal.server.chasm.lib.stream.proto.v1.CloseStreamResponse
+	(*TruncateStreamRequest)(nil),          // 51: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamRequest
+	(*TruncateStreamResponse)(nil),         // 52: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamResponse
+	(*ListStreamsInput)(nil),               // 53: temporal.server.chasm.lib.stream.proto.v1.ListStreamsInput
+	(*StreamListEntry)(nil),                // 54: temporal.server.chasm.lib.stream.proto.v1.StreamListEntry
+	(*ListStreamsOutput)(nil),              // 55: temporal.server.chasm.lib.stream.proto.v1.ListStreamsOutput
+	(*ListStreamsRequest)(nil),             // 56: temporal.server.chasm.lib.stream.proto.v1.ListStreamsRequest
+	(*ListStreamsResponse)(nil),            // 57: temporal.server.chasm.lib.stream.proto.v1.ListStreamsResponse
+	(*DeleteStreamRequest)(nil),            // 58: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamRequest
+	(*DeleteStreamResponse)(nil),           // 59: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse
+	(*StreamLifecycle)(nil),                // 60: temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
+	(*StreamRecord)(nil),                   // 61: temporal.server.chasm.lib.stream.proto.v1.StreamRecord
+	(*v1.Payload)(nil),                     // 62: temporal.api.common.v1.Payload
+	(*StreamState)(nil),                    // 63: temporal.server.chasm.lib.stream.proto.v1.StreamState
 }
 var file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_depIdxs = []int32{
-	58, // 0: temporal.server.chasm.lib.stream.proto.v1.CreateStreamInput.lifecycle:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
-	59, // 1: temporal.server.chasm.lib.stream.proto.v1.AddMessagesInput.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
-	59, // 2: temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
-	60, // 3: temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput.close_reason:type_name -> temporal.api.common.v1.Payload
-	59, // 4: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
-	61, // 5: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput.state:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState
-	60, // 6: temporal.server.chasm.lib.stream.proto.v1.CloseStreamInput.reason:type_name -> temporal.api.common.v1.Payload
-	0,  // 7: temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamInput
-	1,  // 8: temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamOutput
-	2,  // 9: temporal.server.chasm.lib.stream.proto.v1.AddMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesInput
-	3,  // 10: temporal.server.chasm.lib.stream.proto.v1.AddMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesOutput
-	4,  // 11: temporal.server.chasm.lib.stream.proto.v1.FinishWritingRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.FinishWritingInput
-	5,  // 12: temporal.server.chasm.lib.stream.proto.v1.FinishWritingResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.FinishWritingOutput
-	6,  // 13: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowInput
-	7,  // 14: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowOutput
-	8,  // 15: temporal.server.chasm.lib.stream.proto.v1.PollMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesInput
-	9,  // 16: temporal.server.chasm.lib.stream.proto.v1.PollMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput
-	10, // 17: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamInput
-	14, // 18: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput
-	11, // 19: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesInput
-	9,  // 20: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput
-	12, // 21: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamInput
-	14, // 22: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput
-	13, // 23: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput
-	3,  // 24: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesOutput
-	37, // 25: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerInput
-	38, // 26: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerOutput
-	39, // 27: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadInput
-	40, // 28: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadOutput
-	15, // 29: temporal.server.chasm.lib.stream.proto.v1.CloseStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamInput
-	16, // 30: temporal.server.chasm.lib.stream.proto.v1.CloseStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamOutput
-	17, // 31: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamInput
-	18, // 32: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamOutput
-	52, // 33: temporal.server.chasm.lib.stream.proto.v1.ListStreamsOutput.streams:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamListEntry
-	51, // 34: temporal.server.chasm.lib.stream.proto.v1.ListStreamsRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsInput
-	53, // 35: temporal.server.chasm.lib.stream.proto.v1.ListStreamsResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsOutput
-	19, // 36: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamInput
-	20, // 37: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamOutput
-	38, // [38:38] is the sub-list for method output_type
-	38, // [38:38] is the sub-list for method input_type
-	38, // [38:38] is the sub-list for extension type_name
-	38, // [38:38] is the sub-list for extension extendee
-	0,  // [0:38] is the sub-list for field type_name
+	60, // 0: temporal.server.chasm.lib.stream.proto.v1.CreateStreamInput.lifecycle:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
+	61, // 1: temporal.server.chasm.lib.stream.proto.v1.AddMessagesInput.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
+	61, // 2: temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
+	62, // 3: temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput.close_reason:type_name -> temporal.api.common.v1.Payload
+	0,  // 4: temporal.server.chasm.lib.stream.proto.v1.StreamOwner.kind:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwnerKind
+	12, // 5: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesInput.owner:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwner
+	12, // 6: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamInput.owner:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwner
+	12, // 7: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput.owner:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwner
+	61, // 8: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
+	63, // 9: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput.state:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState
+	62, // 10: temporal.server.chasm.lib.stream.proto.v1.CloseStreamInput.reason:type_name -> temporal.api.common.v1.Payload
+	1,  // 11: temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamInput
+	2,  // 12: temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamOutput
+	3,  // 13: temporal.server.chasm.lib.stream.proto.v1.AddMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesInput
+	4,  // 14: temporal.server.chasm.lib.stream.proto.v1.AddMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesOutput
+	5,  // 15: temporal.server.chasm.lib.stream.proto.v1.FinishWritingRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.FinishWritingInput
+	6,  // 16: temporal.server.chasm.lib.stream.proto.v1.FinishWritingResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.FinishWritingOutput
+	7,  // 17: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowInput
+	8,  // 18: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowOutput
+	9,  // 19: temporal.server.chasm.lib.stream.proto.v1.PollMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesInput
+	10, // 20: temporal.server.chasm.lib.stream.proto.v1.PollMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput
+	11, // 21: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamInput
+	16, // 22: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput
+	13, // 23: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesInput
+	10, // 24: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput
+	14, // 25: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamInput
+	16, // 26: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput
+	15, // 27: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput
+	4,  // 28: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesOutput
+	39, // 29: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerInput
+	40, // 30: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerOutput
+	41, // 31: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadInput
+	42, // 32: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadOutput
+	17, // 33: temporal.server.chasm.lib.stream.proto.v1.CloseStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamInput
+	18, // 34: temporal.server.chasm.lib.stream.proto.v1.CloseStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamOutput
+	19, // 35: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamInput
+	20, // 36: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamOutput
+	54, // 37: temporal.server.chasm.lib.stream.proto.v1.ListStreamsOutput.streams:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamListEntry
+	53, // 38: temporal.server.chasm.lib.stream.proto.v1.ListStreamsRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsInput
+	55, // 39: temporal.server.chasm.lib.stream.proto.v1.ListStreamsResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsOutput
+	21, // 40: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamInput
+	22, // 41: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamOutput
+	42, // [42:42] is the sub-list for method output_type
+	42, // [42:42] is the sub-list for method input_type
+	42, // [42:42] is the sub-list for extension type_name
+	42, // [42:42] is the sub-list for extension extendee
+	0,  // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_init() }
@@ -3658,13 +3842,14 @@ func file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_init(
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   58,
+			NumEnums:      1,
+			NumMessages:   59,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_goTypes,
 		DependencyIndexes: file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_depIdxs,
+		EnumInfos:         file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_enumTypes,
 		MessageInfos:      file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_msgTypes,
 	}.Build()
 	File_temporal_server_chasm_lib_stream_proto_v1_request_response_proto = out.File

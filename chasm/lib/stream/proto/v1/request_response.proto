@@ -117,18 +117,43 @@ message DescribeStreamInput {
   string stream_id = 2;
 }
 
-// A stream a workflow owns lives inside that workflow's execution, so it has
-// no standalone id to address it by. It is named by its owner and its name
-// instead, and routed on the owner.
+// The kind of execution an owned stream lives in.
+enum StreamOwnerKind {
+  STREAM_OWNER_KIND_UNSPECIFIED = 0;
+  STREAM_OWNER_KIND_WORKFLOW = 1;
+  // A standalone activity, which is an execution of its own.
+  STREAM_OWNER_KIND_ACTIVITY = 2;
+  // An activity a workflow scheduled. It is not an execution of its own, so
+  // its streams are reached through the workflow and routed on it.
+  STREAM_OWNER_KIND_WORKFLOW_ACTIVITY = 3;
+}
+
+// The execution that owns a stream. An attached stream has no id of its own,
+// so it is named by this and a stream name, and routed on id.
+message StreamOwner {
+  StreamOwnerKind kind = 1;
+  // The workflow id for WORKFLOW and WORKFLOW_ACTIVITY, the activity id for
+  // ACTIVITY.
+  string id = 2;
+  // Optional. Pins to one run of the execution named by id, so a caller is not
+  // silently redirected to a later run's stream, which starts empty and at
+  // offset zero. Empty means whichever run is current.
+  string run_id = 3;
+  // The activity within the workflow, for WORKFLOW_ACTIVITY only.
+  string activity_id = 4;
+}
+
+// A stream an execution owns lives inside it, so it has no standalone id to
+// address it by. It is named by its owner and its name instead, and routed on
+// the owner.
 message PollWorkflowMessagesInput {
   string namespace = 1;
+  StreamOwner owner = 9;
+  // Shorthand for an owner of kind WORKFLOW, and refused alongside owner.
   string workflow_id = 2;
-  // Optional. Pins to one run, so a caller that has continued as new is not
-  // silently redirected to the successor's stream, which starts empty and at
-  // offset zero. Empty means whichever run is current.
   string owner_run_id = 8;
 
-  // Empty means the workflow's default output stream.
+  // Empty means the owner's default output stream.
   string stream_name = 3;
   int64 from_offset = 4;
   int32 max_messages = 5;
@@ -139,26 +164,24 @@ message PollWorkflowMessagesInput {
 
 message DescribeWorkflowStreamInput {
   string namespace = 1;
+  StreamOwner owner = 5;
+  // Shorthand for an owner of kind WORKFLOW, and refused alongside owner.
   string workflow_id = 2;
-  // Optional. Pins to one run, so a caller that has continued as new is not
-  // silently redirected to the successor's stream, which starts empty and at
-  // offset zero. Empty means whichever run is current.
   string owner_run_id = 4;
 
   string stream_name = 3;
 }
 
-// Appending to a stream a workflow owns, from outside that workflow. The
-// workflow's own publishes ride its Workflow Task instead.
+// Appending to an owned stream from outside its owner. A workflow's own
+// publishes ride its Workflow Task instead; an activity has no other path.
 message AddWorkflowMessagesInput {
   string namespace = 1;
+  StreamOwner owner = 8;
+  // Shorthand for an owner of kind WORKFLOW, and refused alongside owner.
   string workflow_id = 2;
-  // Optional. Pins to one run, so a caller that has continued as new is not
-  // silently redirected to the successor's stream, which starts empty and at
-  // offset zero. Empty means whichever run is current.
   string owner_run_id = 7;
 
-  // Empty means the workflow's default output stream.
+  // Empty means the owner's default output stream.
   string stream_name = 3;
   repeated StreamRecord records = 4;
   // Optional idempotency, as on AddMessagesInput.

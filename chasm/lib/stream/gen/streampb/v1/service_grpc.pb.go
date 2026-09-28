@@ -47,7 +47,8 @@ type StreamServiceClient interface {
 	SubscribeWorkflow(ctx context.Context, in *SubscribeWorkflowRequest, opts ...grpc.CallOption) (*SubscribeWorkflowResponse, error)
 	PollMessages(ctx context.Context, in *PollMessagesRequest, opts ...grpc.CallOption) (*PollMessagesResponse, error)
 	DescribeStream(ctx context.Context, in *DescribeStreamRequest, opts ...grpc.CallOption) (*DescribeStreamResponse, error)
-	// Routed on the owner, because the stream it reads has no id of its own.
+	// The owned-stream calls are routed on the owner, because the stream has no
+	// id of its own. A workflow's activity is routed on the workflow.
 	PollWorkflowMessages(ctx context.Context, in *PollWorkflowMessagesRequest, opts ...grpc.CallOption) (*PollWorkflowMessagesResponse, error)
 	DescribeWorkflowStream(ctx context.Context, in *DescribeWorkflowStreamRequest, opts ...grpc.CallOption) (*DescribeWorkflowStreamResponse, error)
 	AddWorkflowMessages(ctx context.Context, in *AddWorkflowMessagesRequest, opts ...grpc.CallOption) (*AddWorkflowMessagesResponse, error)
@@ -217,7 +218,8 @@ type StreamServiceServer interface {
 	SubscribeWorkflow(context.Context, *SubscribeWorkflowRequest) (*SubscribeWorkflowResponse, error)
 	PollMessages(context.Context, *PollMessagesRequest) (*PollMessagesResponse, error)
 	DescribeStream(context.Context, *DescribeStreamRequest) (*DescribeStreamResponse, error)
-	// Routed on the owner, because the stream it reads has no id of its own.
+	// The owned-stream calls are routed on the owner, because the stream has no
+	// id of its own. A workflow's activity is routed on the workflow.
 	PollWorkflowMessages(context.Context, *PollWorkflowMessagesRequest) (*PollWorkflowMessagesResponse, error)
 	DescribeWorkflowStream(context.Context, *DescribeWorkflowStreamRequest) (*DescribeWorkflowStreamResponse, error)
 	AddWorkflowMessages(context.Context, *AddWorkflowMessagesRequest) (*AddWorkflowMessagesResponse, error)
