@@ -77,7 +77,7 @@ message SubscribeWorkflowInput {
   // stream_name is set.
   string stream_id = 5;
   // Where to start, as an absolute offset. Read only when start_position is
-  // unset, and a negative value means the head.
+  // unset. A negative value is refused.
   int64 start_offset = 4;
   // Where to start. Resolved here rather than at delivery, so the first
   // recorded range starts from a fact instead of a reading. Refused alongside a
@@ -308,8 +308,8 @@ message RegisterStreamConsumerInput {
   // inheriting a closed run's floor.
   string consumer_workflow_id = 3;
   string consumer_run_id = 5;
-  // Negative means from wherever the stream is when the pin is taken. Read
-  // only when start_position is unset.
+  // An absolute offset, read only when start_position is unset. A negative
+  // value is refused.
   int64 start_offset = 4;
   // Resolved here, where the frontier is, and returned as start_offset on the
   // output so the cursor records a fact.
