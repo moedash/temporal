@@ -77,7 +77,7 @@ func resolveStagedStreamSubscriptions(
 		// it is in this execution, and its cursor commits with everything else.
 		if _, owned := wf.Streams[pending.StreamID]; owned {
 			startOffset, err := wf.SubscribeToOwnedStream(
-				chasmCtx, pending.StreamID, pending.StartOffset, limits)
+				chasmCtx, pending.StreamID, pending.Start, limits)
 			if err != nil {
 				return chasmworkflow.StreamAdmissionFailure(
 					enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
@@ -104,7 +104,7 @@ func resolveStagedStreamSubscriptions(
 			// the workflow to different, empty data with a History event that
 			// looks exactly like the intended subscription.
 			startOffset, err := wf.SubscribeToOwnedStream(
-				chasmCtx, pending.StreamID, pending.StartOffset, limits)
+				chasmCtx, pending.StreamID, pending.Start, limits)
 			if err != nil {
 				return chasmworkflow.StreamAdmissionFailure(
 					enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, err)
@@ -158,7 +158,7 @@ func registerExternalConsumer(
 			StreamId:           pending.StreamID,
 			ConsumerWorkflowId: key.WorkflowID,
 			ConsumerRunId:      key.RunID,
-			StartOffset:        pending.StartOffset,
+			StartPosition:      pending.Start,
 		},
 	})
 	if err != nil {

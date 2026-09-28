@@ -6,6 +6,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	apistreampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/stream"
@@ -357,6 +358,10 @@ func (h *handler) SubscribeWorkflow(
 	req *streampb.SubscribeWorkflowRequest,
 ) (*streampb.SubscribeWorkflowResponse, error) {
 	in := req.GetFrontendRequest()
+	start, err := stream.RequestedStart(in.GetStartPosition(), "start_offset", in.GetStartOffset())
+	if err != nil {
+		return nil, err
+	}
 
 	if in.GetStreamId() != "" {
 		if in.GetStreamName() != "" {
@@ -364,7 +369,7 @@ func (h *handler) SubscribeWorkflow(
 				"set either stream id, for a standalone stream, or stream name, for one the " +
 					"workflow owns, not both")
 		}
-		return h.subscribeToExternalStream(ctx, req.GetNamespaceId(), in)
+		return h.subscribeToExternalStream(ctx, req.GetNamespaceId(), in, start)
 	}
 
 	limits := h.limitsFor(req.GetNamespaceId())
@@ -374,8 +379,7 @@ func (h *handler) SubscribeWorkflow(
 		func(
 			wf *chasmworkflow.Workflow, mctx chasm.MutableContext, input *streampb.SubscribeWorkflowInput,
 		) (int64, error) {
-			return wf.SubscribeToOwnedStream(
-				mctx, ownedStreamName(input.GetStreamName()), input.GetStartOffset(), limits)
+			return wf.SubscribeToOwnedStream(mctx, ownedStreamName(input.GetStreamName()), start, limits)
 		},
 		in,
 	)
@@ -400,6 +404,7 @@ func (h *handler) subscribeToExternalStream(
 	ctx context.Context,
 	namespaceID string,
 	in *streampb.SubscribeWorkflowInput,
+	start *apistreampb.StreamStartPosition,
 ) (*streampb.SubscribeWorkflowResponse, error) {
 	// The pin is keyed by the consuming run, so the run is resolved first. It
 	// also pins the cursor write below to that run, so a run that ends between
@@ -429,7 +434,7 @@ func (h *handler) subscribeToExternalStream(
 			StreamId:           in.GetStreamId(),
 			ConsumerWorkflowId: in.GetWorkflowId(),
 			ConsumerRunId:      consumerRunID,
-			StartOffset:        in.GetStartOffset(),
+			StartPosition:      start,
 		},
 	})
 	if err != nil {
@@ -477,19 +482,23 @@ func (h *handler) RegisterStreamConsumer(
 ) (*streampb.RegisterStreamConsumerResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
+	start, err := stream.RequestedStart(in.GetStartPosition(), "start_offset", in.GetStartOffset())
+	if err != nil {
+		return nil, err
+	}
 
 	limits := h.limitsFor(req.GetNamespaceId())
 	pin, _, err := chasm.UpdateComponent(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
 		func(
-			s *stream.Stream, mctx chasm.MutableContext, offset int64,
+			s *stream.Stream, mctx chasm.MutableContext, start *apistreampb.StreamStartPosition,
 		) (*streampb.RegisterStreamConsumerOutput, error) {
 			startOffset, err := s.RegisterConsumer(mctx, stream.ConsumerRegistration{
 				ConsumerID:   externalConsumerID(in.GetConsumerWorkflowId(), in.GetConsumerRunId()),
 				WorkflowID:   in.GetConsumerWorkflowId(),
 				RunID:        in.GetConsumerRunId(),
-				Offset:       offset,
+				Start:        start,
 				External:     true,
 				MaxConsumers: limits.MaxConsumersPerStream,
 			})
@@ -501,7 +510,7 @@ func (h *handler) RegisterStreamConsumer(
 				KnownHead:   s.State.GetHeadOffset(),
 			}, nil
 		},
-		in.GetStartOffset(),
+		start,
 	)
 	if err != nil {
 		// Only the absence of the execution itself is turned into an answer.
@@ -650,7 +659,7 @@ func (h *handler) PollMessages(
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
 	ref := refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId())
-	from := in.GetFromOffset()
+	from, start := in.GetFromOffset(), in.GetStartPosition()
 
 	// Only the blocking path needs the frontier before the read. On the
 	// ordinary path the window carries it, and this is the hottest call in the
@@ -661,16 +670,23 @@ func (h *handler) PollMessages(
 		if err != nil {
 			return nil, err
 		}
+		waitFrom, err := waitOffset(from, start, state)
+		if err != nil {
+			return nil, err
+		}
 		// Blocking is only worth it once the reader is genuinely caught up.
-		if from == state.GetHeadOffset() && !state.GetClosed() {
+		if waitFrom == state.GetHeadOffset() && !state.GetClosed() {
 			// The window is re-read below, so only the blocking matters here.
-			if _, err := h.waitForMessages(ctx, ref, from, state); err != nil {
+			if _, err := h.waitForMessages(ctx, ref, waitFrom, state); err != nil {
 				return nil, err
 			}
+			from, start = waitFrom, nil
 		}
 	}
 
-	wreq := stream.WindowRequest{From: from, MaxMessages: in.GetMaxMessages(), Topics: in.GetTopics()}
+	wreq := stream.WindowRequest{
+		From: from, Start: start, MaxMessages: in.GetMaxMessages(), Topics: in.GetTopics(),
+	}
 	w, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).ReadWindow, wreq)
 	if err != nil {
 		return nil, err
@@ -698,20 +714,29 @@ func (h *handler) PollWorkflowMessages(
 	if err != nil {
 		return nil, err
 	}
-	from := in.GetFromOffset()
+	from, start := in.GetFromOffset(), in.GetStartPosition()
 
 	state, err := h.ownedStreamState(ctx, target)
 	if err != nil {
 		return nil, err
 	}
 
-	if in.GetWaitNewMessages() && from == state.GetHeadOffset() && !state.GetClosed() {
-		if _, err := h.waitForOwnedMessages(ctx, target, from, state); err != nil {
+	if in.GetWaitNewMessages() {
+		waitFrom, err := waitOffset(from, start, state)
+		if err != nil {
 			return nil, err
+		}
+		if waitFrom == state.GetHeadOffset() && !state.GetClosed() {
+			if _, err := h.waitForOwnedMessages(ctx, target, waitFrom, state); err != nil {
+				return nil, err
+			}
+			from, start = waitFrom, nil
 		}
 	}
 
-	wreq := stream.WindowRequest{From: from, MaxMessages: in.GetMaxMessages(), Topics: in.GetTopics()}
+	wreq := stream.WindowRequest{
+		From: from, Start: start, MaxMessages: in.GetMaxMessages(), Topics: in.GetTopics(),
+	}
 	w, err := chasm.ReadComponent(ctx, target.ref, readOwnedWindow,
 		ownedWindowRequest{Key: target.key, Window: wreq})
 	if err != nil {
@@ -734,18 +759,18 @@ func (h *handler) PollWorkflowMessages(
 // must not be reported as read to the end.
 func formatWindow(w stream.Window, req stream.WindowRequest) (*streampb.PollMessagesOutput, error) {
 	out := &streampb.PollMessagesOutput{
-		NextOffset:  req.From,
+		NextOffset:  w.From,
 		HeadOffset:  w.State.GetHeadOffset(),
 		Closed:      w.State.GetClosed(),
 		CloseReason: w.State.GetCloseReason(),
 		RunId:       w.RunID,
 	}
-	if req.From == w.State.GetHeadOffset() {
+	if w.From == w.State.GetHeadOffset() {
 		return out, nil
 	}
 
 	records, next, err := stream.CollectRecords(
-		w.Blobs, w.Starts, req.From, w.To, w.Limit, req.Topics)
+		w.Blobs, w.Starts, w.From, w.To, w.Limit, req.Topics)
 	if err != nil {
 		return nil, err
 	}
@@ -775,10 +800,15 @@ func readOwnedWindow(
 	if s == nil {
 		// Nothing published yet, which reads as an empty stream so a reader can
 		// attach before the first append.
-		return stream.Window{
-			State: &streampb.StreamState{Closed: ended},
-			To:    req.Window.From,
-		}, nil
+		state := &streampb.StreamState{Closed: ended}
+		from := req.Window.From
+		if req.Window.Start != nil {
+			var err error
+			if from, err = stream.ResolveStart(req.Window.Start, state); err != nil {
+				return stream.Window{}, err
+			}
+		}
+		return stream.Window{State: state, From: from, To: from}, nil
 	}
 	w, err := s.ReadWindow(cctx, req.Window)
 	if err != nil {
@@ -873,6 +903,19 @@ func (h *handler) waitForOwnedMessages(
 			return owned, true, nil
 		}, from)
 	return pollOutcome(pollCtx, ctx, state, err, current)
+}
+
+// waitOffset is the offset a blocking poll waits past. A first poll that names
+// a start position resolves it against the frontier the wait begins from, and
+// the read after the wait uses that offset: resolving the position again would
+// put a tail at the new head and read nothing.
+func waitOffset(
+	from int64, start *apistreampb.StreamStartPosition, state *streampb.StreamState,
+) (int64, error) {
+	if start == nil {
+		return from, nil
+	}
+	return stream.ResolveStart(start, state)
 }
 
 // pollSatisfied is the monotonic condition PollComponent requires: the head

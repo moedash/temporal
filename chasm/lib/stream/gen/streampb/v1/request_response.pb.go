@@ -12,7 +12,8 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
-	v1 "go.temporal.io/api/common/v1"
+	v11 "go.temporal.io/api/common/v1"
+	v1 "go.temporal.io/api/stream/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -483,9 +484,13 @@ type SubscribeWorkflowInput struct {
 	// Id of a standalone stream in another execution. Exactly one of this and
 	// stream_name is set.
 	StreamId string `protobuf:"bytes,5,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	// Where to start, as an absolute offset. Read only when start_position is
+	// unset, and a negative value means the head.
+	StartOffset int64 `protobuf:"varint,4,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
 	// Where to start. Resolved here rather than at delivery, so the first
-	// recorded range starts from a fact instead of a reading.
-	StartOffset   int64 `protobuf:"varint,4,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
+	// recorded range starts from a fact instead of a reading. Refused alongside a
+	// non-zero start_offset.
+	StartPosition *v1.StreamStartPosition `protobuf:"bytes,7,opt,name=start_position,json=startPosition,proto3" json:"start_position,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -562,6 +567,13 @@ func (x *SubscribeWorkflowInput) GetStartOffset() int64 {
 	return 0
 }
 
+func (x *SubscribeWorkflowInput) GetStartPosition() *v1.StreamStartPosition {
+	if x != nil {
+		return x.StartPosition
+	}
+	return nil
+}
+
 type SubscribeWorkflowOutput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	StartOffset   int64                  `protobuf:"varint,1,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
@@ -611,9 +623,14 @@ type PollMessagesInput struct {
 	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	StreamId  string                 `protobuf:"bytes,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
 	// Optional, as on AddMessagesInput.
-	RunId       string `protobuf:"bytes,7,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	FromOffset  int64  `protobuf:"varint,3,opt,name=from_offset,json=fromOffset,proto3" json:"from_offset,omitempty"`
-	MaxMessages int32  `protobuf:"varint,4,opt,name=max_messages,json=maxMessages,proto3" json:"max_messages,omitempty"`
+	RunId      string `protobuf:"bytes,7,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	FromOffset int64  `protobuf:"varint,3,opt,name=from_offset,json=fromOffset,proto3" json:"from_offset,omitempty"`
+	// Where a first poll starts, when the reader has no offset yet. Resolved in
+	// the same read that serves the records, so it cannot race with truncation,
+	// and next_offset carries the result for the polls after it. Refused
+	// alongside a non-zero from_offset.
+	StartPosition *v1.StreamStartPosition `protobuf:"bytes,8,opt,name=start_position,json=startPosition,proto3" json:"start_position,omitempty"`
+	MaxMessages   int32                   `protobuf:"varint,4,opt,name=max_messages,json=maxMessages,proto3" json:"max_messages,omitempty"`
 	// Filters by exact topic. Offsets are assigned over the unfiltered stream, so
 	// next_offset advances past filtered-out records too.
 	Topics []string `protobuf:"bytes,5,rep,name=topics,proto3" json:"topics,omitempty"`
@@ -683,6 +700,13 @@ func (x *PollMessagesInput) GetFromOffset() int64 {
 	return 0
 }
 
+func (x *PollMessagesInput) GetStartPosition() *v1.StreamStartPosition {
+	if x != nil {
+		return x.StartPosition
+	}
+	return nil
+}
+
 func (x *PollMessagesInput) GetMaxMessages() int32 {
 	if x != nil {
 		return x.MaxMessages
@@ -710,7 +734,7 @@ type PollMessagesOutput struct {
 	NextOffset  int64                  `protobuf:"varint,2,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
 	HeadOffset  int64                  `protobuf:"varint,3,opt,name=head_offset,json=headOffset,proto3" json:"head_offset,omitempty"`
 	Closed      bool                   `protobuf:"varint,4,opt,name=closed,proto3" json:"closed,omitempty"`
-	CloseReason *v1.Payload            `protobuf:"bytes,5,opt,name=close_reason,json=closeReason,proto3" json:"close_reason,omitempty"`
+	CloseReason *v11.Payload           `protobuf:"bytes,5,opt,name=close_reason,json=closeReason,proto3" json:"close_reason,omitempty"`
 	// The execution holding the stream. A workflow task slice built from this
 	// read names the run it came from.
 	RunId         string `protobuf:"bytes,6,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
@@ -776,7 +800,7 @@ func (x *PollMessagesOutput) GetClosed() bool {
 	return false
 }
 
-func (x *PollMessagesOutput) GetCloseReason() *v1.Payload {
+func (x *PollMessagesOutput) GetCloseReason() *v11.Payload {
 	if x != nil {
 		return x.CloseReason
 	}
@@ -929,9 +953,11 @@ type PollWorkflowMessagesInput struct {
 	WorkflowId string `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	OwnerRunId string `protobuf:"bytes,8,opt,name=owner_run_id,json=ownerRunId,proto3" json:"owner_run_id,omitempty"`
 	// Empty means the owner's default output stream.
-	StreamName  string `protobuf:"bytes,3,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
-	FromOffset  int64  `protobuf:"varint,4,opt,name=from_offset,json=fromOffset,proto3" json:"from_offset,omitempty"`
-	MaxMessages int32  `protobuf:"varint,5,opt,name=max_messages,json=maxMessages,proto3" json:"max_messages,omitempty"`
+	StreamName string `protobuf:"bytes,3,opt,name=stream_name,json=streamName,proto3" json:"stream_name,omitempty"`
+	FromOffset int64  `protobuf:"varint,4,opt,name=from_offset,json=fromOffset,proto3" json:"from_offset,omitempty"`
+	// As on PollMessagesInput.
+	StartPosition *v1.StreamStartPosition `protobuf:"bytes,10,opt,name=start_position,json=startPosition,proto3" json:"start_position,omitempty"`
+	MaxMessages   int32                   `protobuf:"varint,5,opt,name=max_messages,json=maxMessages,proto3" json:"max_messages,omitempty"`
 	// Filters as on PollMessagesInput.
 	Topics          []string `protobuf:"bytes,6,rep,name=topics,proto3" json:"topics,omitempty"`
 	WaitNewMessages bool     `protobuf:"varint,7,opt,name=wait_new_messages,json=waitNewMessages,proto3" json:"wait_new_messages,omitempty"`
@@ -1009,6 +1035,13 @@ func (x *PollWorkflowMessagesInput) GetFromOffset() int64 {
 		return x.FromOffset
 	}
 	return 0
+}
+
+func (x *PollWorkflowMessagesInput) GetStartPosition() *v1.StreamStartPosition {
+	if x != nil {
+		return x.StartPosition
+	}
+	return nil
 }
 
 func (x *PollWorkflowMessagesInput) GetMaxMessages() int32 {
@@ -1262,7 +1295,7 @@ type CloseStreamInput struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	StreamId      string                 `protobuf:"bytes,2,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
-	Reason        *v1.Payload            `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	Reason        *v11.Payload           `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1311,7 +1344,7 @@ func (x *CloseStreamInput) GetStreamId() string {
 	return ""
 }
 
-func (x *CloseStreamInput) GetReason() *v1.Payload {
+func (x *CloseStreamInput) GetReason() *v11.Payload {
 	if x != nil {
 		return x.Reason
 	}
@@ -2330,9 +2363,12 @@ type RegisterStreamConsumerInput struct {
 	// inheriting a closed run's floor.
 	ConsumerWorkflowId string `protobuf:"bytes,3,opt,name=consumer_workflow_id,json=consumerWorkflowId,proto3" json:"consumer_workflow_id,omitempty"`
 	ConsumerRunId      string `protobuf:"bytes,5,opt,name=consumer_run_id,json=consumerRunId,proto3" json:"consumer_run_id,omitempty"`
-	// Negative means from wherever the stream is when the pin is taken. Resolved
-	// here, where the frontier is, and returned so the cursor records a fact.
-	StartOffset   int64 `protobuf:"varint,4,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
+	// Negative means from wherever the stream is when the pin is taken. Read
+	// only when start_position is unset.
+	StartOffset int64 `protobuf:"varint,4,opt,name=start_offset,json=startOffset,proto3" json:"start_offset,omitempty"`
+	// Resolved here, where the frontier is, and returned as start_offset on the
+	// output so the cursor records a fact.
+	StartPosition *v1.StreamStartPosition `protobuf:"bytes,6,opt,name=start_position,json=startPosition,proto3" json:"start_position,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2400,6 +2436,13 @@ func (x *RegisterStreamConsumerInput) GetStartOffset() int64 {
 		return x.StartOffset
 	}
 	return 0
+}
+
+func (x *RegisterStreamConsumerInput) GetStartPosition() *v1.StreamStartPosition {
+	if x != nil {
+		return x.StartPosition
+	}
+	return nil
 }
 
 type RegisterStreamConsumerOutput struct {
@@ -3463,7 +3506,7 @@ var File_temporal_server_chasm_lib_stream_proto_v1_request_response_proto protor
 
 const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"@temporal/server/chasm/lib/stream/proto/v1/request_response.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a7temporal/server/chasm/lib/stream/proto/v1/message.proto\x1a<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x1a$temporal/api/common/v1/message.proto\"\xa8\x01\n" +
+	"@temporal/server/chasm/lib/stream/proto/v1/request_response.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a7temporal/server/chasm/lib/stream/proto/v1/message.proto\x1a<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/stream/v1/message.proto\"\xa8\x01\n" +
 	"\x11CreateStreamInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12X\n" +
@@ -3491,7 +3534,7 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x1f\n" +
 	"\vproducer_id\x18\x03 \x01(\tR\n" +
 	"producerId\"\x15\n" +
-	"\x13FinishWritingOutput\"\xda\x01\n" +
+	"\x13FinishWritingOutput\"\xae\x02\n" +
 	"\x16SubscribeWorkflowInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -3501,15 +3544,17 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\vstream_name\x18\x03 \x01(\tR\n" +
 	"streamName\x12\x1b\n" +
 	"\tstream_id\x18\x05 \x01(\tR\bstreamId\x12!\n" +
-	"\fstart_offset\x18\x04 \x01(\x03R\vstartOffset\"<\n" +
+	"\fstart_offset\x18\x04 \x01(\x03R\vstartOffset\x12R\n" +
+	"\x0estart_position\x18\a \x01(\v2+.temporal.api.stream.v1.StreamStartPositionR\rstartPosition\"<\n" +
 	"\x17SubscribeWorkflowOutput\x12!\n" +
-	"\fstart_offset\x18\x01 \x01(\x03R\vstartOffset\"\xed\x01\n" +
+	"\fstart_offset\x18\x01 \x01(\x03R\vstartOffset\"\xc1\x02\n" +
 	"\x11PollMessagesInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x12\x15\n" +
 	"\x06run_id\x18\a \x01(\tR\x05runId\x12\x1f\n" +
 	"\vfrom_offset\x18\x03 \x01(\x03R\n" +
-	"fromOffset\x12!\n" +
+	"fromOffset\x12R\n" +
+	"\x0estart_position\x18\b \x01(\v2+.temporal.api.stream.v1.StreamStartPositionR\rstartPosition\x12!\n" +
 	"\fmax_messages\x18\x04 \x01(\x05R\vmaxMessages\x12\x16\n" +
 	"\x06topics\x18\x05 \x03(\tR\x06topics\x12*\n" +
 	"\x11wait_new_messages\x18\x06 \x01(\bR\x0fwaitNewMessages\"\x9c\x02\n" +
@@ -3530,7 +3575,7 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x15\n" +
 	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12\x1f\n" +
 	"\vactivity_id\x18\x04 \x01(\tR\n" +
-	"activityId\"\xf3\x02\n" +
+	"activityId\"\xc7\x03\n" +
 	"\x19PollWorkflowMessagesInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12L\n" +
 	"\x05owner\x18\t \x01(\v26.temporal.server.chasm.lib.stream.proto.v1.StreamOwnerR\x05owner\x12\x1f\n" +
@@ -3541,7 +3586,9 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\vstream_name\x18\x03 \x01(\tR\n" +
 	"streamName\x12\x1f\n" +
 	"\vfrom_offset\x18\x04 \x01(\x03R\n" +
-	"fromOffset\x12!\n" +
+	"fromOffset\x12R\n" +
+	"\x0estart_position\x18\n" +
+	" \x01(\v2+.temporal.api.stream.v1.StreamStartPositionR\rstartPosition\x12!\n" +
 	"\fmax_messages\x18\x05 \x01(\x05R\vmaxMessages\x12\x16\n" +
 	"\x06topics\x18\x06 \x03(\tR\x06topics\x12*\n" +
 	"\x11wait_new_messages\x18\a \x01(\bR\x0fwaitNewMessages\"\xed\x01\n" +
@@ -3623,13 +3670,14 @@ const file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_rawD
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12q\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2F.temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamInputR\x0ffrontendRequest\"\x8e\x01\n" +
 	"\x1eDescribeWorkflowStreamResponse\x12l\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2?.temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutputR\x10frontendResponse\"\xd5\x01\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2?.temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutputR\x10frontendResponse\"\xa9\x02\n" +
 	"\x1bRegisterStreamConsumerInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1b\n" +
 	"\tstream_id\x18\x02 \x01(\tR\bstreamId\x120\n" +
 	"\x14consumer_workflow_id\x18\x03 \x01(\tR\x12consumerWorkflowId\x12&\n" +
 	"\x0fconsumer_run_id\x18\x05 \x01(\tR\rconsumerRunId\x12!\n" +
-	"\fstart_offset\x18\x04 \x01(\x03R\vstartOffset\"\x91\x01\n" +
+	"\fstart_offset\x18\x04 \x01(\x03R\vstartOffset\x12R\n" +
+	"\x0estart_position\x18\x06 \x01(\v2+.temporal.api.stream.v1.StreamStartPositionR\rstartPosition\"\x91\x01\n" +
 	"\x1cRegisterStreamConsumerOutput\x12!\n" +
 	"\fstart_offset\x18\x01 \x01(\x03R\vstartOffset\x12\x1d\n" +
 	"\n" +
@@ -3777,57 +3825,62 @@ var file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_goType
 	(*DeleteStreamResponse)(nil),           // 59: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse
 	(*StreamLifecycle)(nil),                // 60: temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
 	(*StreamRecord)(nil),                   // 61: temporal.server.chasm.lib.stream.proto.v1.StreamRecord
-	(*v1.Payload)(nil),                     // 62: temporal.api.common.v1.Payload
-	(*StreamState)(nil),                    // 63: temporal.server.chasm.lib.stream.proto.v1.StreamState
+	(*v1.StreamStartPosition)(nil),         // 62: temporal.api.stream.v1.StreamStartPosition
+	(*v11.Payload)(nil),                    // 63: temporal.api.common.v1.Payload
+	(*StreamState)(nil),                    // 64: temporal.server.chasm.lib.stream.proto.v1.StreamState
 }
 var file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_depIdxs = []int32{
 	60, // 0: temporal.server.chasm.lib.stream.proto.v1.CreateStreamInput.lifecycle:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamLifecycle
 	61, // 1: temporal.server.chasm.lib.stream.proto.v1.AddMessagesInput.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
-	61, // 2: temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
-	62, // 3: temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput.close_reason:type_name -> temporal.api.common.v1.Payload
-	0,  // 4: temporal.server.chasm.lib.stream.proto.v1.StreamOwner.kind:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwnerKind
-	12, // 5: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesInput.owner:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwner
-	12, // 6: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamInput.owner:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwner
-	12, // 7: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput.owner:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwner
-	61, // 8: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
-	63, // 9: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput.state:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState
-	62, // 10: temporal.server.chasm.lib.stream.proto.v1.CloseStreamInput.reason:type_name -> temporal.api.common.v1.Payload
-	1,  // 11: temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamInput
-	2,  // 12: temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamOutput
-	3,  // 13: temporal.server.chasm.lib.stream.proto.v1.AddMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesInput
-	4,  // 14: temporal.server.chasm.lib.stream.proto.v1.AddMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesOutput
-	5,  // 15: temporal.server.chasm.lib.stream.proto.v1.FinishWritingRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.FinishWritingInput
-	6,  // 16: temporal.server.chasm.lib.stream.proto.v1.FinishWritingResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.FinishWritingOutput
-	7,  // 17: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowInput
-	8,  // 18: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowOutput
-	9,  // 19: temporal.server.chasm.lib.stream.proto.v1.PollMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesInput
-	10, // 20: temporal.server.chasm.lib.stream.proto.v1.PollMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput
-	11, // 21: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamInput
-	16, // 22: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput
-	13, // 23: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesInput
-	10, // 24: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput
-	14, // 25: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamInput
-	16, // 26: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput
-	15, // 27: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput
-	4,  // 28: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesOutput
-	39, // 29: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerInput
-	40, // 30: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerOutput
-	41, // 31: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadInput
-	42, // 32: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadOutput
-	17, // 33: temporal.server.chasm.lib.stream.proto.v1.CloseStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamInput
-	18, // 34: temporal.server.chasm.lib.stream.proto.v1.CloseStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamOutput
-	19, // 35: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamInput
-	20, // 36: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamOutput
-	54, // 37: temporal.server.chasm.lib.stream.proto.v1.ListStreamsOutput.streams:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamListEntry
-	53, // 38: temporal.server.chasm.lib.stream.proto.v1.ListStreamsRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsInput
-	55, // 39: temporal.server.chasm.lib.stream.proto.v1.ListStreamsResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsOutput
-	21, // 40: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamInput
-	22, // 41: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamOutput
-	42, // [42:42] is the sub-list for method output_type
-	42, // [42:42] is the sub-list for method input_type
-	42, // [42:42] is the sub-list for extension type_name
-	42, // [42:42] is the sub-list for extension extendee
-	0,  // [0:42] is the sub-list for field type_name
+	62, // 2: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowInput.start_position:type_name -> temporal.api.stream.v1.StreamStartPosition
+	62, // 3: temporal.server.chasm.lib.stream.proto.v1.PollMessagesInput.start_position:type_name -> temporal.api.stream.v1.StreamStartPosition
+	61, // 4: temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
+	63, // 5: temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput.close_reason:type_name -> temporal.api.common.v1.Payload
+	0,  // 6: temporal.server.chasm.lib.stream.proto.v1.StreamOwner.kind:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwnerKind
+	12, // 7: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesInput.owner:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwner
+	62, // 8: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesInput.start_position:type_name -> temporal.api.stream.v1.StreamStartPosition
+	12, // 9: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamInput.owner:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwner
+	12, // 10: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput.owner:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamOwner
+	61, // 11: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
+	64, // 12: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput.state:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamState
+	63, // 13: temporal.server.chasm.lib.stream.proto.v1.CloseStreamInput.reason:type_name -> temporal.api.common.v1.Payload
+	1,  // 14: temporal.server.chasm.lib.stream.proto.v1.CreateStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamInput
+	2,  // 15: temporal.server.chasm.lib.stream.proto.v1.CreateStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.CreateStreamOutput
+	3,  // 16: temporal.server.chasm.lib.stream.proto.v1.AddMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesInput
+	4,  // 17: temporal.server.chasm.lib.stream.proto.v1.AddMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesOutput
+	5,  // 18: temporal.server.chasm.lib.stream.proto.v1.FinishWritingRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.FinishWritingInput
+	6,  // 19: temporal.server.chasm.lib.stream.proto.v1.FinishWritingResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.FinishWritingOutput
+	7,  // 20: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowInput
+	8,  // 21: temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.SubscribeWorkflowOutput
+	9,  // 22: temporal.server.chasm.lib.stream.proto.v1.PollMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesInput
+	10, // 23: temporal.server.chasm.lib.stream.proto.v1.PollMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput
+	11, // 24: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamInput
+	16, // 25: temporal.server.chasm.lib.stream.proto.v1.DescribeStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput
+	13, // 26: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesInput
+	10, // 27: temporal.server.chasm.lib.stream.proto.v1.PollWorkflowMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.PollMessagesOutput
+	14, // 28: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamInput
+	16, // 29: temporal.server.chasm.lib.stream.proto.v1.DescribeWorkflowStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DescribeStreamOutput
+	62, // 30: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerInput.start_position:type_name -> temporal.api.stream.v1.StreamStartPosition
+	15, // 31: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesInput
+	4,  // 32: temporal.server.chasm.lib.stream.proto.v1.AddWorkflowMessagesResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AddMessagesOutput
+	39, // 33: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerInput
+	40, // 34: temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.RegisterStreamConsumerOutput
+	41, // 35: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadInput
+	42, // 36: temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.AdvanceConsumerHeadOutput
+	17, // 37: temporal.server.chasm.lib.stream.proto.v1.CloseStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamInput
+	18, // 38: temporal.server.chasm.lib.stream.proto.v1.CloseStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.CloseStreamOutput
+	19, // 39: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamInput
+	20, // 40: temporal.server.chasm.lib.stream.proto.v1.TruncateStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.TruncateStreamOutput
+	54, // 41: temporal.server.chasm.lib.stream.proto.v1.ListStreamsOutput.streams:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamListEntry
+	53, // 42: temporal.server.chasm.lib.stream.proto.v1.ListStreamsRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsInput
+	55, // 43: temporal.server.chasm.lib.stream.proto.v1.ListStreamsResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.ListStreamsOutput
+	21, // 44: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamRequest.frontend_request:type_name -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamInput
+	22, // 45: temporal.server.chasm.lib.stream.proto.v1.DeleteStreamResponse.frontend_response:type_name -> temporal.server.chasm.lib.stream.proto.v1.DeleteStreamOutput
+	46, // [46:46] is the sub-list for method output_type
+	46, // [46:46] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_stream_proto_v1_request_response_proto_init() }

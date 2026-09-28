@@ -63,7 +63,8 @@ func TestSubscribeRegistersTheConsumer(t *testing.T) {
 		DefaultStreamName: chasm.NewComponentField(ctx, owned),
 	}
 
-	start, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0, stream.DefaultLimits())
+	start, err := w.SubscribeToOwnedStream(
+		ctx, DefaultStreamName, stream.AtOffset(0), stream.DefaultLimits())
 	require.NoError(t, err)
 	require.Equal(t, int64(0), start)
 
@@ -86,9 +87,10 @@ func TestSubscribeFromTheTailResolvesToHead(t *testing.T) {
 		DefaultStreamName: chasm.NewComponentField(ctx, owned),
 	}
 
-	start, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, -1, stream.DefaultLimits())
+	start, err := w.SubscribeToOwnedStream(
+		ctx, DefaultStreamName, stream.Tail(), stream.DefaultLimits())
 	require.NoError(t, err)
-	require.Equal(t, int64(4), start, "a negative offset means from wherever the stream is now")
+	require.Equal(t, int64(4), start, "tail means from wherever the stream is now")
 }
 
 // A workflow reads a topic by name before anything has been written to it, so
@@ -97,7 +99,7 @@ func TestSubscribeCreatesTheStreamItNames(t *testing.T) {
 	ctx := newStreamCursorTestContext()
 	w := &Workflow{}
 
-	start, err := w.SubscribeToOwnedStream(ctx, "inputs", 0, stream.DefaultLimits())
+	start, err := w.SubscribeToOwnedStream(ctx, "inputs", stream.AtOffset(0), stream.DefaultLimits())
 	require.NoError(t, err)
 	require.Equal(t, int64(0), start)
 
@@ -119,7 +121,8 @@ func TestCommitStreamCursorsAdvancesTheConsumer(t *testing.T) {
 		DefaultStreamName: chasm.NewComponentField(ctx, owned),
 	}
 
-	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0, stream.DefaultLimits())
+	_, err := w.SubscribeToOwnedStream(
+		ctx, DefaultStreamName, stream.AtOffset(0), stream.DefaultLimits())
 	require.NoError(t, err)
 
 	cursor := w.StreamCursors[DefaultStreamName].Get(ctx)
@@ -144,7 +147,8 @@ func TestCommitStreamCursorsWithAnEmptyRangeHoldsTheConsumer(t *testing.T) {
 		DefaultStreamName: chasm.NewComponentField(ctx, owned),
 	}
 
-	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0, stream.DefaultLimits())
+	_, err := w.SubscribeToOwnedStream(
+		ctx, DefaultStreamName, stream.AtOffset(0), stream.DefaultLimits())
 	require.NoError(t, err)
 
 	cursor := w.StreamCursors[DefaultStreamName].Get(ctx)
@@ -225,7 +229,8 @@ func TestConsumerOutrunByTruncationIsToldSo(t *testing.T) {
 		DefaultStreamName: chasm.NewComponentField(ctx, owned),
 	}
 
-	_, err := w.SubscribeToOwnedStream(ctx, DefaultStreamName, 0, stream.DefaultLimits())
+	_, err := w.SubscribeToOwnedStream(
+		ctx, DefaultStreamName, stream.AtOffset(0), stream.DefaultLimits())
 	require.NoError(t, err)
 
 	// Someone decides these messages are no longer needed, and only then can
@@ -304,7 +309,8 @@ func TestResetRunInheritsAnOwnedStreamAtItsCursor(t *testing.T) {
 	base.Streams = chasm.Map[string, *stream.Stream]{
 		DefaultStreamName: chasm.NewComponentField(baseCtx, newAttachedStream(t, baseCtx, 4)),
 	}
-	_, err := base.SubscribeToOwnedStream(baseCtx, DefaultStreamName, 0, stream.DefaultLimits())
+	_, err := base.SubscribeToOwnedStream(
+		baseCtx, DefaultStreamName, stream.AtOffset(0), stream.DefaultLimits())
 	require.NoError(t, err)
 
 	resetCtx := newStreamCursorTestContextForRun("reset-run")
@@ -384,7 +390,8 @@ func TestResetRunCarriesASubscriptionTheEventsNeverMentioned(t *testing.T) {
 	base.Streams = chasm.Map[string, *stream.Stream]{
 		"inputs": chasm.NewComponentField(baseCtx, newAttachedStream(t, baseCtx, 4)),
 	}
-	_, err := base.SubscribeToOwnedStream(baseCtx, "inputs", 1, stream.DefaultLimits())
+	_, err := base.SubscribeToOwnedStream(
+		baseCtx, "inputs", stream.AtOffset(1), stream.DefaultLimits())
 	require.NoError(t, err)
 
 	resetCtx := newStreamCursorTestContextForRun("reset-run")

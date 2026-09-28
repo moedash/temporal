@@ -218,7 +218,7 @@ func TestTruncateStopsAtAnActiveConsumersReplayFloor(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "wf-1", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+		ConsumerID: "wf-1", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(0),
 	})
 	require.NoError(t, err)
 	s.AdvanceConsumer(nil, "wf-1", 2)
@@ -265,7 +265,7 @@ func TestCapRefusesAnAppendItCouldOnlyAbsorbByDroppingReadRecords(t *testing.T) 
 	s := newTestStream(t)
 	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxItems: 2}
 	_, err := s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "wf-1", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+		ConsumerID: "wf-1", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(0),
 	})
 	require.NoError(t, err)
 
@@ -307,7 +307,7 @@ func TestRegisterConsumerPinsFromWhereItSubscribed(t *testing.T) {
 	// Subscribing at 2 says nothing about offsets 0 and 1, so those stay
 	// droppable and everything from 2 up does not.
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 2,
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(2),
 	})
 	require.NoError(t, err)
 
@@ -321,7 +321,7 @@ func TestAdvanceConsumerTracksWhereAConsumerHasReached(t *testing.T) {
 	_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(0),
 	})
 	require.NoError(t, err)
 
@@ -338,7 +338,7 @@ func TestAdvanceConsumerNeverRewinds(t *testing.T) {
 	_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(0),
 	})
 	require.NoError(t, err)
 
@@ -356,7 +356,7 @@ func TestRegisterConsumerRejectsAnOffsetBelowTheFloor(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 1,
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(1),
 	})
 	require.ErrorContains(t, err, "below the stream's floor")
 }
@@ -368,13 +368,13 @@ func TestRegisterConsumerTwiceKeepsThePin(t *testing.T) {
 	_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(0),
 	})
 	require.NoError(t, err)
 	s.AdvanceConsumer(nil, "workflow:output", 3)
 
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(0),
 	})
 	require.NoError(t, err)
 
@@ -386,7 +386,7 @@ func TestDeregisterConsumerReleasesThePin(t *testing.T) {
 	_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 1,
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(1),
 	})
 	require.NoError(t, err)
 
@@ -421,7 +421,7 @@ func TestCapClampsToAConsumerThatRegisteredLate(t *testing.T) {
 	_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b")})
 	require.NoError(t, err)
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(0),
 	})
 	require.NoError(t, err)
 	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxItems: 1}
@@ -436,7 +436,7 @@ func TestAConsumerThatDeregisteredHoldsNothing(t *testing.T) {
 	s := newTestStream(t)
 	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxItems: 2}
 	_, err := s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(0),
 	})
 	require.NoError(t, err)
 	s.DeregisterConsumer(nil, "workflow:output")
@@ -456,7 +456,7 @@ func TestReregisteringBelowTheFloorIsRefused(t *testing.T) {
 	_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 0,
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(0),
 	})
 	require.NoError(t, err)
 	s.DeregisterConsumer(nil, "workflow:output")
@@ -465,7 +465,7 @@ func TestReregisteringBelowTheFloorIsRefused(t *testing.T) {
 	// Resubscribing further along does not repair the gap. What this consumer
 	// already recorded starts at 0, and offsets 0 and 1 are gone.
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 3,
+		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Start: AtOffset(3),
 	})
 	require.ErrorContains(t, err, "the stream now starts at 2")
 }
@@ -516,20 +516,21 @@ func TestStreamConsumerTableIsBounded(t *testing.T) {
 
 	for i := range MaxConsumersPerStream {
 		_, err := s.RegisterConsumer(nil, ConsumerRegistration{
-			ConsumerID: fmt.Sprintf("c%d", i), WorkflowID: "wf", RunID: "run", External: true,
+			ConsumerID: fmt.Sprintf("c%d", i), WorkflowID: "wf", RunID: "run", Start: AtOffset(0),
+			External: true,
 		})
 		require.NoError(t, err)
 	}
 
 	_, err := s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "c-over", WorkflowID: "wf", RunID: "run", Offset: 0, External: true,
+		ConsumerID: "c-over", WorkflowID: "wf", RunID: "run", Start: AtOffset(0), External: true,
 	})
 	var invalid *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalid)
 
 	// Re-registering an existing consumer is an update, not a new entry.
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "c0", WorkflowID: "wf", RunID: "run", Offset: 0, External: true,
+		ConsumerID: "c0", WorkflowID: "wf", RunID: "run", Start: AtOffset(0), External: true,
 	})
 	require.NoError(t, err)
 }
@@ -603,12 +604,14 @@ func TestRegisterConsumerReplacesAnEntryFromAnotherRun(t *testing.T) {
 	_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b", "c", "d")})
 	require.NoError(t, err)
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:wf/run-1", WorkflowID: "wf", RunID: "run-1", Offset: 0, External: true,
+		ConsumerID: "workflow:wf/run-1", WorkflowID: "wf", RunID: "run-1", Start: AtOffset(0),
+		External: true,
 	})
 	require.NoError(t, err)
 
 	start, err := s.RegisterConsumer(nil, ConsumerRegistration{
-		ConsumerID: "workflow:wf/run-2", WorkflowID: "wf", RunID: "run-2", Offset: 3, External: true,
+		ConsumerID: "workflow:wf/run-2", WorkflowID: "wf", RunID: "run-2", Start: AtOffset(3),
+		External: true,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), start)
@@ -619,7 +622,7 @@ func TestRegisterConsumerReplacesAnEntryFromAnotherRun(t *testing.T) {
 	// A different workflow id is not the same consumer and keeps its pin.
 	_, err = s.RegisterConsumer(nil, ConsumerRegistration{
 		ConsumerID: "workflow:other/run-9", WorkflowID: "other", RunID: "run-9",
-		Offset: 3, External: true,
+		Start: AtOffset(3), External: true,
 	})
 	require.NoError(t, err)
 	require.Len(t, s.State.Consumers, 2)
@@ -635,7 +638,8 @@ func TestNotifyCoalescesIntoOneOutstandingTask(t *testing.T) {
 	s := newTestStream(t)
 	s.Batches = make(chasm.Map[int64, *commonpb.DataBlob])
 	_, err := s.RegisterConsumer(mctx, ConsumerRegistration{
-		ConsumerID: "workflow:wf/run-1", WorkflowID: "wf", RunID: "run-1", Offset: 0, External: true,
+		ConsumerID: "workflow:wf/run-1", WorkflowID: "wf", RunID: "run-1", Start: AtOffset(0),
+		External: true,
 	})
 	require.NoError(t, err)
 

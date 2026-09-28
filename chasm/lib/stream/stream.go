@@ -522,7 +522,10 @@ func (s *Stream) batchStarts() []int64 {
 
 // WindowRequest asks for whatever a reader can be given from an offset.
 type WindowRequest struct {
-	From        int64
+	From int64
+	// When set, where the read begins instead of From, resolved against the
+	// same view the read is served from so it cannot race with truncation.
+	Start       *streampb.StreamStartPosition
 	MaxMessages int32
 	Topics      []string
 }
@@ -533,8 +536,11 @@ type Window struct {
 	State  *streamlib.StreamState
 	Blobs  []*commonpb.DataBlob
 	Starts []int64
-	To     int64
-	Limit  int
+	// Where the read began, which is the request's From unless it named a
+	// start position.
+	From  int64
+	To    int64
+	Limit int
 	// The execution holding the stream, so a slice built from this window can
 	// say which run it came from.
 	RunID string
@@ -544,6 +550,13 @@ type Window struct {
 // come from one view. Read separately they can disagree, because the frontier
 // moves while the bytes are being fetched.
 func (s *Stream) ReadWindow(ctx chasm.Context, req WindowRequest) (Window, error) {
+	if req.Start != nil {
+		from, err := s.resolveStart(req.Start)
+		if err != nil {
+			return Window{}, err
+		}
+		req.From = from
+	}
 	if req.From < s.State.BaseOffset {
 		return Window{}, serviceerror.NewFailedPreconditionf(
 			"offset %d has been truncated, the stream starts at %d", req.From, s.State.BaseOffset)
@@ -561,6 +574,7 @@ func (s *Stream) ReadWindow(ctx chasm.Context, req WindowRequest) (Window, error
 	}
 	w := Window{
 		State: common.CloneProto(s.State),
+		From:  req.From,
 		To:    req.From,
 		Limit: limit,
 		RunID: ctx.ExecutionKey().RunID,
@@ -686,8 +700,9 @@ type ConsumerRegistration struct {
 	ConsumerID string
 	WorkflowID string
 	RunID      string
-	// Negative means the head as of the registering transition.
-	Offset   int64
+	// Where a new consumer starts, resolved against the registering
+	// transition's frontier. One already registered keeps its position.
+	Start    *streampb.StreamStartPosition
 	External bool
 	// Zero means the default.
 	MaxConsumers int
@@ -698,9 +713,9 @@ type ConsumerRegistration struct {
 // consumer reads from: the resolved start for a new consumer, and the current
 // read position for one that is already registered.
 //
-// A negative offset means the head as of this transition. Resolving it here,
-// against the frontier the same transaction sees, is what makes the recorded
-// start a fact rather than a reading taken a moment earlier.
+// Resolving the start here, against the frontier the same transaction sees, is
+// what makes the recorded start a fact rather than a reading taken a moment
+// earlier.
 //
 // The floor it records is where the subscription started, not where it has read
 // to. The ranges this consumer already took are written into its History, and a
@@ -714,9 +729,9 @@ func (s *Stream) RegisterConsumer(_ chasm.MutableContext, reg ConsumerRegistrati
 	if maxConsumers <= 0 {
 		maxConsumers = MaxConsumersPerStream
 	}
-	offset := reg.Offset
-	if offset < 0 {
-		offset = s.State.HeadOffset
+	offset, err := s.resolveStart(reg.Start)
+	if err != nil {
+		return 0, err
 	}
 	if offset < s.State.BaseOffset {
 		return 0, serviceerror.NewFailedPreconditionf(
