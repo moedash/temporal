@@ -3,6 +3,9 @@ package workflow
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"slices"
+	"strings"
 
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -15,7 +18,82 @@ import (
 )
 
 // DefaultStreamName is the stream a command addresses when it names none.
-const DefaultStreamName = "output"
+const DefaultStreamName = stream.DefaultStreamName
+
+// activityStreamPrefix reserves the part of the workflow's stream map that
+// holds streams owned by its activities. An activity scheduled by a workflow
+// is not a component of its own, so its streams live in the workflow's map
+// until it is, and nothing outside the server sees these keys.
+const activityStreamPrefix = "activity/"
+
+// ActivityStreamKey is the key a stream owned by one of this workflow's
+// activities is held under.
+//
+// The activity id is escaped because it may itself contain a slash, and
+// without that ("a/b", "c") and ("a", "b/c") would share a key.
+func ActivityStreamKey(activityID, name string) string {
+	return activityStreamPrefix + url.PathEscape(activityID) + "/" + name
+}
+
+// IsActivityStreamKey reports whether a name falls in the reserved part of the
+// map, which only the activity addressing may reach.
+func IsActivityStreamKey(name string) bool {
+	return strings.HasPrefix(name, activityStreamPrefix)
+}
+
+// activityStreamKeys returns the keys of the streams one activity owns, in a
+// stable order. Only the keys are read, so no stream is loaded.
+func (w *Workflow) activityStreamKeys(activityID string) []string {
+	prefix := ActivityStreamKey(activityID, "")
+	var keys []string
+	for key := range w.Streams {
+		if strings.HasPrefix(key, prefix) {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+// HasOpenActivityStreams reports whether the activity owns a stream that is
+// not closed yet.
+func (w *Workflow) HasOpenActivityStreams(ctx chasm.Context, activityID string) bool {
+	for _, key := range w.activityStreamKeys(activityID) {
+		if !w.Streams[key].Get(ctx).State.GetClosed() {
+			return true
+		}
+	}
+	return false
+}
+
+// CloseActivityStreams ends every stream the activity owns. Called when the
+// activity reaches a terminal status, which is when a reader tailing it has to
+// be released: the workflow is still running, so the rule that ends a stream
+// with its execution does not reach these. A retry is not terminal, so the
+// next attempt keeps writing to the same streams.
+func (w *Workflow) CloseActivityStreams(mctx chasm.MutableContext, activityID string) error {
+	for _, key := range w.activityStreamKeys(activityID) {
+		if err := w.Streams[key].Get(mctx).CloseAndSchedule(mctx, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CheckWorkflowStreamName refuses a name the workflow itself may not use,
+// because it is too long or because it would reach an activity's stream.
+func CheckWorkflowStreamName(name string) error {
+	if IsActivityStreamKey(name) {
+		return serviceerror.NewInvalidArgumentf(
+			"stream names starting with %q are reserved for streams activities own",
+			activityStreamPrefix)
+	}
+	return stream.CheckStreamName(name)
+}
+
+func (w *Workflow) ownedStreams() stream.OwnedStreams {
+	return stream.OwnedStreams{Streams: &w.Streams, Kind: "workflow"}
+}
 
 // StreamAdmissionFailure turns a refusal of a stream command into a workflow
 // task failure with the given cause.
@@ -328,41 +406,10 @@ func (w *Workflow) streamNamed(
 	name string,
 	limits stream.Limits,
 ) (*stream.Stream, error) {
-	if w.Streams == nil {
-		w.Streams = make(chasm.Map[string, *stream.Stream])
-	}
-	if field, ok := w.Streams[name]; ok {
-		return field.Get(ctx), nil
-	}
-
-	// Checked only on the create path, so an existing stream is never refused
-	// for room. The name arrives from the caller and every distinct one adds a
-	// component to this execution's mutable state, so without a bound an
-	// outside writer can grow that state until the size limit terminates the
-	// workflow.
-	if len(name) > stream.MaxStreamNameLength {
-		return nil, serviceerror.NewInvalidArgumentf(
-			"stream name is %d characters, over the %d limit", len(name), stream.MaxStreamNameLength)
-	}
-	if len(w.Streams) >= limits.MaxOwnedStreamsPerWorkflow {
-		return nil, serviceerror.NewFailedPreconditionf(
-			"workflow already owns %d streams, the limit", limits.MaxOwnedStreamsPerWorkflow)
-	}
-
-	// Budgeted, because the batches live in this execution's mutable state and
-	// the size limit on that terminates the workflow instead of refusing.
-	created, err := stream.NewStream(ctx, stream.NewStreamRequest{
-		Attached: true,
-		Budget: &streamlib.StreamBudget{
-			MaxItems: int64(limits.OwnedStreamMaxItems),
-			MaxBytes: int64(limits.OwnedStreamMaxBytes),
-		},
-	})
-	if err != nil {
+	if err := CheckWorkflowStreamName(name); err != nil {
 		return nil, err
 	}
-	w.Streams[name] = chasm.NewComponentField(ctx, created)
-	return created, nil
+	return w.ownedStreams().Named(ctx, name, limits)
 }
 
 // toLibraryRecords shapes a command's records for the store.
@@ -474,24 +521,8 @@ func (w *Workflow) subscribedStreams(streamID string) (int, bool) {
 	return len(seen), known
 }
 
-// siblingStreamBytes is what every other stream this workflow owns holds.
-//
-// The per-stream budget bounds one stream, and an outside writer can name as
-// many as MaxOwnedStreamsPerWorkflow allows. Their sum is what the execution
-// size limit sees, so the append has to be measured against the sum.
-//
-// Skipped for the common case of a single stream, where the sum is the stream
-// itself and reading the others would load state nothing else needs.
+// siblingStreamBytes is what every other stream this workflow owns holds,
+// streams its activities own included, since they live in the same state.
 func (w *Workflow) siblingStreamBytes(ctx chasm.Context, name string) int64 {
-	if len(w.Streams) < 2 {
-		return 0
-	}
-	var total int64
-	for other, field := range w.Streams {
-		if other == name {
-			continue
-		}
-		total += field.Get(ctx).State.GetAppendedBytes()
-	}
-	return total
+	return w.ownedStreams().SiblingBytes(ctx, name)
 }

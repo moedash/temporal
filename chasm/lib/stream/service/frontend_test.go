@@ -182,3 +182,30 @@ func TestFrontendRefusesAListQueryThatNamesTheArchetype(t *testing.T) {
 	})
 	require.ErrorAs(t, err, &invalid, "the check does not depend on how the caller cased it")
 }
+
+// A call that names a workflow by id alone means that workflow, so history
+// routes and resolves on the owner only. Naming both ways is ambiguous.
+func TestFrontendSettlesTheOwner(t *testing.T) {
+	h, _ := newTestFrontend(t, 100)
+
+	owner, err := h.ownerOf(nil, "wf", "run")
+	require.NoError(t, err)
+	require.Equal(t, streampb.STREAM_OWNER_KIND_WORKFLOW, owner.GetKind())
+	require.Equal(t, "wf", owner.GetId())
+	require.Equal(t, "run", owner.GetRunId())
+
+	saa := &streampb.StreamOwner{Kind: streampb.STREAM_OWNER_KIND_ACTIVITY, Id: "act"}
+	owner, err = h.ownerOf(saa, "", "")
+	require.NoError(t, err)
+	require.Same(t, saa, owner)
+
+	_, err = h.ownerOf(saa, "wf", "")
+	var invalid *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalid)
+
+	_, err = h.ownerOf(&streampb.StreamOwner{
+		Kind: streampb.STREAM_OWNER_KIND_WORKFLOW_ACTIVITY, Id: "wf",
+		ActivityId: strings.Repeat("a", 101),
+	}, "", "")
+	require.ErrorAs(t, err, &invalid, "the activity id is bounded like any other id")
+}

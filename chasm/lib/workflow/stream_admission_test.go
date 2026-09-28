@@ -204,3 +204,70 @@ func TestAnInheritedStreamIsNotBornOverItsItemBudget(t *testing.T) {
 	var exhausted *serviceerror.ResourceExhausted
 	require.ErrorAs(t, err, &exhausted)
 }
+
+// An activity id may contain a slash, so the reserved key escapes it. Without
+// that two different (activity, name) pairs would land on one stream.
+func TestActivityStreamKeysDoNotCollide(t *testing.T) {
+	require.NotEqual(t, ActivityStreamKey("a/b", "c"), ActivityStreamKey("a", "b/c"))
+	require.True(t, IsActivityStreamKey(ActivityStreamKey("act", DefaultStreamName)))
+	require.False(t, IsActivityStreamKey(DefaultStreamName))
+}
+
+// The workflow may not name the reserved part of its own map, or it could
+// write into, or subscribe to, a stream one of its activities owns.
+func TestWorkflowCannotNameAnActivityStream(t *testing.T) {
+	ctx := newStreamBudgetTestContext()
+	w := &Workflow{}
+	limits := stream.Limits{MaxOwnedStreamsPerWorkflow: 10}
+
+	key := ActivityStreamKey("act", DefaultStreamName)
+	_, err := w.streamNamed(ctx, key, limits)
+	var invalid *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalid)
+
+	// The activity addressing reaches it, and it counts against the workflow's
+	// stream count and shared byte budget because it lives in the same state.
+	_, err = w.AppendToOwnedStream(ctx, key, stream.AddMessagesRequest{
+		Records: budgetTestRecords(10), Limits: limits,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, w.OwnedStream(ctx, key))
+	require.Positive(t, w.siblingStreamBytes(ctx, DefaultStreamName)+
+		w.OwnedStream(ctx, key).State.GetAppendedBytes())
+	require.Len(t, w.Streams, 1)
+}
+
+// An activity's streams end when it reaches a terminal status, while the
+// workflow's own streams and another activity's stay open.
+func TestCloseActivityStreamsEndsOnlyThatActivity(t *testing.T) {
+	ctx := newStreamBudgetTestContext()
+	w := &Workflow{}
+	limits := stream.Limits{MaxOwnedStreamsPerWorkflow: 10}
+	for _, key := range []string{
+		DefaultStreamName,
+		ActivityStreamKey("act", DefaultStreamName),
+		ActivityStreamKey("act", "reasoning"),
+		ActivityStreamKey("act-2", DefaultStreamName),
+	} {
+		_, err := w.AppendToOwnedStream(ctx, key, stream.AddMessagesRequest{
+			Records: budgetTestRecords(1), Limits: limits,
+		})
+		require.NoError(t, err)
+	}
+
+	require.True(t, w.HasOpenActivityStreams(ctx, "act"))
+	require.False(t, w.HasOpenActivityStreams(ctx, "never-wrote"))
+	require.NoError(t, w.CloseActivityStreams(ctx, "act"))
+	require.False(t, w.HasOpenActivityStreams(ctx, "act"))
+
+	closed := func(key string) bool { return w.OwnedStream(ctx, key).State.GetClosed() }
+	require.True(t, closed(ActivityStreamKey("act", DefaultStreamName)))
+	require.True(t, closed(ActivityStreamKey("act", "reasoning")))
+	require.False(t, closed(ActivityStreamKey("act-2", DefaultStreamName)))
+	require.False(t, closed(DefaultStreamName))
+
+	_, err := w.AppendToOwnedStream(ctx, ActivityStreamKey("act", DefaultStreamName),
+		stream.AddMessagesRequest{Records: budgetTestRecords(1), Limits: limits})
+	var precondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &precondition, "an ended activity's stream takes no more records")
+}

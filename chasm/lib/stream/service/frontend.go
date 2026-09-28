@@ -174,6 +174,38 @@ func (h *FrontendHandler) checkID(field, value string) error {
 	return nil
 }
 
+// ownerOf settles which execution an owned-stream call names. A call that
+// sets only the workflow fields means that workflow; everything the history
+// side routes and resolves on is then the owner alone.
+func (h *FrontendHandler) ownerOf(
+	owner *streampb.StreamOwner,
+	workflowID, runID string,
+) (*streampb.StreamOwner, error) {
+	if owner == nil {
+		owner = &streampb.StreamOwner{
+			Kind:  streampb.STREAM_OWNER_KIND_WORKFLOW,
+			Id:    workflowID,
+			RunId: runID,
+		}
+	} else if workflowID != "" || runID != "" {
+		return nil, serviceerror.NewInvalidArgument(
+			"set either owner or the workflow id and owner run id, not both")
+	}
+	if err := checkOwner(owner); err != nil {
+		return nil, err
+	}
+	if err := h.checkID("owner id", owner.GetId()); err != nil {
+		return nil, err
+	}
+	if err := h.checkID("owner run id", owner.GetRunId()); err != nil {
+		return nil, err
+	}
+	if err := h.checkID("owner activity id", owner.GetActivityId()); err != nil {
+		return nil, err
+	}
+	return owner, nil
+}
+
 func checkOffset(field string, value int64) error {
 	if value < 0 {
 		return serviceerror.NewInvalidArgumentf("%s cannot be negative, got %d", field, value)
@@ -308,9 +340,11 @@ func (h *FrontendHandler) PollWorkflowMessages(
 	if err := checkOffset("from offset", in.GetFromOffset()); err != nil {
 		return nil, err
 	}
-	if err := h.checkID("workflow id", in.GetWorkflowId()); err != nil {
+	owner, err := h.ownerOf(in.GetOwner(), in.GetWorkflowId(), in.GetOwnerRunId())
+	if err != nil {
 		return nil, err
 	}
+	in.Owner, in.WorkflowId, in.OwnerRunId = owner, "", ""
 	in.MaxMessages = clampMaxMessages(in.GetMaxMessages())
 	return h.client.PollWorkflowMessages(ctx, &streampb.PollWorkflowMessagesRequest{
 		NamespaceId: id, FrontendRequest: in,
@@ -328,9 +362,11 @@ func (h *FrontendHandler) DescribeWorkflowStream(
 	if err := h.checkID("stream name", in.GetStreamName()); err != nil {
 		return nil, err
 	}
-	if err := h.checkID("workflow id", in.GetWorkflowId()); err != nil {
+	owner, err := h.ownerOf(in.GetOwner(), in.GetWorkflowId(), in.GetOwnerRunId())
+	if err != nil {
 		return nil, err
 	}
+	in.Owner, in.WorkflowId, in.OwnerRunId = owner, "", ""
 	return h.client.DescribeWorkflowStream(ctx, &streampb.DescribeWorkflowStreamRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
@@ -347,9 +383,11 @@ func (h *FrontendHandler) AddWorkflowMessages(
 	if err := h.checkID("stream name", in.GetStreamName()); err != nil {
 		return nil, err
 	}
-	if err := h.checkID("workflow id", in.GetWorkflowId()); err != nil {
+	owner, err := h.ownerOf(in.GetOwner(), in.GetWorkflowId(), in.GetOwnerRunId())
+	if err != nil {
 		return nil, err
 	}
+	in.Owner, in.WorkflowId, in.OwnerRunId = owner, "", ""
 	if err := h.checkID("producer id", in.GetProducerId()); err != nil {
 		return nil, err
 	}
