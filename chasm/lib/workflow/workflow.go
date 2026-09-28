@@ -67,8 +67,10 @@ type Workflow struct {
 // PendingStreamSubscription is a subscribe command whose stream lives in
 // another execution, waiting for the flush to look up its addressing.
 type PendingStreamSubscription struct {
-	StreamID    string
-	StartOffset int64
+	StreamID string
+	// Where the command asked to start, already checked. The flush resolves it
+	// against the stream.
+	Start *streampb.StreamStartPosition
 	// The workflow already holds a cursor for this stream. The subscription
 	// itself is done, but the command still needs its event, because that is
 	// what a replaying worker matches the re-issued command against.
