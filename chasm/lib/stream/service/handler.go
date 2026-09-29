@@ -6,11 +6,11 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	apistreampb "go.temporal.io/api/stream/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/stream"
-	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
@@ -21,7 +21,7 @@ import (
 )
 
 type handler struct {
-	streampb.UnimplementedStreamServiceServer
+	streamlib.UnimplementedStreamServiceServer
 
 	shardController   shard.Controller
 	namespaceRegistry namespace.Registry
@@ -32,7 +32,7 @@ type handler struct {
 	// executions cannot resolve both through the local controller, which
 	// refuses a shard this host does not own, so the far half goes back out
 	// through the service and lands wherever it belongs.
-	routed streampb.StreamServiceClient
+	routed streamlib.StreamServiceClient
 }
 
 func newHandler(
@@ -40,7 +40,7 @@ func newHandler(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	config *stream.Config,
-	routed streampb.StreamServiceClient,
+	routed streamlib.StreamServiceClient,
 ) *handler {
 	return &handler{
 		shardController:   shardController,
@@ -142,7 +142,7 @@ type ownedTarget struct {
 // a stream its activity owns.
 func resolveOwned(
 	namespaceID string,
-	owner *streampb.StreamOwner,
+	owner *streamlib.StreamOwner,
 	name string,
 ) (ownedTarget, error) {
 	if err := checkOwner(owner); err != nil {
@@ -150,7 +150,7 @@ func resolveOwned(
 	}
 	name = ownedStreamName(name)
 	switch owner.GetKind() {
-	case streampb.STREAM_OWNER_KIND_WORKFLOW:
+	case streamlib.STREAM_OWNER_KIND_WORKFLOW:
 		if err := chasmworkflow.CheckWorkflowStreamName(name); err != nil {
 			return ownedTarget{}, err
 		}
@@ -158,7 +158,7 @@ func resolveOwned(
 			ref: workflowRef(namespaceID, owner.GetId(), owner.GetRunId()),
 			key: name,
 		}, nil
-	case streampb.STREAM_OWNER_KIND_ACTIVITY:
+	case streamlib.STREAM_OWNER_KIND_ACTIVITY:
 		if err := stream.CheckStreamName(name); err != nil {
 			return ownedTarget{}, err
 		}
@@ -166,7 +166,7 @@ func resolveOwned(
 			ref: activityRef(namespaceID, owner.GetId(), owner.GetRunId()),
 			key: name,
 		}, nil
-	case streampb.STREAM_OWNER_KIND_WORKFLOW_ACTIVITY:
+	case streamlib.STREAM_OWNER_KIND_WORKFLOW_ACTIVITY:
 		if err := stream.CheckStreamName(name); err != nil {
 			return ownedTarget{}, err
 		}
@@ -174,24 +174,25 @@ func resolveOwned(
 			ref: workflowRef(namespaceID, owner.GetId(), owner.GetRunId()),
 			key: chasmworkflow.ActivityStreamKey(owner.GetActivityId(), name),
 		}, nil
+	default:
+		return ownedTarget{}, serviceerror.NewInvalidArgument("owner kind is required")
 	}
-	return ownedTarget{}, serviceerror.NewInvalidArgument("owner kind is required")
 }
 
 // checkOwner refuses an owner reference that names no execution, or names one
 // in a way its kind does not allow.
-func checkOwner(owner *streampb.StreamOwner) error {
+func checkOwner(owner *streamlib.StreamOwner) error {
 	if owner.GetId() == "" {
 		return serviceerror.NewInvalidArgument("owner id is required")
 	}
 	switch owner.GetKind() {
-	case streampb.STREAM_OWNER_KIND_WORKFLOW, streampb.STREAM_OWNER_KIND_ACTIVITY:
+	case streamlib.STREAM_OWNER_KIND_WORKFLOW, streamlib.STREAM_OWNER_KIND_ACTIVITY:
 		if owner.GetActivityId() != "" {
 			return serviceerror.NewInvalidArgumentf(
 				"owner activity id is only for a workflow's activity, not for kind %v",
 				owner.GetKind())
 		}
-	case streampb.STREAM_OWNER_KIND_WORKFLOW_ACTIVITY:
+	case streamlib.STREAM_OWNER_KIND_WORKFLOW_ACTIVITY:
 		if owner.GetActivityId() == "" {
 			return serviceerror.NewInvalidArgument(
 				"owner activity id is required for a workflow's activity")
@@ -204,8 +205,8 @@ func checkOwner(owner *streampb.StreamOwner) error {
 
 func (h *handler) CreateStream(
 	ctx context.Context,
-	req *streampb.CreateStreamRequest,
-) (*streampb.CreateStreamResponse, error) {
+	req *streamlib.CreateStreamRequest,
+) (*streamlib.CreateStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	if in.GetStreamId() == "" {
@@ -215,7 +216,7 @@ func (h *handler) CreateStream(
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: in.GetStreamId()},
-		func(mctx chasm.MutableContext, input *streampb.CreateStreamInput) (*stream.Stream, error) {
+		func(mctx chasm.MutableContext, input *streamlib.CreateStreamInput) (*stream.Stream, error) {
 			return stream.NewStream(mctx, stream.NewStreamRequest{Lifecycle: input.GetLifecycle()})
 		},
 		in,
@@ -223,15 +224,15 @@ func (h *handler) CreateStream(
 	if err != nil {
 		return nil, err
 	}
-	return &streampb.CreateStreamResponse{
-		FrontendResponse: &streampb.CreateStreamOutput{RunId: result.ExecutionKey.RunID},
+	return &streamlib.CreateStreamResponse{
+		FrontendResponse: &streamlib.CreateStreamOutput{RunId: result.ExecutionKey.RunID},
 	}, nil
 }
 
 func (h *handler) AddMessages(
 	ctx context.Context,
-	req *streampb.AddMessagesRequest,
-) (*streampb.AddMessagesResponse, error) {
+	req *streamlib.AddMessagesRequest,
+) (*streamlib.AddMessagesResponse, error) {
 	in := req.GetFrontendRequest()
 	if len(in.GetRecords()) == 0 {
 		return nil, serviceerror.NewInvalidArgument("no records to append")
@@ -260,8 +261,8 @@ func (h *handler) AddMessages(
 		return nil, err
 	}
 
-	return &streampb.AddMessagesResponse{
-		FrontendResponse: &streampb.AddMessagesOutput{
+	return &streamlib.AddMessagesResponse{
+		FrontendResponse: &streamlib.AddMessagesOutput{
 			FirstOffset:  result.FirstOffset,
 			NextOffset:   result.NextOffset,
 			Count:        result.Count,
@@ -285,8 +286,8 @@ func (h *handler) AddMessages(
 // execution, so neither producer needs to pin the head against the other.
 func (h *handler) AddWorkflowMessages(
 	ctx context.Context,
-	req *streampb.AddWorkflowMessagesRequest,
-) (*streampb.AddWorkflowMessagesResponse, error) {
+	req *streamlib.AddWorkflowMessagesRequest,
+) (*streamlib.AddWorkflowMessagesResponse, error) {
 	in := req.GetFrontendRequest()
 	if len(in.GetRecords()) == 0 {
 		return nil, serviceerror.NewInvalidArgument("no records to append")
@@ -316,8 +317,8 @@ func (h *handler) AddWorkflowMessages(
 		return nil, err
 	}
 
-	return &streampb.AddWorkflowMessagesResponse{
-		FrontendResponse: &streampb.AddMessagesOutput{
+	return &streamlib.AddWorkflowMessagesResponse{
+		FrontendResponse: &streamlib.AddMessagesOutput{
 			FirstOffset:  result.FirstOffset,
 			NextOffset:   result.NextOffset,
 			Count:        result.Count,
@@ -328,8 +329,8 @@ func (h *handler) AddWorkflowMessages(
 
 func (h *handler) FinishWriting(
 	ctx context.Context,
-	req *streampb.FinishWritingRequest,
-) (*streampb.FinishWritingResponse, error) {
+	req *streamlib.FinishWritingRequest,
+) (*streamlib.FinishWritingResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	_, _, err := chasm.UpdateComponent(
@@ -343,7 +344,7 @@ func (h *handler) FinishWriting(
 	if err != nil {
 		return nil, err
 	}
-	return &streampb.FinishWritingResponse{FrontendResponse: &streampb.FinishWritingOutput{}}, nil
+	return &streamlib.FinishWritingResponse{FrontendResponse: &streamlib.FinishWritingOutput{}}, nil
 }
 
 // SubscribeWorkflow registers a workflow as a consumer of a stream it owns.
@@ -355,8 +356,8 @@ func (h *handler) FinishWriting(
 // consuming workflow's transaction is a separate problem.
 func (h *handler) SubscribeWorkflow(
 	ctx context.Context,
-	req *streampb.SubscribeWorkflowRequest,
-) (*streampb.SubscribeWorkflowResponse, error) {
+	req *streamlib.SubscribeWorkflowRequest,
+) (*streamlib.SubscribeWorkflowResponse, error) {
 	in := req.GetFrontendRequest()
 	start, err := stream.RequestedStart(in.GetStartPosition(), "start_offset", in.GetStartOffset())
 	if err != nil {
@@ -377,7 +378,7 @@ func (h *handler) SubscribeWorkflow(
 		ctx,
 		workflowRef(req.GetNamespaceId(), in.GetWorkflowId(), in.GetOwnerRunId()),
 		func(
-			wf *chasmworkflow.Workflow, mctx chasm.MutableContext, input *streampb.SubscribeWorkflowInput,
+			wf *chasmworkflow.Workflow, mctx chasm.MutableContext, input *streamlib.SubscribeWorkflowInput,
 		) (int64, error) {
 			return wf.SubscribeToOwnedStream(mctx, ownedStreamName(input.GetStreamName()), start, limits)
 		},
@@ -387,8 +388,8 @@ func (h *handler) SubscribeWorkflow(
 		return nil, err
 	}
 
-	return &streampb.SubscribeWorkflowResponse{
-		FrontendResponse: &streampb.SubscribeWorkflowOutput{StartOffset: startOffset},
+	return &streamlib.SubscribeWorkflowResponse{
+		FrontendResponse: &streamlib.SubscribeWorkflowOutput{StartOffset: startOffset},
 	}, nil
 }
 
@@ -403,9 +404,9 @@ func (h *handler) SubscribeWorkflow(
 func (h *handler) subscribeToExternalStream(
 	ctx context.Context,
 	namespaceID string,
-	in *streampb.SubscribeWorkflowInput,
-	start *apistreampb.StreamStartPosition,
-) (*streampb.SubscribeWorkflowResponse, error) {
+	in *streamlib.SubscribeWorkflowInput,
+	start *streampb.StreamStartPosition,
+) (*streamlib.SubscribeWorkflowResponse, error) {
 	// The pin is keyed by the consuming run, so the run is resolved first. It
 	// also pins the cursor write below to that run, so a run that ends between
 	// the two steps cannot leave the pin on one run and the cursor on another.
@@ -427,9 +428,9 @@ func (h *handler) subscribeToExternalStream(
 	// between them there is a pin holding storage nothing reads, which costs
 	// space, where the other order would leave a cursor with no pin and let
 	// truncation take a range it still points at.
-	registered, err := h.routed.RegisterStreamConsumer(ctx, &streampb.RegisterStreamConsumerRequest{
+	registered, err := h.routed.RegisterStreamConsumer(ctx, &streamlib.RegisterStreamConsumerRequest{
 		NamespaceId: namespaceID,
-		FrontendRequest: &streampb.RegisterStreamConsumerInput{
+		FrontendRequest: &streamlib.RegisterStreamConsumerInput{
 			Namespace:          in.GetNamespace(),
 			StreamId:           in.GetStreamId(),
 			ConsumerWorkflowId: in.GetWorkflowId(),
@@ -464,8 +465,8 @@ func (h *handler) subscribeToExternalStream(
 		return nil, err
 	}
 
-	return &streampb.SubscribeWorkflowResponse{
-		FrontendResponse: &streampb.SubscribeWorkflowOutput{StartOffset: startOffset},
+	return &streamlib.SubscribeWorkflowResponse{
+		FrontendResponse: &streamlib.SubscribeWorkflowOutput{StartOffset: startOffset},
 	}, nil
 }
 
@@ -478,8 +479,8 @@ func (h *handler) subscribeToExternalStream(
 // facts rather than readings.
 func (h *handler) RegisterStreamConsumer(
 	ctx context.Context,
-	req *streampb.RegisterStreamConsumerRequest,
-) (*streampb.RegisterStreamConsumerResponse, error) {
+	req *streamlib.RegisterStreamConsumerRequest,
+) (*streamlib.RegisterStreamConsumerResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	start, err := stream.RequestedStart(in.GetStartPosition(), "start_offset", in.GetStartOffset())
@@ -492,8 +493,8 @@ func (h *handler) RegisterStreamConsumer(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
 		func(
-			s *stream.Stream, mctx chasm.MutableContext, start *apistreampb.StreamStartPosition,
-		) (*streampb.RegisterStreamConsumerOutput, error) {
+			s *stream.Stream, mctx chasm.MutableContext, start *streampb.StreamStartPosition,
+		) (*streamlib.RegisterStreamConsumerOutput, error) {
 			startOffset, err := s.RegisterConsumer(mctx, stream.ConsumerRegistration{
 				ConsumerID:   externalConsumerID(in.GetConsumerWorkflowId(), in.GetConsumerRunId()),
 				WorkflowID:   in.GetConsumerWorkflowId(),
@@ -505,7 +506,7 @@ func (h *handler) RegisterStreamConsumer(
 			if err != nil {
 				return nil, err
 			}
-			return &streampb.RegisterStreamConsumerOutput{
+			return &streamlib.RegisterStreamConsumerOutput{
 				StartOffset: startOffset,
 				KnownHead:   s.State.GetHeadOffset(),
 			}, nil
@@ -518,13 +519,13 @@ func (h *handler) RegisterStreamConsumer(
 		// binds to a stream of its own instead, which would be the wrong thing
 		// to do about a registry miss or a shard that has moved.
 		if executionAbsent(err) {
-			return &streampb.RegisterStreamConsumerResponse{
-				FrontendResponse: &streampb.RegisterStreamConsumerOutput{StreamAbsent: true},
+			return &streamlib.RegisterStreamConsumerResponse{
+				FrontendResponse: &streamlib.RegisterStreamConsumerOutput{StreamAbsent: true},
 			}, nil
 		}
 		return nil, err
 	}
-	return &streampb.RegisterStreamConsumerResponse{FrontendResponse: pin}, nil
+	return &streamlib.RegisterStreamConsumerResponse{FrontendResponse: pin}, nil
 }
 
 // executionAbsent reports whether an error means no execution holds the stream.
@@ -609,8 +610,8 @@ func (h *handler) pushHead(
 // the stream re-keys its pin, or nothing does, so the stream releases it.
 func (h *handler) AdvanceConsumerHead(
 	ctx context.Context,
-	req *streampb.AdvanceConsumerHeadRequest,
-) (*streampb.AdvanceConsumerHeadResponse, error) {
+	req *streamlib.AdvanceConsumerHeadRequest,
+) (*streamlib.AdvanceConsumerHeadResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	namespaceID, workflowID, streamID := req.GetNamespaceId(), in.GetWorkflowId(), in.GetStreamId()
@@ -619,17 +620,17 @@ func (h *handler) AdvanceConsumerHead(
 	if err != nil {
 		return nil, err
 	}
-	out := &streampb.AdvanceConsumerHeadOutput{}
+	out := &streamlib.AdvanceConsumerHeadOutput{}
 	if !pinned.closed {
 		if !pinned.consumes {
 			out.ConsumerClosed = true
-			return &streampb.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
+			return &streamlib.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
 		}
 		err := h.pushHead(ctx, namespaceID, workflowID, pinned.runID, streamID, in.GetHeadOffset())
 		if err != nil {
 			return nil, err
 		}
-		return &streampb.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
+		return &streamlib.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
 	}
 
 	// The pinned run is over. A continue-as-new carries the subscription to the
@@ -640,7 +641,7 @@ func (h *handler) AdvanceConsumerHead(
 	}
 	if current.closed || current.runID == pinned.runID || !current.consumes {
 		out.ConsumerClosed = true
-		return &streampb.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
+		return &streamlib.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
 	}
 	err = h.pushHead(ctx, namespaceID, workflowID, current.runID, streamID, in.GetHeadOffset())
 	if err != nil {
@@ -648,13 +649,13 @@ func (h *handler) AdvanceConsumerHead(
 	}
 	out.SuccessorRunId = current.runID
 	out.SuccessorStartOffset = current.startOffset
-	return &streampb.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
+	return &streamlib.AdvanceConsumerHeadResponse{FrontendResponse: out}, nil
 }
 
 func (h *handler) PollMessages(
 	ctx context.Context,
-	req *streampb.PollMessagesRequest,
-) (*streampb.PollMessagesResponse, error) {
+	req *streamlib.PollMessagesRequest,
+) (*streamlib.PollMessagesResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
@@ -695,7 +696,7 @@ func (h *handler) PollMessages(
 	if err != nil {
 		return nil, err
 	}
-	return &streampb.PollMessagesResponse{FrontendResponse: out}, nil
+	return &streamlib.PollMessagesResponse{FrontendResponse: out}, nil
 }
 
 // PollWorkflowMessages reads a stream an execution owns.
@@ -705,8 +706,8 @@ func (h *handler) PollMessages(
 // component.
 func (h *handler) PollWorkflowMessages(
 	ctx context.Context,
-	req *streampb.PollWorkflowMessagesRequest,
-) (*streampb.PollWorkflowMessagesResponse, error) {
+	req *streamlib.PollWorkflowMessagesRequest,
+) (*streamlib.PollWorkflowMessagesResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
@@ -746,7 +747,7 @@ func (h *handler) PollWorkflowMessages(
 	if err != nil {
 		return nil, err
 	}
-	return &streampb.PollWorkflowMessagesResponse{FrontendResponse: out}, nil
+	return &streamlib.PollWorkflowMessagesResponse{FrontendResponse: out}, nil
 }
 
 // formatWindow turns a component read into the wire response. The read happens
@@ -757,8 +758,8 @@ func (h *handler) PollWorkflowMessages(
 // steps past every message it filtered out, so a filtered page that matched
 // nothing still moves the reader; a window whose batches stop short of its end
 // must not be reported as read to the end.
-func formatWindow(w stream.Window, req stream.WindowRequest) (*streampb.PollMessagesOutput, error) {
-	out := &streampb.PollMessagesOutput{
+func formatWindow(w stream.Window, req stream.WindowRequest) (*streamlib.PollMessagesOutput, error) {
+	out := &streamlib.PollMessagesOutput{
 		NextOffset:  w.From,
 		HeadOffset:  w.State.GetHeadOffset(),
 		Closed:      w.State.GetClosed(),
@@ -800,7 +801,7 @@ func readOwnedWindow(
 	if s == nil {
 		// Nothing published yet, which reads as an empty stream so a reader can
 		// attach before the first append.
-		state := &streampb.StreamState{Closed: ended}
+		state := &streamlib.StreamState{Closed: ended}
 		from := req.Window.From
 		if req.Window.Start != nil {
 			var err error
@@ -826,7 +827,7 @@ func readOwnedWindow(
 func (h *handler) ownedStreamState(
 	ctx context.Context,
 	target ownedTarget,
-) (*streampb.StreamState, error) {
+) (*streamlib.StreamState, error) {
 	return chasm.ReadComponent(ctx, target.ref, readOwnedStream, target.key)
 }
 
@@ -836,8 +837,8 @@ func readOwnedStream(
 	owner stream.Owner,
 	cctx chasm.Context,
 	key string,
-) (*streampb.StreamState, error) {
-	state := &streampb.StreamState{}
+) (*streamlib.StreamState, error) {
+	state := &streamlib.StreamState{}
 	if s := owner.OwnedStream(cctx, key); s != nil {
 		var err error
 		if state, err = s.Snapshot(cctx, struct{}{}); err != nil {
@@ -858,14 +859,14 @@ func (h *handler) waitForMessages(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	from int64,
-	current *streampb.StreamState,
-) (*streampb.StreamState, error) {
+	current *streamlib.StreamState,
+) (*streamlib.StreamState, error) {
 	pollCtx, cancel := contextutil.WithDeadlineBuffer(
 		ctx, stream.LongPollTimeout, stream.LongPollBuffer)
 	defer cancel()
 
 	state, _, err := chasm.PollComponent(pollCtx, ref,
-		func(s *stream.Stream, _ chasm.Context, offset int64) (*streampb.StreamState, bool, error) {
+		func(s *stream.Stream, _ chasm.Context, offset int64) (*streamlib.StreamState, bool, error) {
 			// Monotonic, as PollComponent requires: the head only advances and
 			// closed never clears.
 			if !pollSatisfied(s.State, offset) {
@@ -883,8 +884,8 @@ func (h *handler) waitForOwnedMessages(
 	ctx context.Context,
 	target ownedTarget,
 	from int64,
-	current *streampb.StreamState,
-) (*streampb.StreamState, error) {
+	current *streamlib.StreamState,
+) (*streamlib.StreamState, error) {
 	pollCtx, cancel := contextutil.WithDeadlineBuffer(
 		ctx, stream.LongPollTimeout, stream.LongPollBuffer)
 	defer cancel()
@@ -892,7 +893,7 @@ func (h *handler) waitForOwnedMessages(
 	state, _, err := chasm.PollComponent(pollCtx, target.ref,
 		func(
 			owner stream.Owner, cctx chasm.Context, offset int64,
-		) (*streampb.StreamState, bool, error) {
+		) (*streamlib.StreamState, bool, error) {
 			owned, err := readOwnedStream(owner, cctx, target.key)
 			if err != nil {
 				return nil, false, err
@@ -910,7 +911,7 @@ func (h *handler) waitForOwnedMessages(
 // the read after the wait uses that offset: resolving the position again would
 // put a tail at the new head and read nothing.
 func waitOffset(
-	from int64, start *apistreampb.StreamStartPosition, state *streampb.StreamState,
+	from int64, start *streampb.StreamStartPosition, state *streamlib.StreamState,
 ) (int64, error) {
 	if start == nil {
 		return from, nil
@@ -920,7 +921,7 @@ func waitOffset(
 
 // pollSatisfied is the monotonic condition PollComponent requires: the head
 // only advances and closed never clears.
-func pollSatisfied(state *streampb.StreamState, from int64) bool {
+func pollSatisfied(state *streamlib.StreamState, from int64) bool {
 	return state.GetHeadOffset() > from || state.GetClosed()
 }
 
@@ -928,10 +929,10 @@ func pollSatisfied(state *streampb.StreamState, from int64) bool {
 // served.
 func pollOutcome(
 	pollCtx, callerCtx context.Context,
-	state *streampb.StreamState,
+	state *streamlib.StreamState,
 	err error,
-	current *streampb.StreamState,
-) (*streampb.StreamState, error) {
+	current *streamlib.StreamState,
+) (*streamlib.StreamState, error) {
 	if err != nil {
 		if pollCtx.Err() != nil && callerCtx.Err() == nil {
 			// Our long-poll budget expired, not the caller's. Hand back the
@@ -950,8 +951,8 @@ func pollOutcome(
 
 func (h *handler) DescribeStream(
 	ctx context.Context,
-	req *streampb.DescribeStreamRequest,
-) (*streampb.DescribeStreamResponse, error) {
+	req *streamlib.DescribeStreamRequest,
+) (*streamlib.DescribeStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	state, err := chasm.ReadComponent(ctx,
@@ -959,8 +960,8 @@ func (h *handler) DescribeStream(
 	if err != nil {
 		return nil, err
 	}
-	return &streampb.DescribeStreamResponse{
-		FrontendResponse: &streampb.DescribeStreamOutput{State: state},
+	return &streamlib.DescribeStreamResponse{
+		FrontendResponse: &streamlib.DescribeStreamOutput{State: state},
 	}, nil
 }
 
@@ -969,8 +970,8 @@ func (h *handler) DescribeStream(
 // attached stream offers no other way to find.
 func (h *handler) DescribeWorkflowStream(
 	ctx context.Context,
-	req *streampb.DescribeWorkflowStreamRequest,
-) (*streampb.DescribeWorkflowStreamResponse, error) {
+	req *streamlib.DescribeWorkflowStreamRequest,
+) (*streamlib.DescribeWorkflowStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 
@@ -982,15 +983,15 @@ func (h *handler) DescribeWorkflowStream(
 	if err != nil {
 		return nil, err
 	}
-	return &streampb.DescribeWorkflowStreamResponse{
-		FrontendResponse: &streampb.DescribeStreamOutput{State: state},
+	return &streamlib.DescribeWorkflowStreamResponse{
+		FrontendResponse: &streamlib.DescribeStreamOutput{State: state},
 	}, nil
 }
 
 func (h *handler) CloseStream(
 	ctx context.Context,
-	req *streampb.CloseStreamRequest,
-) (*streampb.CloseStreamResponse, error) {
+	req *streamlib.CloseStreamRequest,
+) (*streamlib.CloseStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	_, _, err := chasm.UpdateComponent(
@@ -1004,7 +1005,7 @@ func (h *handler) CloseStream(
 	if err != nil {
 		return nil, err
 	}
-	return &streampb.CloseStreamResponse{FrontendResponse: &streampb.CloseStreamOutput{}}, nil
+	return &streamlib.CloseStreamResponse{FrontendResponse: &streamlib.CloseStreamOutput{}}, nil
 }
 
 // TruncateStream advances the readable floor.
@@ -1017,8 +1018,8 @@ func (h *handler) CloseStream(
 // tries once more, and what survives that is a consumer that really is there.
 func (h *handler) TruncateStream(
 	ctx context.Context,
-	req *streampb.TruncateStreamRequest,
-) (*streampb.TruncateStreamResponse, error) {
+	req *streamlib.TruncateStreamRequest,
+) (*streamlib.TruncateStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	ref := refFor(req.GetNamespaceId(), in.GetStreamId())
@@ -1039,7 +1040,7 @@ func (h *handler) TruncateStream(
 	if err != nil {
 		return nil, err
 	}
-	return &streampb.TruncateStreamResponse{FrontendResponse: &streampb.TruncateStreamOutput{}}, nil
+	return &streamlib.TruncateStreamResponse{FrontendResponse: &streamlib.TruncateStreamOutput{}}, nil
 }
 
 func (h *handler) truncate(ctx context.Context, ref chasm.ComponentRef, newBase int64) error {
@@ -1059,8 +1060,8 @@ func (h *handler) truncate(ctx context.Context, ref chasm.ComponentRef, newBase 
 
 func (h *handler) DeleteStream(
 	ctx context.Context,
-	req *streampb.DeleteStreamRequest,
-) (*streampb.DeleteStreamResponse, error) {
+	req *streamlib.DeleteStreamRequest,
+) (*streamlib.DeleteStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
 	key := chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: in.GetStreamId()}
@@ -1090,5 +1091,5 @@ func (h *handler) DeleteStream(
 	if err != nil {
 		return nil, err
 	}
-	return &streampb.DeleteStreamResponse{FrontendResponse: &streampb.DeleteStreamOutput{}}, nil
+	return &streamlib.DeleteStreamResponse{FrontendResponse: &streamlib.DeleteStreamOutput{}}, nil
 }
