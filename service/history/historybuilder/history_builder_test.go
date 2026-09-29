@@ -2272,6 +2272,8 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:                         true,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED:                            true,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED:                     true,
+		enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED:                           true,
+		enumspb.EVENT_TYPE_WORKFLOW_STREAM_RECORDS_APPENDED:                     true,
 	}
 
 	// events corresponding to message from client will be assigned an event ID immediately
