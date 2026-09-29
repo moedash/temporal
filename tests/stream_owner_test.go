@@ -446,7 +446,9 @@ func TestStreamWorkflowActivityStreamsEndWithTheActivity(t *testing.T) {
 		})
 		done <- result{resp.GetFrontendResponse(), err}
 	}()
-	time.Sleep(500 * time.Millisecond)
+	// Give the reader time to park, so the wake is what releases it. Nothing
+	// observable marks a parked reader, so a wait is the only option.
+	time.Sleep(500 * time.Millisecond) //nolint:forbidigo
 	completeActivityAttempt(t, env, s, second)
 
 	select {
