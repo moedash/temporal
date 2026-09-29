@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"go.temporal.io/api/serviceerror"
-	apistreampb "go.temporal.io/api/stream/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
-	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -28,16 +28,16 @@ import (
 // or page size that history would only clamp or refuse later is refused here
 // before the request is routed.
 type FrontendHandler struct {
-	streampb.UnimplementedStreamServiceServer
+	streamlib.UnimplementedStreamServiceServer
 
-	client            streampb.StreamServiceClient
+	client            streamlib.StreamServiceClient
 	namespaceRegistry namespace.Registry
 	logger            log.Logger
 	config            *stream.Config
 }
 
 func NewFrontendHandler(
-	client streampb.StreamServiceClient,
+	client streamlib.StreamServiceClient,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	config *stream.Config,
@@ -61,44 +61,44 @@ func NewFrontendHandler(
 // them with Unimplemented wherever they land.
 func RedirectableMethods() map[string]func() any {
 	return map[string]func() any{
-		streampb.StreamService_CreateStream_FullMethodName: func() any {
-			return &streampb.CreateStreamResponse{}
+		streamlib.StreamService_CreateStream_FullMethodName: func() any {
+			return &streamlib.CreateStreamResponse{}
 		},
-		streampb.StreamService_AddMessages_FullMethodName: func() any {
-			return &streampb.AddMessagesResponse{}
+		streamlib.StreamService_AddMessages_FullMethodName: func() any {
+			return &streamlib.AddMessagesResponse{}
 		},
-		streampb.StreamService_FinishWriting_FullMethodName: func() any {
-			return &streampb.FinishWritingResponse{}
+		streamlib.StreamService_FinishWriting_FullMethodName: func() any {
+			return &streamlib.FinishWritingResponse{}
 		},
-		streampb.StreamService_SubscribeWorkflow_FullMethodName: func() any {
-			return &streampb.SubscribeWorkflowResponse{}
+		streamlib.StreamService_SubscribeWorkflow_FullMethodName: func() any {
+			return &streamlib.SubscribeWorkflowResponse{}
 		},
-		streampb.StreamService_PollMessages_FullMethodName: func() any {
-			return &streampb.PollMessagesResponse{}
+		streamlib.StreamService_PollMessages_FullMethodName: func() any {
+			return &streamlib.PollMessagesResponse{}
 		},
-		streampb.StreamService_DescribeStream_FullMethodName: func() any {
-			return &streampb.DescribeStreamResponse{}
+		streamlib.StreamService_DescribeStream_FullMethodName: func() any {
+			return &streamlib.DescribeStreamResponse{}
 		},
-		streampb.StreamService_PollWorkflowMessages_FullMethodName: func() any {
-			return &streampb.PollWorkflowMessagesResponse{}
+		streamlib.StreamService_PollWorkflowMessages_FullMethodName: func() any {
+			return &streamlib.PollWorkflowMessagesResponse{}
 		},
-		streampb.StreamService_DescribeWorkflowStream_FullMethodName: func() any {
-			return &streampb.DescribeWorkflowStreamResponse{}
+		streamlib.StreamService_DescribeWorkflowStream_FullMethodName: func() any {
+			return &streamlib.DescribeWorkflowStreamResponse{}
 		},
-		streampb.StreamService_AddWorkflowMessages_FullMethodName: func() any {
-			return &streampb.AddWorkflowMessagesResponse{}
+		streamlib.StreamService_AddWorkflowMessages_FullMethodName: func() any {
+			return &streamlib.AddWorkflowMessagesResponse{}
 		},
-		streampb.StreamService_CloseStream_FullMethodName: func() any {
-			return &streampb.CloseStreamResponse{}
+		streamlib.StreamService_CloseStream_FullMethodName: func() any {
+			return &streamlib.CloseStreamResponse{}
 		},
-		streampb.StreamService_TruncateStream_FullMethodName: func() any {
-			return &streampb.TruncateStreamResponse{}
+		streamlib.StreamService_TruncateStream_FullMethodName: func() any {
+			return &streamlib.TruncateStreamResponse{}
 		},
-		streampb.StreamService_ListStreams_FullMethodName: func() any {
-			return &streampb.ListStreamsResponse{}
+		streamlib.StreamService_ListStreams_FullMethodName: func() any {
+			return &streamlib.ListStreamsResponse{}
 		},
-		streampb.StreamService_DeleteStream_FullMethodName: func() any {
-			return &streampb.DeleteStreamResponse{}
+		streamlib.StreamService_DeleteStream_FullMethodName: func() any {
+			return &streamlib.DeleteStreamResponse{}
 		},
 	}
 }
@@ -133,14 +133,14 @@ func (h *FrontendHandler) namespaceID(name string) (string, error) {
 // should not be the exception because the caller left a field empty.
 func (h *FrontendHandler) checkLifecycle(
 	namespaceName string,
-	lifecycle *streampb.StreamLifecycle,
-) (*streampb.StreamLifecycle, error) {
+	lifecycle *streamlib.StreamLifecycle,
+) (*streamlib.StreamLifecycle, error) {
 	ns, err := h.namespaceRegistry.GetNamespace(namespace.Name(namespaceName))
 	if err != nil {
 		return nil, err
 	}
 	if lifecycle == nil {
-		lifecycle = &streampb.StreamLifecycle{}
+		lifecycle = &streamlib.StreamLifecycle{}
 	}
 	lifecycle = common.CloneProto(lifecycle)
 
@@ -159,6 +159,8 @@ func (h *FrontendHandler) checkLifecycle(
 	case retention > ns.Retention():
 		return nil, serviceerror.NewInvalidArgumentf(
 			"retention of %v is over the namespace's retention of %v", retention, ns.Retention())
+	default:
+		// A positive retention within the namespace's is kept as requested.
 	}
 	lifecycle.Retention = durationpb.New(retention)
 	return lifecycle, nil
@@ -179,12 +181,12 @@ func (h *FrontendHandler) checkID(field, value string) error {
 // sets only the workflow fields means that workflow; everything the history
 // side routes and resolves on is then the owner alone.
 func (h *FrontendHandler) ownerOf(
-	owner *streampb.StreamOwner,
+	owner *streamlib.StreamOwner,
 	workflowID, runID string,
-) (*streampb.StreamOwner, error) {
+) (*streamlib.StreamOwner, error) {
 	if owner == nil {
-		owner = &streampb.StreamOwner{
-			Kind:  streampb.STREAM_OWNER_KIND_WORKFLOW,
+		owner = &streamlib.StreamOwner{
+			Kind:  streamlib.STREAM_OWNER_KIND_WORKFLOW,
 			Id:    workflowID,
 			RunId: runID,
 		}
@@ -216,7 +218,7 @@ func checkOffset(field string, value int64) error {
 
 // checkFirstPoll refuses a start position the history side could not resolve,
 // or one sent by a reader that already has an offset.
-func checkFirstPoll(pos *apistreampb.StreamStartPosition, from int64) error {
+func checkFirstPoll(pos *streampb.StreamStartPosition, from int64) error {
 	if pos == nil {
 		return nil
 	}
@@ -234,8 +236,8 @@ func clampMaxMessages(requested int32) int32 {
 }
 
 func (h *FrontendHandler) CreateStream(
-	ctx context.Context, req *streampb.CreateStreamRequest,
-) (*streampb.CreateStreamResponse, error) {
+	ctx context.Context, req *streamlib.CreateStreamRequest,
+) (*streamlib.CreateStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -252,14 +254,14 @@ func (h *FrontendHandler) CreateStream(
 		return nil, err
 	}
 	in.Lifecycle = lifecycle
-	return h.client.CreateStream(ctx, &streampb.CreateStreamRequest{
+	return h.client.CreateStream(ctx, &streamlib.CreateStreamRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) AddMessages(
-	ctx context.Context, req *streampb.AddMessagesRequest,
-) (*streampb.AddMessagesResponse, error) {
+	ctx context.Context, req *streamlib.AddMessagesRequest,
+) (*streamlib.AddMessagesResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -271,14 +273,14 @@ func (h *FrontendHandler) AddMessages(
 	if err := h.checkID("producer id", in.GetProducerId()); err != nil {
 		return nil, err
 	}
-	return h.client.AddMessages(ctx, &streampb.AddMessagesRequest{
+	return h.client.AddMessages(ctx, &streamlib.AddMessagesRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) FinishWriting(
-	ctx context.Context, req *streampb.FinishWritingRequest,
-) (*streampb.FinishWritingResponse, error) {
+	ctx context.Context, req *streamlib.FinishWritingRequest,
+) (*streamlib.FinishWritingResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -290,14 +292,14 @@ func (h *FrontendHandler) FinishWriting(
 	if err := h.checkID("producer id", in.GetProducerId()); err != nil {
 		return nil, err
 	}
-	return h.client.FinishWriting(ctx, &streampb.FinishWritingRequest{
+	return h.client.FinishWriting(ctx, &streamlib.FinishWritingRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) SubscribeWorkflow(
-	ctx context.Context, req *streampb.SubscribeWorkflowRequest,
-) (*streampb.SubscribeWorkflowResponse, error) {
+	ctx context.Context, req *streamlib.SubscribeWorkflowRequest,
+) (*streamlib.SubscribeWorkflowResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -316,14 +318,14 @@ func (h *FrontendHandler) SubscribeWorkflow(
 		in.GetStartPosition(), "start_offset", in.GetStartOffset()); err != nil {
 		return nil, err
 	}
-	return h.client.SubscribeWorkflow(ctx, &streampb.SubscribeWorkflowRequest{
+	return h.client.SubscribeWorkflow(ctx, &streamlib.SubscribeWorkflowRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) PollMessages(
-	ctx context.Context, req *streampb.PollMessagesRequest,
-) (*streampb.PollMessagesResponse, error) {
+	ctx context.Context, req *streamlib.PollMessagesRequest,
+) (*streamlib.PollMessagesResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -339,14 +341,14 @@ func (h *FrontendHandler) PollMessages(
 		return nil, err
 	}
 	in.MaxMessages = clampMaxMessages(in.GetMaxMessages())
-	return h.client.PollMessages(ctx, &streampb.PollMessagesRequest{
+	return h.client.PollMessages(ctx, &streamlib.PollMessagesRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) PollWorkflowMessages(
-	ctx context.Context, req *streampb.PollWorkflowMessagesRequest,
-) (*streampb.PollWorkflowMessagesResponse, error) {
+	ctx context.Context, req *streamlib.PollWorkflowMessagesRequest,
+) (*streamlib.PollWorkflowMessagesResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -367,14 +369,14 @@ func (h *FrontendHandler) PollWorkflowMessages(
 	}
 	in.Owner, in.WorkflowId, in.OwnerRunId = owner, "", ""
 	in.MaxMessages = clampMaxMessages(in.GetMaxMessages())
-	return h.client.PollWorkflowMessages(ctx, &streampb.PollWorkflowMessagesRequest{
+	return h.client.PollWorkflowMessages(ctx, &streamlib.PollWorkflowMessagesRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) DescribeWorkflowStream(
-	ctx context.Context, req *streampb.DescribeWorkflowStreamRequest,
-) (*streampb.DescribeWorkflowStreamResponse, error) {
+	ctx context.Context, req *streamlib.DescribeWorkflowStreamRequest,
+) (*streamlib.DescribeWorkflowStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -388,14 +390,14 @@ func (h *FrontendHandler) DescribeWorkflowStream(
 		return nil, err
 	}
 	in.Owner, in.WorkflowId, in.OwnerRunId = owner, "", ""
-	return h.client.DescribeWorkflowStream(ctx, &streampb.DescribeWorkflowStreamRequest{
+	return h.client.DescribeWorkflowStream(ctx, &streamlib.DescribeWorkflowStreamRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) AddWorkflowMessages(
-	ctx context.Context, req *streampb.AddWorkflowMessagesRequest,
-) (*streampb.AddWorkflowMessagesResponse, error) {
+	ctx context.Context, req *streamlib.AddWorkflowMessagesRequest,
+) (*streamlib.AddWorkflowMessagesResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -412,14 +414,14 @@ func (h *FrontendHandler) AddWorkflowMessages(
 	if err := h.checkID("producer id", in.GetProducerId()); err != nil {
 		return nil, err
 	}
-	return h.client.AddWorkflowMessages(ctx, &streampb.AddWorkflowMessagesRequest{
+	return h.client.AddWorkflowMessages(ctx, &streamlib.AddWorkflowMessagesRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) DescribeStream(
-	ctx context.Context, req *streampb.DescribeStreamRequest,
-) (*streampb.DescribeStreamResponse, error) {
+	ctx context.Context, req *streamlib.DescribeStreamRequest,
+) (*streamlib.DescribeStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -428,14 +430,14 @@ func (h *FrontendHandler) DescribeStream(
 	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
 		return nil, err
 	}
-	return h.client.DescribeStream(ctx, &streampb.DescribeStreamRequest{
+	return h.client.DescribeStream(ctx, &streamlib.DescribeStreamRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) CloseStream(
-	ctx context.Context, req *streampb.CloseStreamRequest,
-) (*streampb.CloseStreamResponse, error) {
+	ctx context.Context, req *streamlib.CloseStreamRequest,
+) (*streamlib.CloseStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -444,14 +446,14 @@ func (h *FrontendHandler) CloseStream(
 	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
 		return nil, err
 	}
-	return h.client.CloseStream(ctx, &streampb.CloseStreamRequest{
+	return h.client.CloseStream(ctx, &streamlib.CloseStreamRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) TruncateStream(
-	ctx context.Context, req *streampb.TruncateStreamRequest,
-) (*streampb.TruncateStreamResponse, error) {
+	ctx context.Context, req *streamlib.TruncateStreamRequest,
+) (*streamlib.TruncateStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -463,14 +465,14 @@ func (h *FrontendHandler) TruncateStream(
 	if err := checkOffset("new base offset", in.GetNewBaseOffset()); err != nil {
 		return nil, err
 	}
-	return h.client.TruncateStream(ctx, &streampb.TruncateStreamRequest{
+	return h.client.TruncateStream(ctx, &streamlib.TruncateStreamRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
 
 func (h *FrontendHandler) DeleteStream(
-	ctx context.Context, req *streampb.DeleteStreamRequest,
-) (*streampb.DeleteStreamResponse, error) {
+	ctx context.Context, req *streamlib.DeleteStreamRequest,
+) (*streamlib.DeleteStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	id, err := h.namespaceID(in.GetNamespace())
 	if err != nil {
@@ -479,7 +481,7 @@ func (h *FrontendHandler) DeleteStream(
 	if err := h.checkID("stream id", in.GetStreamId()); err != nil {
 		return nil, err
 	}
-	return h.client.DeleteStream(ctx, &streampb.DeleteStreamRequest{
+	return h.client.DeleteStream(ctx, &streamlib.DeleteStreamRequest{
 		NamespaceId: id, FrontendRequest: in,
 	})
 }
@@ -487,8 +489,8 @@ func (h *FrontendHandler) DeleteStream(
 // ListStreams answers from visibility rather than from any one stream, so it
 // does not route to a shard and is served here rather than on the history side.
 func (h *FrontendHandler) ListStreams(
-	ctx context.Context, req *streampb.ListStreamsRequest,
-) (*streampb.ListStreamsResponse, error) {
+	ctx context.Context, req *streamlib.ListStreamsRequest,
+) (*streamlib.ListStreamsResponse, error) {
 	in := req.GetFrontendRequest()
 	if _, err := h.namespaceID(in.GetNamespace()); err != nil {
 		return nil, err
@@ -521,15 +523,15 @@ func (h *FrontendHandler) ListStreams(
 		return nil, err
 	}
 
-	entries := make([]*streampb.StreamListEntry, 0, len(resp.Executions))
+	entries := make([]*streamlib.StreamListEntry, 0, len(resp.Executions))
 	for _, e := range resp.Executions {
-		entries = append(entries, &streampb.StreamListEntry{
+		entries = append(entries, &streamlib.StreamListEntry{
 			StreamId: e.BusinessID,
 			RunId:    e.RunID,
 		})
 	}
-	return &streampb.ListStreamsResponse{
-		FrontendResponse: &streampb.ListStreamsOutput{
+	return &streamlib.ListStreamsResponse{
+		FrontendResponse: &streamlib.ListStreamsOutput{
 			Streams:       entries,
 			NextPageToken: resp.NextPageToken,
 		},
