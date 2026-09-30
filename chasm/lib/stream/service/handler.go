@@ -14,11 +14,14 @@ import (
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/shard"
+	"google.golang.org/protobuf/proto"
 )
 
 type handler struct {
@@ -27,7 +30,10 @@ type handler struct {
 	shardController   shard.Controller
 	namespaceRegistry namespace.Registry
 	logger            log.Logger
+	metricsHandler    metrics.Handler
+	timeSource        clock.TimeSource
 	config            *stream.Config
+	limiters          *namespaceLimiters
 
 	// Routes a call to the host that owns a shard. A step spanning two
 	// executions cannot resolve both through the local controller, which
@@ -40,6 +46,8 @@ func newHandler(
 	shardController shard.Controller,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
 	config *stream.Config,
 	routed streamlib.StreamServiceClient,
 ) *handler {
@@ -47,20 +55,87 @@ func newHandler(
 		shardController:   shardController,
 		namespaceRegistry: namespaceRegistry,
 		logger:            logger,
+		metricsHandler:    metricsHandler,
+		timeSource:        timeSource,
 		config:            config,
+		limiters:          newNamespaceLimiters(config),
 		routed:            routed,
 	}
 }
 
-// limitsFor resolves the namespace's limits. An id the registry cannot name
-// falls back to the defaults; the interceptors have already refused requests
-// for namespaces that do not exist.
-func (h *handler) limitsFor(namespaceID string) stream.Limits {
+// namespaceName resolves an id for the limits, the rate limiters and the
+// metrics tag. An id the registry cannot name resolves to the empty string;
+// the interceptors have already refused requests for namespaces that do not
+// exist.
+func (h *handler) namespaceName(namespaceID string) string {
 	name, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
 	if err != nil {
+		return ""
+	}
+	return name.String()
+}
+
+// limitsFor resolves the namespace's limits. An unnamed namespace falls back
+// to the defaults.
+func (h *handler) limitsFor(namespaceID string) stream.Limits {
+	name := h.namespaceName(namespaceID)
+	if name == "" {
 		return stream.DefaultLimits()
 	}
-	return h.config.LimitsFor(name.String())
+	return h.config.LimitsFor(name)
+}
+
+// admitAppend applies the namespace's append rate to a batch before the
+// transition that would store it.
+func (h *handler) admitAppend(
+	ns string, records []*streamlib.StreamRecord, limits stream.Limits,
+) error {
+	return h.limiters.allowAppend(
+		ns, h.timeSource.Now(), len(records), recordsSize(records), limits)
+}
+
+// admitPoll applies the namespace's poll rate and counts the poll once it is
+// through. A refused poll cost nothing and is not counted.
+func (h *handler) admitPoll(ns string) error {
+	if err := h.limiters.allowPoll(ns, h.timeSource.Now()); err != nil {
+		return err
+	}
+	metrics.StreamPolls.With(h.metricsHandler).Record(1, metrics.NamespaceTag(ns))
+	return nil
+}
+
+// meterAppend counts what an append stored. A deduplicated retry stored
+// nothing, so the meter reads records kept rather than requests made.
+func (h *handler) meterAppend(
+	ns string, records []*streamlib.StreamRecord, result stream.AddMessagesResult,
+) {
+	if result.Deduplicated {
+		return
+	}
+	tag := metrics.NamespaceTag(ns)
+	metrics.StreamRecordsAppended.With(h.metricsHandler).Record(result.Count, tag)
+	metrics.StreamBytesAppended.With(h.metricsHandler).Record(int64(recordsSize(records)), tag)
+}
+
+// meterDelivery counts what a poll handed back.
+func (h *handler) meterDelivery(ns string, out *streamlib.PollMessagesOutput) {
+	records := out.GetRecords()
+	if len(records) == 0 {
+		return
+	}
+	tag := metrics.NamespaceTag(ns)
+	metrics.StreamRecordsDelivered.With(h.metricsHandler).Record(int64(len(records)), tag)
+	metrics.StreamBytesDelivered.With(h.metricsHandler).Record(int64(recordsSize(records)), tag)
+}
+
+// recordsSize is the metered size of a batch: the records as the producer
+// sent them, which is also what the component measures against its caps.
+func recordsSize(records []*streamlib.StreamRecord) int {
+	total := 0
+	for _, record := range records {
+		total += proto.Size(record)
+	}
+	return total
 }
 
 // withCallerInfo tags the context so the stream's direct persistence calls are
@@ -239,6 +314,11 @@ func (h *handler) AddMessages(
 		return nil, serviceerror.NewInvalidArgument("no records to append")
 	}
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
+	ns := h.namespaceName(req.GetNamespaceId())
+	limits := h.limitsFor(req.GetNamespaceId())
+	if err := h.admitAppend(ns, in.GetRecords(), limits); err != nil {
+		return nil, err
+	}
 
 	// The batch and the frontier commit in one transition, and the execution
 	// serializes transitions, so a producer that names no expected offset takes
@@ -248,7 +328,7 @@ func (h *handler) AddMessages(
 		Records:    in.GetRecords(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
-		Limits:     h.limitsFor(req.GetNamespaceId()),
+		Limits:     limits,
 	}
 	if in.GetUseExpectedOffset() {
 		expected := in.GetExpectedOffset()
@@ -261,6 +341,7 @@ func (h *handler) AddMessages(
 	if err != nil {
 		return nil, err
 	}
+	h.meterAppend(ns, in.GetRecords(), result)
 
 	return &streamlib.AddMessagesResponse{
 		FrontendResponse: &streamlib.AddMessagesOutput{
@@ -299,6 +380,11 @@ func (h *handler) AddWorkflowMessages(
 	if err != nil {
 		return nil, err
 	}
+	ns := h.namespaceName(req.GetNamespaceId())
+	limits := h.limitsFor(req.GetNamespaceId())
+	if err := h.admitAppend(ns, in.GetRecords(), limits); err != nil {
+		return nil, err
+	}
 
 	// The records go in as sent, producer identity included. Who is writing is
 	// the caller's claim to make; the store only answers whether it fits.
@@ -306,7 +392,7 @@ func (h *handler) AddWorkflowMessages(
 		Records:    in.GetRecords(),
 		ProducerID: in.GetProducerId(),
 		Sequence:   in.GetSequence(),
-		Limits:     h.limitsFor(req.GetNamespaceId()),
+		Limits:     limits,
 	}
 	result, _, err := chasm.UpdateComponent(ctx, target.ref,
 		func(
@@ -317,6 +403,7 @@ func (h *handler) AddWorkflowMessages(
 	if err != nil {
 		return nil, err
 	}
+	h.meterAppend(ns, in.GetRecords(), result)
 
 	return &streamlib.AddWorkflowMessagesResponse{
 		FrontendResponse: &streamlib.AddMessagesOutput{
@@ -659,6 +746,10 @@ func (h *handler) PollMessages(
 ) (*streamlib.PollMessagesResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
+	ns := h.namespaceName(req.GetNamespaceId())
+	if err := h.admitPoll(ns); err != nil {
+		return nil, err
+	}
 
 	ref := refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId())
 	from, start := in.GetFromOffset(), in.GetStartPosition()
@@ -705,6 +796,7 @@ func (h *handler) PollMessages(
 	if err != nil {
 		return nil, err
 	}
+	h.meterDelivery(ns, out)
 	return &streamlib.PollMessagesResponse{FrontendResponse: out}, nil
 }
 
@@ -722,6 +814,10 @@ func (h *handler) PollWorkflowMessages(
 
 	target, err := resolveOwned(req.GetNamespaceId(), in.GetOwner(), in.GetStreamName())
 	if err != nil {
+		return nil, err
+	}
+	ns := h.namespaceName(req.GetNamespaceId())
+	if err := h.admitPoll(ns); err != nil {
 		return nil, err
 	}
 	from, start := in.GetFromOffset(), in.GetStartPosition()
@@ -758,6 +854,7 @@ func (h *handler) PollWorkflowMessages(
 	if err != nil {
 		return nil, err
 	}
+	h.meterDelivery(ns, out)
 	return &streamlib.PollWorkflowMessagesResponse{FrontendResponse: out}, nil
 }
 
