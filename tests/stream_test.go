@@ -15,8 +15,18 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
+
+// requireReason checks a refusal the way an SDK reads it off a raw gRPC
+// client: by status code and by the reason token in the message prefix.
+func requireReason(t *testing.T, err error, code codes.Code, reason string) {
+	t.Helper()
+	require.Equal(t, code, status.Code(err), "%v", err)
+	require.Equal(t, reason, chasmstream.ReasonOf(status.Convert(err).Message()), "%v", err)
+}
 
 // End-to-end coverage of the native stream path: append through the frontend,
 // read back by offset, and the lifecycle transitions around it. This is the
@@ -211,6 +221,19 @@ func TestStreamProducerDedup(t *testing.T) {
 		Records: streamMsgs("", "different"), ProducerId: "p1", Sequence: 1,
 	})
 	require.ErrorContains(t, err, "different content")
+	requireReason(t, err, codes.FailedPrecondition, chasmstream.ReasonProducerConflict)
+
+	// The table keeps the producer's most recent sequence only, so once a later
+	// one lands an earlier one cannot be answered and is refused as stale.
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{
+		Records: streamMsgs("", "c"), ProducerId: "p1", Sequence: 2,
+	})
+	require.NoError(t, err)
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{
+		Records: streamMsgs("", "a", "b"), ProducerId: "p1", Sequence: 1,
+	})
+	requireReason(t, err, codes.FailedPrecondition, chasmstream.ReasonProducerStaleSequence)
+	require.Equal(t, []string{"a", "b", "c"}, bodies(s.poll(ctx, t, id, 0).GetRecords()))
 }
 
 func TestStreamTopicFilter(t *testing.T) {
@@ -279,6 +302,7 @@ func TestStreamCloseAndTruncate(t *testing.T) {
 		FrontendRequest: &streamlib.PollMessagesInput{Namespace: s.ns, StreamId: id, FromOffset: 0},
 	})
 	require.ErrorContains(t, err, "truncated")
+	requireReason(t, err, codes.FailedPrecondition, chasmstream.ReasonCursorBelowFloor)
 
 	_, err = s.client.CloseStream(ctx, &streamlib.CloseStreamRequest{
 		FrontendRequest: &streamlib.CloseStreamInput{Namespace: s.ns, StreamId: id},
@@ -448,6 +472,72 @@ func TestStreamLongPollReturnsImmediatelyWhenBehind(t *testing.T) {
 	require.Less(t, time.Since(start), 5*time.Second)
 }
 
+// A blocking poll on a standalone stream id that names nothing yet parks until
+// the stream exists and then reads it, so a reader can attach before the
+// producer's first write without racing the create.
+func TestStreamLongPollWaitsForTheStreamToBeCreated(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-longpoll-create"
+
+	type outcome struct {
+		out  *streamlib.PollMessagesOutput
+		err  error
+		took time.Duration
+	}
+	done := make(chan outcome, 1)
+	started := time.Now()
+	go func() {
+		out, err := s.pollWait(ctx, id, 0)
+		done <- outcome{out: out, err: err, took: time.Since(started)}
+	}()
+
+	// Long enough for the poll to have found nothing at least once. There is
+	// nothing to await: a parked poll gives no signal that it has parked.
+	const createAfter = 600 * time.Millisecond
+	time.Sleep(createAfter) //nolint:forbidigo
+	s.create(ctx, t, id)
+	_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "first")})
+	require.NoError(t, err)
+
+	got := <-done
+	require.NoError(t, got.err)
+	require.Equal(t, []string{"first"}, bodies(got.out.GetRecords()))
+	require.GreaterOrEqual(t, got.took, createAfter, "the poll parked rather than failing")
+}
+
+func TestStreamPollOnAMissingStreamIsNotFoundUnlessItWaits(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-missing"
+
+	// Not asked to wait: the answer comes at once.
+	_, err := s.client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+		FrontendRequest: &streamlib.PollMessagesInput{Namespace: s.ns, StreamId: id, FromOffset: 0},
+	})
+	require.Equal(t, codes.NotFound, status.Code(err), "%v", err)
+
+	// Asked to wait: the poll parks for the caller's budget, then gives the
+	// same answer. The budget is the caller's deadline less the long-poll
+	// buffer, so a short deadline keeps the test short.
+	short, cancel := context.WithTimeout(ctx, chasmstream.LongPollBuffer+time.Second)
+	defer cancel()
+	started := time.Now()
+	_, err = s.pollWait(short, id, 0)
+	require.Equal(t, codes.NotFound, status.Code(err), "%v", err)
+	require.GreaterOrEqual(t, time.Since(started), 500*time.Millisecond)
+
+	// Pinned to a run there is nothing to wait for: a stream created later
+	// would be another run.
+	_, err = s.client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+		FrontendRequest: &streamlib.PollMessagesInput{
+			Namespace: s.ns, StreamId: id, RunId: "00000000-0000-0000-0000-000000000000",
+			WaitNewMessages: true,
+		},
+	})
+	require.Equal(t, codes.NotFound, status.Code(err), "%v", err)
+}
+
 func TestStreamCapTruncatesAndReclaims(t *testing.T) {
 	s := newStreamTestEnv(t)
 	ctx := streamCtx(t)
@@ -477,6 +567,7 @@ func TestStreamCapTruncatesAndReclaims(t *testing.T) {
 		FrontendRequest: &streamlib.PollMessagesInput{Namespace: s.ns, StreamId: id, FromOffset: 0},
 	})
 	require.ErrorContains(t, err, "truncated")
+	requireReason(t, err, codes.FailedPrecondition, chasmstream.ReasonCursorBelowFloor)
 }
 
 func TestStreamClosedStaysReadable(t *testing.T) {

@@ -193,6 +193,43 @@ terminate the workflow.`,
 		`How long a closed stream past its retention waits before asking again whether the
 consumers holding it are still running.`,
 	)
+	CreateWaitRecheckIntervalSetting = dynamicconfig.NewGlobalDurationSetting(
+		"stream.createWaitRecheckInterval",
+		250*time.Millisecond,
+		`How often a blocking poll on a standalone stream id that names nothing yet asks
+again whether the stream has been created, until the poll's wait expires.`,
+	)
+
+	// The rates below are enforced by the stream service per namespace and
+	// answered with ResourceExhausted when exceeded. Zero means unlimited: a
+	// rate is something an operator may want off, and the enablement setting
+	// already covers turning the feature off.
+	AppendRecordsPerSecondSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.appendRecordsPerSecond",
+		AppendRecordsPerSecond,
+		`Most stream records a namespace may append per second through the stream service.
+A burst of one full batch is always admitted. Zero means unlimited.`,
+	)
+	AppendBytesPerSecondSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.appendBytesPerSecond",
+		AppendBytesPerSecond,
+		`Most stream record bytes a namespace may append per second through the stream
+service. A burst of one full batch is always admitted. Zero means unlimited.`,
+	)
+	PollsPerSecondSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.pollsPerSecond",
+		PollsPerSecond,
+		`Most stream polls a namespace may make per second, blocking or not. Zero means
+unlimited.`,
+	)
+)
+
+// Default rates. Generous: they exist so a runaway producer or reader can be
+// contained by config, not to shape ordinary traffic.
+const (
+	AppendRecordsPerSecond = 100_000
+	AppendBytesPerSecond   = 256 << 20
+	PollsPerSecond         = 10_000
 )
 
 // Config holds the settings as live property functions.
@@ -202,6 +239,7 @@ type Config struct {
 	// execution's business id, and a stream name a key in mutable state.
 	MaxIDLength                dynamicconfig.IntPropertyFn
 	RetentionRecheckInterval   dynamicconfig.DurationPropertyFn
+	CreateWaitRecheckInterval  dynamicconfig.DurationPropertyFn
 	MaxConsumeItemsPerTask     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxConsumeBytesPerTask     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxProducersPerStream      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -215,6 +253,10 @@ type Config struct {
 	// per-stream budget cannot do.
 	OwnedStreamsMaxBytesPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxSubscriptionsPerWorkflow     dynamicconfig.IntPropertyFnWithNamespaceFilter
+
+	AppendRecordsPerSecond dynamicconfig.IntPropertyFnWithNamespaceFilter
+	AppendBytesPerSecond   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PollsPerSecond         dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func NewConfig(dc *dynamicconfig.Collection) *Config {
@@ -222,6 +264,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		Enabled:                    EnabledSetting.Get(dc),
 		MaxIDLength:                dynamicconfig.MaxIDLengthLimit.Get(dc),
 		RetentionRecheckInterval:   RetentionRecheckIntervalSetting.Get(dc),
+		CreateWaitRecheckInterval:  CreateWaitRecheckIntervalSetting.Get(dc),
 		MaxConsumeItemsPerTask:     MaxConsumeItemsPerTaskSetting.Get(dc),
 		MaxConsumeBytesPerTask:     MaxConsumeBytesPerTaskSetting.Get(dc),
 		MaxProducersPerStream:      MaxProducersPerStreamSetting.Get(dc),
@@ -234,6 +277,10 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 
 		OwnedStreamsMaxBytesPerWorkflow: OwnedStreamsMaxBytesPerWorkflowSetting.Get(dc),
 		MaxSubscriptionsPerWorkflow:     MaxSubscriptionsPerWorkflowSetting.Get(dc),
+
+		AppendRecordsPerSecond: AppendRecordsPerSecondSetting.Get(dc),
+		AppendBytesPerSecond:   AppendBytesPerSecondSetting.Get(dc),
+		PollsPerSecond:         PollsPerSecondSetting.Get(dc),
 	}
 }
 

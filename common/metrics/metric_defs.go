@@ -761,6 +761,28 @@ var (
 		"http_service_requests",
 		WithDescription("The number of HTTP requests received by the service."),
 	)
+	// Stream service meters, per namespace. Appends count what was stored, so a
+	// deduplicated retry adds nothing; deliveries count what a poll returned.
+	StreamRecordsAppended = NewCounterDef(
+		"stream_records_appended",
+		WithDescription("The number of stream records appended through the stream service."),
+	)
+	StreamBytesAppended = NewCounterDef(
+		"stream_bytes_appended",
+		WithDescription("The number of stream record bytes appended through the stream service."),
+	)
+	StreamRecordsDelivered = NewCounterDef(
+		"stream_records_delivered",
+		WithDescription("The number of stream records returned by stream polls."),
+	)
+	StreamBytesDelivered = NewCounterDef(
+		"stream_bytes_delivered",
+		WithDescription("The number of stream record bytes returned by stream polls."),
+	)
+	StreamPolls = NewCounterDef(
+		"stream_polls",
+		WithDescription("The number of stream polls admitted by the stream service."),
+	)
 	NexusRequests = NewCounterDef(
 		"nexus_requests",
 		WithDescription("The number of Nexus requests received by the service."),
