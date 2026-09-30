@@ -15,3 +15,8 @@ message StreamRetentionTask {}
 // subscribed is the exception: it asked to be told, and it cannot find out any
 // other way, since nothing else it does would notice the stream moved.
 message StreamNotifyConsumersTask {}
+
+// Fires when the oldest batch of an open stream may have aged past the
+// lifecycle's retention. It truncates what aged, stopping at an active
+// consumer's floor, and re-arms itself while the stream holds records.
+message StreamAgeTask {}
