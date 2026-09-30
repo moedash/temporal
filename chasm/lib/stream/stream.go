@@ -163,7 +163,14 @@ func (s *Stream) AddMessages(
 		return AddMessagesResult{}, err
 	}
 	settled := settleKinds(req.Records)
-	blob, err := marshalBatch(settled)
+	// Stamped with the transition's time, which is what the retention age is
+	// measured from. Without a context there is no clock, and an unstamped
+	// batch never ages.
+	var now time.Time
+	if mctx != nil {
+		now = mctx.Now(s)
+	}
+	blob, err := marshalBatch(settled, now)
 	if err != nil {
 		return AddMessagesResult{}, err
 	}
@@ -173,7 +180,7 @@ func (s *Stream) AddMessages(
 	// its codec may have encoded the declared value on the way in.
 	var hash []byte
 	if req.ProducerID != "" {
-		if hash, err = batchFingerprint(settled, blob.Data); err != nil {
+		if hash, err = batchFingerprint(settled); err != nil {
 			return AddMessagesResult{}, err
 		}
 	}
@@ -241,7 +248,120 @@ func (s *Stream) AddMessages(
 		Blob:        blob,
 	}
 	s.notifyConsumers(mctx)
+	s.scheduleAgeCheck(mctx)
 	return result, nil
+}
+
+// scheduleAgeCheck arms the retention age check for a stream whose lifecycle
+// has one. One task is outstanding at a time: the check re-arms itself while
+// the stream holds records and lowers the flag when it holds none, so the
+// next append arms it again. The first check waits a full retention, since
+// nothing can have aged before then.
+func (s *Stream) scheduleAgeCheck(mctx chasm.MutableContext) {
+	if mctx == nil || s.State.AgeTaskPending {
+		return
+	}
+	retention := s.State.GetLifecycle().GetRetention().AsDuration()
+	if retention <= 0 {
+		return
+	}
+	s.State.AgeTaskPending = true
+	mctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: mctx.Now(s).Add(retention)},
+		&streamlib.StreamAgeTask{})
+}
+
+// RunAgeCheck is the age task's transition: reclaim what has aged past the
+// retention, then re-arm for the next batch to age or stand down when nothing
+// is held. Re-arming waits at least the recheck interval, so a stream that
+// keeps taking records is checked on that cadence rather than per batch.
+func (s *Stream) RunAgeCheck(mctx chasm.MutableContext, recheck time.Duration) error {
+	now := mctx.Now(s)
+	next, err := s.TruncateAged(mctx, now)
+	if err != nil {
+		return err
+	}
+	if s.State.Closed || s.held() == 0 {
+		s.State.AgeTaskPending = false
+		return nil
+	}
+	at := now.Add(recheck)
+	if next.After(at) {
+		at = next
+	}
+	s.State.AgeTaskPending = true
+	mctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: at}, &streamlib.StreamAgeTask{})
+	return nil
+}
+
+// TruncateAged advances the floor past every batch older than the lifecycle's
+// retention as of now, and reports when the next batch ages out, or now when
+// an aged batch is held by an active consumer's floor and has to be asked
+// about again. The zero time means nothing is waiting to age.
+//
+// A closed stream is left alone: its retention counts down to deletion from
+// the close instead, and a consumer draining it is owed the tail.
+func (s *Stream) TruncateAged(mctx chasm.MutableContext, now time.Time) (time.Time, error) {
+	retention := s.State.GetLifecycle().GetRetention().AsDuration()
+	if retention <= 0 || s.State.Closed {
+		return time.Time{}, nil
+	}
+	floor, _, pinned := s.replayFloor()
+	newBase := s.State.BaseOffset
+	var next time.Time
+	starts := s.batchStarts()
+	for i, start := range starts {
+		end := s.State.HeadOffset
+		if i+1 < len(starts) {
+			end = starts[i+1]
+		}
+		if end <= s.State.BaseOffset {
+			continue
+		}
+		appended, ok, err := s.batchAppendedAt(mctx, start)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if !ok {
+			// Written before batches were stamped. It never ages, and
+			// nothing behind it can be reached either.
+			break
+		}
+		if expires := appended.Add(retention); expires.After(now) {
+			next = expires
+			break
+		}
+		if pinned && end > floor {
+			// Aged, but a workflow's History still refers to it. The floor
+			// moves up to the consumer's and no further; asked again later,
+			// in case the consumer has let go by then.
+			newBase = max(newBase, min(end, floor))
+			next = now
+			break
+		}
+		newBase = end
+	}
+	if newBase > s.State.BaseOffset {
+		s.State.BaseOffset = newBase
+		s.reclaim(mctx, newBase)
+	}
+	return next, nil
+}
+
+// batchAppendedAt reads when the batch keyed by start was written, reporting
+// false for a batch written before batches carried the time.
+func (s *Stream) batchAppendedAt(ctx chasm.Context, start int64) (time.Time, bool, error) {
+	field, ok := s.Batches[start]
+	if !ok {
+		return time.Time{}, false, nil
+	}
+	var batch streamlib.StreamRecordBatch
+	if err := proto.Unmarshal(field.Get(ctx).GetData(), &batch); err != nil {
+		return time.Time{}, false, err
+	}
+	if batch.GetAppendedAt() == nil {
+		return time.Time{}, false, nil
+	}
+	return batch.GetAppendedAt().AsTime(), true, nil
 }
 
 // notifyConsumers schedules the wake for consumers this append left behind.
@@ -835,12 +955,16 @@ func settleKinds(records []*streamlib.StreamRecord) []*streamlib.StreamRecord {
 	return out
 }
 
-func marshalBatch(records []*streamlib.StreamRecord) (*commonpb.DataBlob, error) {
-	// The serialized batch is also the producer's deduplication fingerprint, and
-	// protobuf map iteration order is not stable. A record carrying payload or
-	// record metadata would otherwise hash differently on a retry and be
-	// refused as a conflicting duplicate of itself.
-	data, err := marshalDeterministic(&streamlib.StreamRecordBatch{Records: records})
+// marshalBatch serializes a batch for storage, stamped with when it was
+// appended. The stamp is not part of the producer's fingerprint, which is
+// taken over the records alone, so a retry hashes the same however late it
+// arrives.
+func marshalBatch(records []*streamlib.StreamRecord, appendedAt time.Time) (*commonpb.DataBlob, error) {
+	batch := &streamlib.StreamRecordBatch{Records: records}
+	if !appendedAt.IsZero() {
+		batch.AppendedAt = timestamppb.New(appendedAt)
+	}
+	data, err := marshalDeterministic(batch)
 	if err != nil {
 		return nil, err
 	}

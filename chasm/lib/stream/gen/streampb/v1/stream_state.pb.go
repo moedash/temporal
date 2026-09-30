@@ -62,9 +62,13 @@ type StreamState struct {
 	// Kept for the lifecycle's byte cap, which the appended total cannot serve
 	// once truncation has reclaimed behind the floor. A batch straddling the
 	// floor counts whole, since it is held whole.
-	HeldBytes     int64 `protobuf:"varint,17,opt,name=held_bytes,json=heldBytes,proto3" json:"held_bytes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	HeldBytes int64 `protobuf:"varint,17,opt,name=held_bytes,json=heldBytes,proto3" json:"held_bytes,omitempty"`
+	// An age check is scheduled and has not run yet. Appends while it is set
+	// schedule none of their own; the check re-arms itself while the stream
+	// holds records and lowers the flag when it holds none.
+	AgeTaskPending bool `protobuf:"varint,18,opt,name=age_task_pending,json=ageTaskPending,proto3" json:"age_task_pending,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *StreamState) Reset() {
@@ -186,6 +190,13 @@ func (x *StreamState) GetHeldBytes() int64 {
 		return x.HeldBytes
 	}
 	return 0
+}
+
+func (x *StreamState) GetAgeTaskPending() bool {
+	if x != nil {
+		return x.AgeTaskPending
+	}
+	return false
 }
 
 // Hard bounds on what a stream may hold. Distinct from StreamLifecycle.max_items,
@@ -538,7 +549,10 @@ func (x *WorkflowStreamCursor) GetStartOffset() int64 {
 
 type StreamLifecycle struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// How long a closed stream stays readable before it is deleted.
+	// How long a record stays readable, and how long a closed stream stays
+	// readable before it is deleted. On an open stream batches older than this
+	// are reclaimed behind the floor, never past an active consumer's floor; on
+	// a closed one it is the time to deletion.
 	Retention *durationpb.Duration `protobuf:"bytes,1,opt,name=retention,proto3" json:"retention,omitempty"`
 	// Cap on readable messages. Whole batches are reclaimed once the floor
 	// passes them, so a capped stream has bounded storage.
@@ -613,7 +627,7 @@ var File_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto protorefle
 
 const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc = "" +
 	"\n" +
-	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xfa\a\n" +
+	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xa4\b\n" +
 	"\vStreamState\x12\x1f\n" +
 	"\vhead_offset\x18\x01 \x01(\x03R\n" +
 	"headOffset\x12\x1f\n" +
@@ -632,7 +646,8 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\x0eappended_bytes\x18\x0f \x01(\x03R\rappendedBytes\x12%\n" +
 	"\x0enotify_pending\x18\x10 \x01(\bR\rnotifyPending\x12\x1d\n" +
 	"\n" +
-	"held_bytes\x18\x11 \x01(\x03R\theldBytes\x1aw\n" +
+	"held_bytes\x18\x11 \x01(\x03R\theldBytes\x12(\n" +
+	"\x10age_task_pending\x18\x12 \x01(\bR\x0eageTaskPending\x1aw\n" +
 	"\x0eProducersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12O\n" +
 	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.stream.proto.v1.ProducerCursorR\x05value:\x028\x01\x1aw\n" +

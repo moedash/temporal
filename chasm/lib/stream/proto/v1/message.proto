@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.stream.proto.v1;
 
+import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/stream/v1/message.proto";
 
@@ -35,8 +36,12 @@ message StreamRecord {
 }
 
 // One append is one batch, and one batch is one data node. The server stores
-// this serialized and opaque; it decodes only to trim a partial first page or
-// to apply a topic filter.
+// this serialized and opaque; it decodes only to trim a partial first page, to
+// apply a topic filter, or to learn the batch's age.
 message StreamRecordBatch {
   repeated StreamRecord records = 1;
+  // When the batch was appended, for the lifecycle's retention age. Kept here
+  // rather than in the stream's state so the state stays free of a per-batch
+  // index; the age check reads the oldest batches to find it.
+  google.protobuf.Timestamp appended_at = 2;
 }

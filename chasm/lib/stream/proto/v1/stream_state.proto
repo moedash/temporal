@@ -58,6 +58,11 @@ message StreamState {
   // once truncation has reclaimed behind the floor. A batch straddling the
   // floor counts whole, since it is held whole.
   int64 held_bytes = 17;
+
+  // An age check is scheduled and has not run yet. Appends while it is set
+  // schedule none of their own; the check re-arms itself while the stream
+  // holds records and lowers the flag when it holds none.
+  bool age_task_pending = 18;
 }
 
 // Hard bounds on what a stream may hold. Distinct from StreamLifecycle.max_items,
@@ -137,7 +142,10 @@ message WorkflowStreamCursor {
 }
 
 message StreamLifecycle {
-  // How long a closed stream stays readable before it is deleted.
+  // How long a record stays readable, and how long a closed stream stays
+  // readable before it is deleted. On an open stream batches older than this
+  // are reclaimed behind the floor, never past an active consumer's floor; on
+  // a closed one it is the time to deletion.
   google.protobuf.Duration retention = 1;
   // Cap on readable messages. Whole batches are reclaimed once the floor
   // passes them, so a capped stream has bounded storage.

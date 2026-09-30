@@ -37,6 +37,18 @@
 // floor; the record cap refuses instead, and the byte cap simply stays full.
 // DescribeStream reports the lifecycle and the held bytes.
 //
+// # Retention
+//
+// The lifecycle's retention is an age. On an open stream, a batch older than
+// it is reclaimed behind the floor by a check the first append arms and that
+// re-arms itself on stream.retentionRecheckInterval while the stream holds
+// records, so a reader from BEGINNING sees the oldest record still young
+// enough. The check never moves the floor past an active workflow consumer's
+// replay floor; an aged batch a consumer still depends on waits until the
+// consumer lets go. On a closed stream the same retention is the time to
+// deletion, counted from the close, so a consumer can drain the tail first.
+// Batches written before they carried a timestamp never age.
+//
 // # Content hash
 //
 // The producer table tells a genuine retry from a divergent repeat by
