@@ -20,6 +20,8 @@
 //   - STREAM_CURSOR_BELOW_FLOOR: a read or a subscription start below the
 //     stream's retention floor. The message names the offset the stream now
 //     starts at.
+//   - STREAM_CLOSED: an append on a stream that has been sealed. Its records
+//     stay readable; nothing more goes in.
 //
 // [Refusal] builds one and [ReasonOf] reads one back.
 //

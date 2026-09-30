@@ -149,7 +149,7 @@ func (s *Stream) AddMessages(
 	req AddMessagesRequest,
 ) (AddMessagesResult, error) {
 	if s.State.Closed {
-		return AddMessagesResult{}, serviceerror.NewFailedPrecondition("stream is closed")
+		return AddMessagesResult{}, Refusal(ReasonStreamClosed, "stream is closed")
 	}
 	if len(req.Records) == 0 {
 		return AddMessagesResult{}, serviceerror.NewInvalidArgument("no records to append")

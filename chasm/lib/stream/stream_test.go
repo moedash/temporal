@@ -173,6 +173,7 @@ func TestReasonOfIgnoresMessagesWithoutAToken(t *testing.T) {
 	require.Empty(t, ReasonOf("SOMETHING_ELSE: with a separator"))
 	require.Equal(t, ReasonProducerConflict,
 		ReasonOf(Refusal(ReasonProducerConflict, "sequence %d", 3).Error()))
+	require.Equal(t, ReasonStreamClosed, ReasonOf(Refusal(ReasonStreamClosed, "closed").Error()))
 }
 
 func TestExpectedOffsetMismatchReportsHead(t *testing.T) {
@@ -213,6 +214,7 @@ func TestCloseRejectsFurtherAppends(t *testing.T) {
 	require.Error(t, err)
 	var precondition *serviceerror.FailedPrecondition
 	require.ErrorAs(t, err, &precondition)
+	require.Equal(t, ReasonStreamClosed, ReasonOf(err.Error()))
 }
 
 func TestReadSpansBatchesAndStartsAtTheBatchHoldingTheOffset(t *testing.T) {

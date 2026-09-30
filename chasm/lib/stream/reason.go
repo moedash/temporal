@@ -12,6 +12,7 @@ const (
 	ReasonProducerConflict      = "STREAM_PRODUCER_CONFLICT"
 	ReasonProducerStaleSequence = "STREAM_PRODUCER_STALE_SEQUENCE"
 	ReasonCursorBelowFloor      = "STREAM_CURSOR_BELOW_FLOOR"
+	ReasonStreamClosed          = "STREAM_CLOSED"
 )
 
 const reasonSeparator = ": "
@@ -31,7 +32,8 @@ func ReasonOf(message string) string {
 		return ""
 	}
 	switch token {
-	case ReasonProducerConflict, ReasonProducerStaleSequence, ReasonCursorBelowFloor:
+	case ReasonProducerConflict, ReasonProducerStaleSequence, ReasonCursorBelowFloor,
+		ReasonStreamClosed:
 		return token
 	default:
 		return ""
