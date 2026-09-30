@@ -27,6 +27,16 @@ func agingStream(t *testing.T, retention time.Duration) (*Stream, *chasm.MockMut
 	return s, mctx, &now
 }
 
+// pinConsumer registers an active workflow consumer whose replay floor is at
+// offset, written straight into the table so the test does not depend on how
+// a registration names its start.
+func pinConsumer(s *Stream, id string, offset int64) {
+	s.State.Consumers[id] = &streamlib.ConsumerCursor{
+		WorkflowId: "wf", RunId: "run", Offset: offset, ReplayFloor: offset,
+		Active: true, External: true,
+	}
+}
+
 func ageTasks(mctx *chasm.MockMutableContext) []chasm.MockTask {
 	var out []chasm.MockTask
 	for _, task := range mctx.Tasks {
@@ -93,10 +103,7 @@ func TestTruncateAgedStopsAtAnActiveConsumersFloor(t *testing.T) {
 	require.NoError(t, err)
 	_, err = s.AddMessages(mctx, AddMessagesRequest{Records: msgs("c", "d")})
 	require.NoError(t, err)
-	_, err = s.RegisterConsumer(mctx, ConsumerRegistration{
-		ConsumerID: "workflow:wf/run", WorkflowID: "wf", RunID: "run", Offset: 2, External: true,
-	})
-	require.NoError(t, err)
+	pinConsumer(s, "workflow:wf/run", 2)
 
 	*now = now.Add(2 * time.Hour)
 	next, err := s.TruncateAged(mctx, *now)
@@ -156,10 +163,7 @@ func TestRunAgeCheckReArmsWhileRecordsAreHeldAndStandsDownWhenNoneAre(t *testing
 
 	// A check that finds a batch held by a consumer asks again after the
 	// recheck interval rather than at once.
-	_, err = s.RegisterConsumer(mctx, ConsumerRegistration{
-		ConsumerID: "workflow:wf/run", WorkflowID: "wf", RunID: "run", Offset: 1, External: true,
-	})
-	require.NoError(t, err)
+	pinConsumer(s, "workflow:wf/run", 1)
 	*now = now.Add(time.Hour)
 	require.NoError(t, s.RunAgeCheck(mctx, time.Minute))
 	require.Equal(t, int64(1), s.State.BaseOffset)
