@@ -201,6 +201,9 @@ func (s *Stream) AddMessages(
 	if err := s.checkCapRoom(int64(len(req.Records))); err != nil {
 		return AddMessagesResult{}, err
 	}
+	if err := s.checkByteCap(int64(len(blob.Data))); err != nil {
+		return AddMessagesResult{}, err
+	}
 
 	if req.ExpectedOffset != nil && *req.ExpectedOffset != s.State.HeadOffset {
 		return AddMessagesResult{}, serviceerror.NewAlreadyExistsf(
@@ -217,6 +220,7 @@ func (s *Stream) AddMessages(
 
 	s.State.HeadOffset = first + count
 	s.State.AppendedBytes += int64(len(blob.Data))
+	s.State.HeldBytes += int64(len(blob.Data))
 	if req.ProducerID != "" {
 		if s.State.Producers == nil {
 			s.State.Producers = make(map[string]*streamlib.ProducerCursor)
@@ -229,7 +233,7 @@ func (s *Stream) AddMessages(
 		}
 	}
 
-	s.applyCap()
+	s.applyCap(mctx)
 	result := AddMessagesResult{
 		FirstOffset: first,
 		NextOffset:  s.State.HeadOffset,
@@ -439,7 +443,7 @@ func (s *Stream) CloseAndSchedule(mctx chasm.MutableContext, reason *commonpb.Pa
 // A consumer that is behind but not active is not protected. Reading from
 // below the base is an error naming where the stream now starts, the same
 // answer a log with a retention window gives anywhere else.
-func (s *Stream) Truncate(_ chasm.MutableContext, newBase int64) error {
+func (s *Stream) Truncate(mctx chasm.MutableContext, newBase int64) error {
 	if newBase < s.State.BaseOffset {
 		return serviceerror.NewInvalidArgumentf(
 			"cannot truncate backwards from %d to %d", s.State.BaseOffset, newBase)
@@ -455,7 +459,7 @@ func (s *Stream) Truncate(_ chasm.MutableContext, newBase int64) error {
 			newBase, holder, floor)
 	}
 	s.State.BaseOffset = newBase
-	s.reclaim(newBase)
+	s.reclaim(mctx, newBase)
 	return nil
 }
 
@@ -481,7 +485,11 @@ func (s *Stream) replayFloor() (int64, string, bool) {
 
 // reclaim drops batches lying entirely below the readable floor. A batch
 // straddling the floor stays, because the offsets above it are still readable.
-func (s *Stream) reclaim(newBase int64) {
+//
+// Each dropped batch is read once for its size, so the held bytes stay exact.
+// That read is the price of keeping the state free of a per-batch index, and
+// it is paid on a batch that is being deleted anyway.
+func (s *Stream) reclaim(ctx chasm.Context, newBase int64) {
 	starts := s.batchStarts()
 	for i, start := range starts {
 		end := s.State.HeadOffset
@@ -491,8 +499,18 @@ func (s *Stream) reclaim(newBase int64) {
 		if end > newBase {
 			return
 		}
+		s.State.HeldBytes = max(0, s.State.HeldBytes-s.batchBytes(ctx, start))
 		delete(s.Batches, start)
 	}
+}
+
+// batchBytes is the stored size of the batch keyed by start.
+func (s *Stream) batchBytes(ctx chasm.Context, start int64) int64 {
+	field, ok := s.Batches[start]
+	if !ok {
+		return 0
+	}
+	return int64(len(field.Get(ctx).GetData()))
 }
 
 // batchStarts returns the batch keys in offset order. Reading and reclaiming
@@ -602,7 +620,7 @@ func (s *Stream) ReadBatches(
 // Evaluated at the end of a successful append rather than by a sweeper: the
 // append transition is already writing, so folding the check into it costs
 // nothing and keeps the cap tight instead of eventually true.
-func (s *Stream) applyCap() {
+func (s *Stream) applyCap(ctx chasm.Context) {
 	maxItems := s.State.GetLifecycle().GetMaxItems()
 	if maxItems <= 0 {
 		return
@@ -623,7 +641,26 @@ func (s *Stream) applyCap() {
 		return
 	}
 	s.State.BaseOffset = newBase
-	s.reclaim(newBase)
+	s.reclaim(ctx, newBase)
+}
+
+// checkByteCap refuses an append that would take the held bytes past the
+// lifecycle's byte cap.
+//
+// Refused rather than reclaimed, unlike the record cap: reclaiming by bytes
+// would have to read the oldest batches to learn what dropping them frees, on
+// the hot path of every append. Room comes back as the record cap, an explicit
+// truncation or the retention age reclaims behind the floor, and the refusal
+// is the same one a budgeted stream gives, so a client handles both alike.
+func (s *Stream) checkByteCap(size int64) error {
+	maxBytes := s.State.GetLifecycle().GetMaxBytes()
+	if maxBytes <= 0 || s.State.HeldBytes+size <= maxBytes {
+		return nil
+	}
+	return serviceerror.NewResourceExhaustedf(
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT,
+		"stream holds %d of its cap of %d bytes; the append of %d does not fit",
+		s.State.HeldBytes, maxBytes, size)
 }
 
 // checkCapRoom refuses an append the cap could only absorb by dropping bytes an

@@ -52,6 +52,12 @@ message StreamState {
   // schedule none of their own; the task reads the head when it runs, so it
   // carries every append that landed before it.
   bool notify_pending = 16;
+
+  // Bytes of the batches the stream still holds, from the floor to the head.
+  // Kept for the lifecycle's byte cap, which the appended total cannot serve
+  // once truncation has reclaimed behind the floor. A batch straddling the
+  // floor counts whole, since it is held whole.
+  int64 held_bytes = 17;
 }
 
 // Hard bounds on what a stream may hold. Distinct from StreamLifecycle.max_items,
@@ -142,4 +148,9 @@ message StreamLifecycle {
   // behaves as a lifetime quota measured from that subscription and appends
   // past it are refused rather than reclaiming behind the consumer.
   int64 max_items = 2;
+  // Cap on held bytes. Unlike max_items it reclaims nothing: an append that
+  // would take the held bytes past it is refused, and room comes back only as
+  // the record cap, an explicit truncation or the retention age reclaims
+  // batches behind the floor.
+  int64 max_bytes = 3;
 }

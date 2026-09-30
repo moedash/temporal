@@ -25,6 +25,18 @@
 //
 // [Refusal] builds one and [ReasonOf] reads one back.
 //
+// # Capacity
+//
+// A standalone stream's creator sets its lifecycle: a record cap, a byte cap
+// and a retention. The record cap is a rolling window, reclaiming the oldest
+// batches as new ones land. The byte cap is a ceiling on held bytes: an
+// append that would cross it is refused with the storage-limit
+// ResourceExhausted a budgeted stream gives, and room comes back only as the
+// record cap, an explicit truncation or the retention age reclaims behind the
+// floor. Neither ever reclaims past an active workflow consumer's replay
+// floor; the record cap refuses instead, and the byte cap simply stays full.
+// DescribeStream reports the lifecycle and the held bytes.
+//
 // # Content hash
 //
 // The producer table tells a genuine retry from a divergent repeat by

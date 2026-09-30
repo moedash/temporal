@@ -58,6 +58,11 @@ type StreamState struct {
 	// schedule none of their own; the task reads the head when it runs, so it
 	// carries every append that landed before it.
 	NotifyPending bool `protobuf:"varint,16,opt,name=notify_pending,json=notifyPending,proto3" json:"notify_pending,omitempty"`
+	// Bytes of the batches the stream still holds, from the floor to the head.
+	// Kept for the lifecycle's byte cap, which the appended total cannot serve
+	// once truncation has reclaimed behind the floor. A batch straddling the
+	// floor counts whole, since it is held whole.
+	HeldBytes     int64 `protobuf:"varint,17,opt,name=held_bytes,json=heldBytes,proto3" json:"held_bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -174,6 +179,13 @@ func (x *StreamState) GetNotifyPending() bool {
 		return x.NotifyPending
 	}
 	return false
+}
+
+func (x *StreamState) GetHeldBytes() int64 {
+	if x != nil {
+		return x.HeldBytes
+	}
+	return 0
 }
 
 // Hard bounds on what a stream may hold. Distinct from StreamLifecycle.max_items,
@@ -536,7 +548,12 @@ type StreamLifecycle struct {
 	// because replay re-reads every range its History recorded, so the cap
 	// behaves as a lifetime quota measured from that subscription and appends
 	// past it are refused rather than reclaiming behind the consumer.
-	MaxItems      int64 `protobuf:"varint,2,opt,name=max_items,json=maxItems,proto3" json:"max_items,omitempty"`
+	MaxItems int64 `protobuf:"varint,2,opt,name=max_items,json=maxItems,proto3" json:"max_items,omitempty"`
+	// Cap on held bytes. Unlike max_items it reclaims nothing: an append that
+	// would take the held bytes past it is refused, and room comes back only as
+	// the record cap, an explicit truncation or the retention age reclaims
+	// batches behind the floor.
+	MaxBytes      int64 `protobuf:"varint,3,opt,name=max_bytes,json=maxBytes,proto3" json:"max_bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -585,11 +602,18 @@ func (x *StreamLifecycle) GetMaxItems() int64 {
 	return 0
 }
 
+func (x *StreamLifecycle) GetMaxBytes() int64 {
+	if x != nil {
+		return x.MaxBytes
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc = "" +
 	"\n" +
-	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xdb\a\n" +
+	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xfa\a\n" +
 	"\vStreamState\x12\x1f\n" +
 	"\vhead_offset\x18\x01 \x01(\x03R\n" +
 	"headOffset\x12\x1f\n" +
@@ -606,7 +630,9 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"close_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\x12O\n" +
 	"\x06budget\x18\x0e \x01(\v27.temporal.server.chasm.lib.stream.proto.v1.StreamBudgetR\x06budget\x12%\n" +
 	"\x0eappended_bytes\x18\x0f \x01(\x03R\rappendedBytes\x12%\n" +
-	"\x0enotify_pending\x18\x10 \x01(\bR\rnotifyPending\x1aw\n" +
+	"\x0enotify_pending\x18\x10 \x01(\bR\rnotifyPending\x12\x1d\n" +
+	"\n" +
+	"held_bytes\x18\x11 \x01(\x03R\theldBytes\x1aw\n" +
 	"\x0eProducersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12O\n" +
 	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.stream.proto.v1.ProducerCursorR\x05value:\x028\x01\x1aw\n" +
@@ -642,10 +668,11 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\vhas_pending\x18\a \x01(\bR\n" +
 	"hasPending\x12!\n" +
 	"\fstart_offset\x18\n" +
-	" \x01(\x03R\vstartOffsetJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"g\n" +
+	" \x01(\x03R\vstartOffsetJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"\x84\x01\n" +
 	"\x0fStreamLifecycle\x127\n" +
 	"\tretention\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\tretention\x12\x1b\n" +
-	"\tmax_items\x18\x02 \x01(\x03R\bmaxItemsB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
+	"\tmax_items\x18\x02 \x01(\x03R\bmaxItems\x12\x1b\n" +
+	"\tmax_bytes\x18\x03 \x01(\x03R\bmaxBytesB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDescOnce sync.Once

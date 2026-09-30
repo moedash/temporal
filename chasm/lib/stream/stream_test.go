@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
@@ -204,6 +205,67 @@ func TestFinishWritingFencesOneProducerOnly(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, s.State.Closed)
+}
+
+func TestHeldBytesFollowAppendsAndReclaim(t *testing.T) {
+	s := newTestStream(t)
+	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxItems: 3}
+
+	first, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b")})
+	require.NoError(t, err)
+	second, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("c", "d")})
+	require.NoError(t, err)
+	// The cap moved the floor to 1, inside the first batch, which stays whole.
+	require.Equal(t, int64(1), s.State.BaseOffset)
+	require.Equal(t, int64(len(first.Blob.Data)+len(second.Blob.Data)), s.State.HeldBytes)
+
+	// A third batch pushes the floor past the first batch, which is reclaimed
+	// and no longer counts.
+	third, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("e", "f")})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), s.State.BaseOffset)
+	require.Equal(t, int64(len(second.Blob.Data)+len(third.Blob.Data)), s.State.HeldBytes)
+	require.Equal(t, int64(len(first.Blob.Data)+len(second.Blob.Data)+len(third.Blob.Data)),
+		s.State.AppendedBytes, "the appended total keeps counting")
+
+	// An explicit truncation reclaims the same way.
+	require.NoError(t, s.Truncate(nil, 6))
+	require.Equal(t, int64(0), s.State.HeldBytes)
+}
+
+func TestByteCapRefusesAnAppendThatWouldCrossIt(t *testing.T) {
+	s := newTestStream(t)
+	first, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("aaaa", "bbbb")})
+	require.NoError(t, err)
+	batch := int64(len(first.Blob.Data))
+	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxBytes: 2*batch + batch/2}
+
+	// A second batch of the same size fits; a third would cross the cap.
+	_, err = s.AddMessages(nil, AddMessagesRequest{Records: msgs("cccc", "dddd")})
+	require.NoError(t, err)
+	_, err = s.AddMessages(nil, AddMessagesRequest{Records: msgs("eeee", "ffff")})
+	var exhausted *serviceerror.ResourceExhausted
+	require.ErrorAs(t, err, &exhausted)
+	require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, exhausted.Cause)
+	require.Equal(t, int64(4), s.State.HeadOffset, "a refused append writes nothing")
+
+	// Truncating behind the floor gives the room back.
+	require.NoError(t, s.Truncate(nil, 2))
+	_, err = s.AddMessages(nil, AddMessagesRequest{Records: msgs("eeee", "ffff")})
+	require.NoError(t, err)
+	require.Equal(t, int64(6), s.State.HeadOffset)
+}
+
+func TestByteCapNeverReclaims(t *testing.T) {
+	s := newTestStream(t)
+	first, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a")})
+	require.NoError(t, err)
+	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxBytes: int64(len(first.Blob.Data))}
+
+	_, err = s.AddMessages(nil, AddMessagesRequest{Records: msgs("b")})
+	require.Error(t, err)
+	require.Equal(t, int64(0), s.State.BaseOffset, "the byte cap does not move the floor")
+	require.Len(t, s.Batches, 1)
 }
 
 func TestCloseRejectsFurtherAppends(t *testing.T) {
@@ -473,7 +535,7 @@ func TestCapClampsToAConsumerThatRegisteredLate(t *testing.T) {
 	})
 	require.NoError(t, err)
 	s.State.Lifecycle = &streamlib.StreamLifecycle{MaxItems: 1}
-	s.applyCap()
+	s.applyCap(nil)
 
 	require.Equal(t, int64(0), s.State.BaseOffset, "the clamp keeps what the consumer needs")
 }
