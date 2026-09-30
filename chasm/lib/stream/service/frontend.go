@@ -148,6 +148,10 @@ func (h *FrontendHandler) checkLifecycle(
 		return nil, serviceerror.NewInvalidArgumentf(
 			"max items cannot be negative, got %d", lifecycle.GetMaxItems())
 	}
+	if lifecycle.GetMaxBytes() < 0 {
+		return nil, serviceerror.NewInvalidArgumentf(
+			"max bytes cannot be negative, got %d", lifecycle.GetMaxBytes())
+	}
 
 	retention := lifecycle.GetRetention().AsDuration()
 	switch {
