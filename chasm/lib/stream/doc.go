@@ -51,4 +51,12 @@
 // no producer to repeat under, the task being its boundary, and the worker's
 // codec runs over its record metadata payloads too, so the value may arrive
 // encoded on that path. The server applies no codec anywhere.
+//
+// # Replay re-supply
+//
+// A cold replay is handed every range the consumer's completed tasks
+// recorded, re-read from the streams, within one response's budget. A
+// re-supply the budget cuts short is refused as a whole rather than marked:
+// paging it needs a short flag on the poll response, or on the last
+// StreamSlice, that this package does not have on the wire yet.
 package stream
