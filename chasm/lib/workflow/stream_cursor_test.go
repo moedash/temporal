@@ -300,10 +300,113 @@ func TestRebuildRecreatesTheCursorFromItsEvents(t *testing.T) {
 	require.Equal(t, int64(4), w.StreamCursors["inputs"].Get(ctx).Offset())
 }
 
+// newAttachedStreamWithBodies is newAttachedStream with one record per body,
+// for a test that reads the records back.
+func newAttachedStreamWithBodies(
+	t *testing.T, ctx chasm.MutableContext, bodies ...string,
+) *stream.Stream {
+	t.Helper()
+	s := &stream.Stream{
+		State: &streamlib.StreamState{
+			Producers: make(map[string]*streamlib.ProducerCursor),
+			Consumers: make(map[string]*streamlib.ConsumerCursor),
+		},
+	}
+	// Two appends, so the copy has a batch to trim and a batch to take whole.
+	for _, half := range [][]string{bodies[:len(bodies)/2], bodies[len(bodies)/2:]} {
+		records := make([]*streamlib.StreamRecord, len(half))
+		for i, body := range half {
+			records[i] = &streamlib.StreamRecord{
+				Kind: streampb.STREAM_RECORD_KIND_DATA,
+				Body: &commonpb.Payload{Data: []byte(body)},
+			}
+		}
+		_, err := s.AddMessages(ctx, stream.AddMessagesRequest{Records: records})
+		require.NoError(t, err)
+	}
+	return s
+}
+
 // A reset run's cursor on a stream the base run owned gets a stream of the
 // reset run's own, starting where the cursor stands, so the ranges below it
 // stay in the base run and everything from here on is the reset run's.
 func TestResetRunInheritsAnOwnedStreamAtItsCursor(t *testing.T) {
+	baseCtx := newStreamCursorTestContextForRun("base-run")
+	base := &Workflow{}
+	base.Streams = chasm.Map[string, *stream.Stream]{
+		DefaultStreamName: chasm.NewComponentField(baseCtx,
+			newAttachedStreamWithBodies(t, baseCtx, "base-0", "base-1", "base-2", "base-3")),
+	}
+	_, err := base.SubscribeToOwnedStream(
+		baseCtx, DefaultStreamName, stream.AtOffset(0), stream.DefaultLimits())
+	require.NoError(t, err)
+
+	resetCtx := newStreamCursorTestContextForRun("reset-run")
+	reset := &Workflow{}
+	require.NoError(t,
+		streamSubscribedEvent{}.Apply(resetCtx, reset, subscribedEvent(DefaultStreamName, 0)))
+	// The cursor stands at 1, inside the base run's first batch, so the copy
+	// has to trim that batch rather than take it whole. The reset-point task
+	// had been given [1,3); the base run's last record, past that range,
+	// belongs to the timeline the reset leaves behind.
+	require.NoError(t, reset.ApplyConsumedStreamRanges(resetCtx, []*streampb.StreamRange{
+		{StreamId: DefaultStreamName, FromOffset: 0, ToOffset: 1},
+	}))
+	resetPoint := []*streampb.StreamRange{{StreamId: DefaultStreamName, FromOffset: 1, ToOffset: 3}}
+
+	require.NoError(t, reset.InheritStreamsOnReset(
+		resetCtx, base, baseCtx, stream.DefaultLimits(), resetPoint))
+
+	cursor := reset.StreamCursors[DefaultStreamName].Get(resetCtx)
+	require.False(t, cursor.IsExternal())
+	require.Equal(t, int64(1), cursor.Offset())
+
+	own := reset.OwnedStream(resetCtx, DefaultStreamName)
+	require.NotNil(t, own, "the reset run reads and writes a stream of its own")
+	state, err := own.Snapshot(resetCtx, struct{}{})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), state.GetBaseOffset(), "the stream continues the offset space")
+	require.Equal(t, int64(3), state.GetHeadOffset(),
+		"the range the reset-point task consumed is carried, so it gets it again")
+	require.NotNil(t, state.GetBudget(), "an owned stream is budgeted like one created by a publish")
+	require.Empty(t, state.GetProducers(), "a copy is the stream's own past, not a producer's append")
+	pin := state.GetConsumers()[streamConsumerID(DefaultStreamName)]
+	require.NotNil(t, pin, "the reset run pins its own stream")
+	require.Equal(t, "reset-run", pin.GetRunId())
+	require.Equal(t, int64(1), pin.GetReplayFloor())
+
+	// The carried records read back at the offsets the base run gave them;
+	// nothing below the cursor or past the range came along.
+	window, err := own.ReadWindow(resetCtx, stream.WindowRequest{From: 1})
+	require.NoError(t, err)
+	carried, next, err := stream.CollectRecords(window.Blobs, window.Starts, 1, window.To, 10, nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), next)
+	require.Equal(t, []string{"base-1", "base-2"}, testBodies(carried))
+	require.Equal(t, []int64{1, 2}, []int64{carried[0].GetOffset(), carried[1].GetOffset()})
+	_, err = own.ReadWindow(resetCtx, stream.WindowRequest{From: 0})
+	require.Equal(t, stream.ReasonCursorBelowFloor, stream.ReasonOf(err.Error()))
+
+	// The base run's stream is untouched: it still holds what the reset run's
+	// history refers to.
+	baseState, err := base.OwnedStream(baseCtx, DefaultStreamName).Snapshot(baseCtx, struct{}{})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), baseState.GetBaseOffset())
+	require.Equal(t, int64(4), baseState.GetHeadOffset())
+
+	// A publish on the reset run lands after the carried records.
+	result, err := own.AddMessages(resetCtx, stream.AddMessagesRequest{
+		Records: []*streamlib.StreamRecord{{Kind: streampb.STREAM_RECORD_KIND_DATA}},
+		Limits:  stream.DefaultLimits(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), result.FirstOffset)
+}
+
+// A reset whose reset-point task recorded nothing for the stream, because it
+// consumed nothing or never completed, carries nothing: the reset run's stream
+// starts empty at the cursor.
+func TestResetRunCarriesNothingWithoutAResetPointRange(t *testing.T) {
 	baseCtx := newStreamCursorTestContextForRun("base-run")
 	base := &Workflow{}
 	base.Streams = chasm.Map[string, *stream.Stream]{
@@ -320,39 +423,23 @@ func TestResetRunInheritsAnOwnedStreamAtItsCursor(t *testing.T) {
 	require.NoError(t, reset.ApplyConsumedStreamRanges(resetCtx, []*streampb.StreamRange{
 		{StreamId: DefaultStreamName, FromOffset: 0, ToOffset: 2},
 	}))
+	empty := []*streampb.StreamRange{{StreamId: DefaultStreamName, FromOffset: 2, ToOffset: 2}}
+	require.NoError(t, reset.InheritStreamsOnReset(
+		resetCtx, base, baseCtx, stream.DefaultLimits(), empty))
 
-	require.NoError(t, reset.InheritStreamsOnReset(resetCtx, base, baseCtx, stream.DefaultLimits()))
-
-	cursor := reset.StreamCursors[DefaultStreamName].Get(resetCtx)
-	require.False(t, cursor.IsExternal())
-	require.Equal(t, int64(2), cursor.Offset())
-
-	own := reset.OwnedStream(resetCtx, DefaultStreamName)
-	require.NotNil(t, own, "the reset run reads and writes a stream of its own")
-	state, err := own.Snapshot(resetCtx, struct{}{})
+	state, err := reset.OwnedStream(resetCtx, DefaultStreamName).Snapshot(resetCtx, struct{}{})
 	require.NoError(t, err)
-	require.Equal(t, int64(2), state.GetBaseOffset(), "the stream continues the offset space")
-	require.Equal(t, int64(2), state.GetHeadOffset())
-	require.NotNil(t, state.GetBudget(), "an owned stream is budgeted like one created by a publish")
-	pin := state.GetConsumers()[streamConsumerID(DefaultStreamName)]
-	require.NotNil(t, pin, "the reset run pins its own stream")
-	require.Equal(t, "reset-run", pin.GetRunId())
-	require.Equal(t, int64(2), pin.GetReplayFloor())
+	require.Equal(t, int64(2), state.GetBaseOffset())
+	require.Equal(t, int64(2), state.GetHeadOffset(),
+		"the base run's records past the cursor stay with the base run")
+}
 
-	// The base run's stream is untouched: it still holds what the reset run's
-	// history refers to.
-	baseState, err := base.OwnedStream(baseCtx, DefaultStreamName).Snapshot(baseCtx, struct{}{})
-	require.NoError(t, err)
-	require.Equal(t, int64(0), baseState.GetBaseOffset())
-	require.Equal(t, int64(4), baseState.GetHeadOffset())
-
-	// A publish on the reset run lands after the inherited position.
-	result, err := own.AddMessages(resetCtx, stream.AddMessagesRequest{
-		Records: []*streamlib.StreamRecord{{Kind: streampb.STREAM_RECORD_KIND_DATA}},
-		Limits:  stream.DefaultLimits(),
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(2), result.FirstOffset)
+func testBodies(records []*streamlib.StreamRecord) []string {
+	out := make([]string, len(records))
+	for i, r := range records {
+		out[i] = string(r.GetBody().GetData())
+	}
+	return out
 }
 
 // A reset run's cursor on a stream in another execution stays on that stream
@@ -372,7 +459,7 @@ func TestResetRunInheritsAnExternalCursorAsExternal(t *testing.T) {
 		{StreamId: "shared", FromOffset: 0, ToOffset: 3},
 	}))
 
-	require.NoError(t, reset.InheritStreamsOnReset(resetCtx, base, baseCtx, stream.DefaultLimits()))
+	require.NoError(t, reset.InheritStreamsOnReset(resetCtx, base, baseCtx, stream.DefaultLimits(), nil))
 
 	cursor := reset.StreamCursors["shared"].Get(resetCtx)
 	require.True(t, cursor.IsExternal())
@@ -396,7 +483,7 @@ func TestResetRunCarriesASubscriptionTheEventsNeverMentioned(t *testing.T) {
 
 	resetCtx := newStreamCursorTestContextForRun("reset-run")
 	reset := &Workflow{}
-	require.NoError(t, reset.InheritStreamsOnReset(resetCtx, base, baseCtx, stream.DefaultLimits()))
+	require.NoError(t, reset.InheritStreamsOnReset(resetCtx, base, baseCtx, stream.DefaultLimits(), nil))
 
 	cursor := reset.StreamCursors["inputs"].Get(resetCtx)
 	require.Equal(t, int64(1), cursor.StartOffset())

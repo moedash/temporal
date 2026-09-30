@@ -392,3 +392,131 @@ func TestResetOfAPublisherRestartsItsStreamAtZero(t *testing.T) {
 	require.Equal(t, []int64{0, 0}, resetOffsets,
 		"the copied event and the new one name the same offset for different records")
 }
+
+// A reset re-runs the task at the reset point, and that task had been given a
+// range of the base run's own stream which its completion, not copied, was the
+// only record of. The reset run's stream starts with those records at the same
+// offsets, so its first task is given them again, while the ranges recorded
+// before the reset point are still re-supplied from the base run.
+func TestResetRedeliversWhatTheResetPointTaskConsumed(t *testing.T) {
+	// Dedicated, because the cold replay at the end evicts the cached
+	// workflow context through CloseShard.
+	env := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+	s := newStreamTestEnvFrom(t, env)
+	execution, tq := startConsumer(t, s, "stream-wf-reset-redeliver-")
+
+	var delivered [][]*streampb.StreamSlice
+	var commands [][]*commandpb.Command
+	//nolint:staticcheck // SA1019: only the deprecated poller can emit this command type.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
+			delivered = append(delivered, resp.GetStreamSlices())
+			next := commands[0]
+			commands = commands[1:]
+			return next, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	runTask := func(cmds []*commandpb.Command) []*streampb.StreamSlice {
+		t.Helper()
+		commands = append(commands, cmds)
+		_, err := poller.PollAndProcessWorkflowTask()
+		require.NoError(t, err)
+		return delivered[len(delivered)-1]
+	}
+
+	// Base run: publish two, subscribe, consume them, publish a third, and
+	// consume that on a fourth task, which is the reset point.
+	runTask(publishCommand("before-1", "before-2"))
+	_, err := s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(),
+			StreamName: chasmworkflow.DefaultStreamName, StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"before-1", "before-2"},
+		apiBodies(currentSlice(t, runTask(nil)).GetRecords()))
+	signalWorkflow(t, s, execution.GetWorkflowId(), execution.GetRunId())
+	runTask(publishCommand("before-3"))
+	consumedAtResetPoint := currentSlice(t, runTask(nil))
+	require.Equal(t, []string{"before-3"}, apiBodies(consumedAtResetPoint.GetRecords()))
+	require.Equal(t, int64(2), consumedAtResetPoint.GetFromOffset())
+	require.Equal(t, int64(3), consumedAtResetPoint.GetToOffset())
+
+	baseEvents := env.GetHistory(s.ns, execution)
+	firstConsumedAt := completedEventWithCursors(t, baseEvents)
+
+	// Reset to the fourth task. Its completion, which recorded [2,3), is not
+	// copied, so the reset run's cursor stands at 2.
+	resetRunID := resetTo(t, s, execution, nthCompletedEvent(t, baseEvents, 4))
+	resetRun := &commonpb.WorkflowExecution{WorkflowId: execution.GetWorkflowId(), RunId: resetRunID}
+
+	// The reset run's first task is given the range the reset-point task had
+	// consumed, from a stream of its own, and the earlier range from the base.
+	first := runTask(nil)
+	replayed := sliceForEvent(first, firstConsumedAt)
+	require.NotNil(t, replayed)
+	require.Equal(t, execution.GetRunId(), replayed.GetRunId(),
+		"a range recorded before the reset point is read from the base run")
+	require.Equal(t, []string{"before-1", "before-2"}, apiBodies(replayed.GetRecords()))
+	live := currentSlice(t, first)
+	require.Equal(t, resetRunID, live.GetRunId())
+	require.Equal(t, int64(2), live.GetFromOffset(), "the inherited cursor keeps its position")
+	require.Equal(t, int64(3), live.GetToOffset())
+	require.Equal(t, []string{"before-3"}, apiBodies(live.GetRecords()),
+		"the input the reset-point task consumed is delivered again")
+
+	// The reset run's stream holds the carried record at its offset and goes
+	// on from there.
+	signalWorkflow(t, s, execution.GetWorkflowId(), resetRunID)
+	runTask(publishCommand("after-1"))
+	own := currentSlice(t, runTask(nil))
+	require.Equal(t, int64(3), own.GetFromOffset())
+	require.Equal(t, int64(4), own.GetToOffset())
+	require.Equal(t, []string{"after-1"}, apiBodies(own.GetRecords()))
+
+	resetPoll, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(),
+			OwnerRunId: resetRunID, FromOffset: 2,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"before-3", "after-1"}, bodies(resetPoll.GetFrontendResponse().GetRecords()))
+	require.Equal(t, []int64{2, 3}, offsets(resetPoll.GetFrontendResponse().GetRecords()))
+
+	// The base run's stream is untouched.
+	basePoll, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(),
+			OwnerRunId: execution.GetRunId(), FromOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"before-1", "before-2", "before-3"},
+		bodies(basePoll.GetFrontendResponse().GetRecords()))
+
+	// A cold replay re-supplies the redelivered range from the reset run's own
+	// stream, tagged with the completion that recorded it.
+	env.CloseShard(env.NamespaceID().String(), execution.GetWorkflowId())
+	signalWorkflow(t, s, execution.GetWorkflowId(), resetRunID)
+	cold := runTask(nil)
+	fromBase := sliceForEvent(cold, firstConsumedAt)
+	require.NotNil(t, fromBase)
+	require.Equal(t, execution.GetRunId(), fromBase.GetRunId())
+	redeliveredAt := completedEventWithCursorsAfter(t, env.GetHistory(s.ns, resetRun), firstConsumedAt)
+	fromReset := sliceForEvent(cold, redeliveredAt)
+	require.NotNil(t, fromReset)
+	require.Equal(t, resetRunID, fromReset.GetRunId())
+	require.Equal(t, int64(2), fromReset.GetFromOffset())
+	require.Equal(t, int64(3), fromReset.GetToOffset())
+	require.Equal(t, []string{"before-3"}, apiBodies(fromReset.GetRecords()))
+}

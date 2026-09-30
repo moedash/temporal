@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/api/stream/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -255,7 +256,8 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	defer func() { resetWorkflow.GetReleaseFn()(retError) }()
 
 	resetMS := resetWorkflow.GetMutableState()
-	err = r.inheritStreams(ctx, namespaceEntry, baseWorkflow.GetMutableState(), resetMS)
+	err = r.inheritStreams(ctx, namespaceEntry, baseWorkflow.GetMutableState(), resetMS,
+		baseBranchToken, baseRebuildLastEventID+1)
 	if err != nil {
 		return err
 	}
@@ -296,12 +298,15 @@ func (r *workflowResetterImpl) ResetWorkflow(
 // reset run's events with what only the base run's state can say: which
 // streams live in other executions, and the frontier those last pushed. A
 // cursor on a stream the base run owned gets a stream of the reset run's own,
-// continuing the offset space from where the cursor stands.
+// continuing the offset space from where the cursor stands and holding the
+// range the reset-point task consumed, read from the event that closed it.
 func (r *workflowResetterImpl) inheritStreams(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	baseMS historyi.MutableState,
 	resetMS historyi.MutableState,
+	baseBranchToken []byte,
+	finishEventID int64,
 ) error {
 	if !resetMS.HasChasmWorkflowComponent() {
 		return nil
@@ -323,12 +328,43 @@ func (r *workflowResetterImpl) inheritStreams(
 			return err
 		}
 	}
+	resetPoint, err := r.resetPointStreamRanges(ctx, baseBranchToken, finishEventID)
+	if err != nil {
+		return err
+	}
 	reset, resetCtx, err := resetMS.ChasmWorkflowComponent(ctx)
 	if err != nil {
 		return err
 	}
 	limits := r.shardContext.GetConfig().Stream.LimitsFor(namespaceEntry.Name().String())
-	return reset.InheritStreamsOnReset(resetCtx, base, baseCtx, limits)
+	return reset.InheritStreamsOnReset(resetCtx, base, baseCtx, limits, resetPoint)
+}
+
+// resetPointStreamRanges reads the stream ranges the reset-point task recorded
+// on the event that closed it, the first event the reset run does not copy.
+// A task that failed or timed out recorded none, and a reset to such a task
+// carries nothing.
+func (r *workflowResetterImpl) resetPointStreamRanges(
+	ctx context.Context,
+	baseBranchToken []byte,
+	finishEventID int64,
+) ([]*streampb.StreamRange, error) {
+	resp, err := r.executionMgr.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+		BranchToken: baseBranchToken,
+		MinEventID:  finishEventID,
+		MaxEventID:  finishEventID + 1,
+		PageSize:    1,
+		ShardID:     r.shardContext.GetShardID(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, event := range resp.HistoryEvents {
+		if event.GetEventId() == finishEventID {
+			return event.GetWorkflowTaskCompletedEventAttributes().GetConsumedStreamRanges(), nil
+		}
+	}
+	return nil, nil
 }
 
 func (r *workflowResetterImpl) prepareResetWorkflow(

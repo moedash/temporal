@@ -179,7 +179,9 @@ func TestAnInheritedStreamIsNotBornOverItsItemBudget(t *testing.T) {
 	}
 
 	// The inherited cursor stands far past the item budget.
-	require.NoError(t, w.ownStreamFrom(ctx, DefaultStreamName, 100, limits))
+	created, createErr := w.ownStreamFrom(ctx, DefaultStreamName, 100, limits)
+	require.NoError(t, createErr)
+	require.True(t, created)
 
 	_, err := w.AppendToOwnedStream(ctx, DefaultStreamName, stream.AddMessagesRequest{
 		Records: budgetTestRecords(8),

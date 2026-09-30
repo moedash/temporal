@@ -303,15 +303,21 @@ func (w *Workflow) ApplyConsumedStreamRanges(
 // started in the base run. A cursor on a stream in another execution keeps
 // reading that stream; it is marked so and given the frontier the base run
 // last knew. A cursor on a stream the base run owned gets a stream of this
-// run's own, starting at the offset the cursor stands at: the ranges below it
-// are in the base run's stream, which is where replay re-reads them, and
-// everything from here on is this run's. Continuing the offset space is what
-// keeps a range in this run's History unambiguous about which run holds it.
+// run's own, starting at the offset the cursor stands at and holding a copy of
+// the range the reset-point task had been given from there, when resetPoint
+// names one: the ranges below the cursor are in the base run's stream, which
+// is where replay re-reads them, and everything from the cursor on is this
+// run's. Continuing the offset space is what keeps a range in this run's
+// History unambiguous about which run holds it, and the copy is what lets the
+// reset re-run the reset-point task with its input.
 //
-// Two things the reset run does not get. Records the base run's stream held
-// but had not delivered, everything between the cursor and the base head, are
-// not carried and are invisible to it: the reset run starts past them. And the
-// ranges below the cursor stay in the base run's mutable state, so nothing
+// resetPoint is what the reset-point task's completion recorded, if it
+// completed. That event is not copied, so the rebuild leaves the cursor at the
+// start of its range, and the copy ends where the range did. Records the base
+// run's stream took after that range belong to the timeline the reset leaves
+// behind and are not carried.
+//
+// The ranges below the cursor stay in the base run's mutable state, so nothing
 // here pins that run. Once namespace retention deletes it, the reset run's
 // cold replay has nowhere to read those ranges from.
 func (w *Workflow) InheritStreamsOnReset(
@@ -319,6 +325,7 @@ func (w *Workflow) InheritStreamsOnReset(
 	base *Workflow,
 	baseCtx chasm.Context,
 	limits stream.Limits,
+	resetPoint []*streampb.StreamRange,
 ) error {
 	if w.StreamCursors == nil {
 		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
@@ -339,11 +346,67 @@ func (w *Workflow) InheritStreamsOnReset(
 			cursor.MarkExternal(mctx, baseCursor.KnownHead())
 			continue
 		}
-		if err := w.ownStreamFrom(mctx, name, cursor.Offset(), limits); err != nil {
+		created, err := w.ownStreamFrom(mctx, name, cursor.Offset(), limits)
+		if err != nil {
 			return err
+		}
+		if !created {
+			continue
+		}
+		for _, recorded := range resetPoint {
+			if recorded.GetStreamId() != cursor.StreamID() {
+				continue
+			}
+			err := w.carryResetPointRange(mctx, name, cursor.Offset(), recorded.GetToOffset(),
+				base, baseCtx)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// carryResetPointRange copies into this run's new stream the records of the
+// base run's stream of the same name from the inherited cursor to the end of
+// the range the reset-point task consumed.
+//
+// The reset re-runs that task, and a task re-run without its input would
+// decide on less than the run it was reset from saw. The records keep their
+// offsets, so the appended events the copied history carries stay true. A
+// stream a workflow owns is never truncated, so the range is there to read; if
+// it is not, the reset is refused rather than left to re-run the task on a
+// hole.
+func (w *Workflow) carryResetPointRange(
+	mctx chasm.MutableContext,
+	name string,
+	from int64,
+	to int64,
+	base *Workflow,
+	baseCtx chasm.Context,
+) error {
+	if base == nil || to <= from {
+		return nil
+	}
+	source := base.OwnedStream(baseCtx, name)
+	if source == nil {
+		return nil
+	}
+	if floor := source.State.GetBaseOffset(); from < floor {
+		return serviceerror.NewFailedPreconditionf(
+			"stream %q of the base run starts at %d, past the inherited offset %d",
+			name, floor, from)
+	}
+	if head := source.State.GetHeadOffset(); to > head {
+		return serviceerror.NewFailedPreconditionf(
+			"stream %q of the base run ends at %d, short of the recorded offset %d",
+			name, head, to)
+	}
+	blobs, starts, err := source.ReadBatches(baseCtx, from, to, 0)
+	if err != nil {
+		return err
+	}
+	return w.Streams[name].Get(mctx).Seed(mctx, blobs, starts, from, to)
 }
 
 // cursorNamed returns a workflow's cursor by stream name, or nil when the
@@ -388,14 +451,15 @@ func (w *Workflow) carryBaseCursors(
 
 // ownStreamFrom gives this run a stream of its own by that name, beginning at
 // the given offset and pinned by this run's consumer there, unless it has one.
+// It reports whether it made the stream.
 func (w *Workflow) ownStreamFrom(
 	mctx chasm.MutableContext,
 	name string,
 	offset int64,
 	limits stream.Limits,
-) error {
+) (bool, error) {
 	if _, ok := w.Streams[name]; ok {
-		return nil
+		return false, nil
 	}
 	if w.Streams == nil {
 		w.Streams = make(chasm.Map[string, *stream.Stream])
@@ -409,7 +473,7 @@ func (w *Workflow) ownStreamFrom(
 		},
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 	key := mctx.ExecutionKey()
 	if _, err := created.RegisterConsumer(mctx, stream.ConsumerRegistration{
@@ -419,10 +483,10 @@ func (w *Workflow) ownStreamFrom(
 		Start:        stream.AtOffset(offset),
 		MaxConsumers: limits.MaxConsumersPerStream,
 	}); err != nil {
-		return err
+		return false, err
 	}
 	w.Streams[name] = chasm.NewComponentField(mctx, created)
-	return nil
+	return true, nil
 }
 
 // AdvanceKnownHead records how far a stream in another execution has moved.
