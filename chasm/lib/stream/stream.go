@@ -2,7 +2,6 @@ package stream
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"maps"
 	"slices"
 	"time"
@@ -163,11 +162,15 @@ func (s *Stream) AddMessages(
 	if err := checkBatchBytes(req.Records, limits); err != nil {
 		return AddMessagesResult{}, err
 	}
-	blob, err := marshalBatch(settleKinds(req.Records))
+	settled := settleKinds(req.Records)
+	blob, err := marshalBatch(settled)
 	if err != nil {
 		return AddMessagesResult{}, err
 	}
-	hash := contentHash(blob.Data)
+	hash, err := batchFingerprint(settled, blob.Data)
+	if err != nil {
+		return AddMessagesResult{}, err
+	}
 
 	if replay, err := s.checkProducer(req, hash); err != nil || replay != nil {
 		if err != nil {
@@ -794,8 +797,7 @@ func marshalBatch(records []*streamlib.StreamRecord) (*commonpb.DataBlob, error)
 	// protobuf map iteration order is not stable. A record carrying payload or
 	// record metadata would otherwise hash differently on a retry and be
 	// refused as a conflicting duplicate of itself.
-	data, err := (proto.MarshalOptions{Deterministic: true}).Marshal(
-		&streamlib.StreamRecordBatch{Records: records})
+	data, err := marshalDeterministic(&streamlib.StreamRecordBatch{Records: records})
 	if err != nil {
 		return nil, err
 	}
@@ -805,7 +807,6 @@ func marshalBatch(records []*streamlib.StreamRecord) (*commonpb.DataBlob, error)
 	}, nil
 }
 
-func contentHash(data []byte) []byte {
-	sum := sha256.Sum256(data)
-	return sum[:]
+func marshalDeterministic(m proto.Message) ([]byte, error) {
+	return (proto.MarshalOptions{Deterministic: true}).Marshal(m)
 }
