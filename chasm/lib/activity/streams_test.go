@@ -76,6 +76,8 @@ func TestActivityStreamsEndAtTerminalStatus(t *testing.T) {
 			})
 			var precondition *serviceerror.FailedPrecondition
 			require.ErrorAs(t, err, &precondition)
+			require.Equal(t, stream.ReasonStreamClosed, stream.ReasonOf(err.Error()),
+				"an SDK maps it to its closed-stream error by the token")
 			require.Nil(t, a.OwnedStream(ctx, stream.DefaultStreamName),
 				"a refused append must not leave a stream behind")
 		})

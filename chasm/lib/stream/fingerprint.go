@@ -5,14 +5,26 @@ import (
 	"encoding/hex"
 	"strings"
 
-	"go.temporal.io/api/serviceerror"
+	commonpb "go.temporal.io/api/common/v1"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 )
 
 // ContentHashMetadataKey is the record metadata key under which a producer
-// declares a record's identity before its payload codec runs: the lowercase
-// hex SHA-256 of the converted body. See the package doc.
+// declares a record's identity before its payload codec runs. The value is a
+// payload with encoding binary/plain whose data is the 64 lowercase hex
+// characters of [ContentHashOf] over the converted body. See the package doc.
 const ContentHashMetadataKey = "temporal.io/content-hash"
+
+// ContentHashOf is the SHA-256 a producer declares for a body: over the
+// deterministic proto serialization of the converted payload, metadata and
+// data, before any codec or external storage touches it.
+func ContentHashOf(body *commonpb.Payload) ([]byte, error) {
+	data, err := marshalDeterministic(body)
+	if err != nil {
+		return nil, err
+	}
+	return contentHash(data), nil
+}
 
 // batchFingerprint is what the producer table compares a repeat against.
 //
@@ -23,11 +35,8 @@ const ContentHashMetadataKey = "temporal.io/content-hash"
 func batchFingerprint(records []*streamlib.StreamRecord, encoded []byte) ([]byte, error) {
 	declared := false
 	digests := make([]byte, 0, sha256.Size*len(records))
-	for i, record := range records {
-		digest, ok, err := declaredContentHash(record)
-		if err != nil {
-			return nil, serviceerror.NewInvalidArgumentf("record %d: %v", i, err)
-		}
+	for _, record := range records {
+		digest, ok := declaredContentHash(record)
 		if !ok {
 			data, err := marshalDeterministic(record)
 			if err != nil {
@@ -59,21 +68,20 @@ func batchFingerprint(records []*streamlib.StreamRecord, encoded []byte) ([]byte
 	return contentHash(digests), nil
 }
 
-// declaredContentHash reads the hash a record declares, reporting whether it
-// declared one at all.
-func declaredContentHash(record *streamlib.StreamRecord) ([]byte, bool, error) {
+// declaredContentHash reads the hash a record declares. A record without the
+// key, or whose value is not a hex SHA-256, reports none and is fingerprinted
+// by its bytes: a value a codec has encoded is unreadable here, and refusing
+// the append for it would make the key worse than no key at all.
+func declaredContentHash(record *streamlib.StreamRecord) ([]byte, bool) {
 	payload, ok := record.GetMetadata()[ContentHashMetadataKey]
 	if !ok {
-		return nil, false, nil
+		return nil, false
 	}
-	text := strings.TrimSpace(string(payload.GetData()))
-	digest, err := hex.DecodeString(text)
+	digest, err := hex.DecodeString(strings.TrimSpace(string(payload.GetData())))
 	if err != nil || len(digest) != sha256.Size {
-		return nil, true, serviceerror.NewInvalidArgumentf(
-			"metadata %q must be the hex SHA-256 of the record's converted body, got %q",
-			ContentHashMetadataKey, text)
+		return nil, false
 	}
-	return digest, true, nil
+	return digest, true
 }
 
 func contentHash(data []byte) []byte {
