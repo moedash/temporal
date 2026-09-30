@@ -167,9 +167,15 @@ func (s *Stream) AddMessages(
 	if err != nil {
 		return AddMessagesResult{}, err
 	}
-	hash, err := batchFingerprint(settled, blob.Data)
-	if err != nil {
-		return AddMessagesResult{}, err
+	// Only a producer that named itself can repeat, so only then is a
+	// fingerprint taken, and only then is a declared content hash read. A
+	// workflow's own publish names no producer: the task is its boundary, and
+	// its codec may have encoded the declared value on the way in.
+	var hash []byte
+	if req.ProducerID != "" {
+		if hash, err = batchFingerprint(settled, blob.Data); err != nil {
+			return AddMessagesResult{}, err
+		}
 	}
 
 	if replay, err := s.checkProducer(req, hash); err != nil || replay != nil {
