@@ -22,6 +22,9 @@
 //     starts at.
 //   - STREAM_CLOSED: an append on a stream that has been sealed. Its records
 //     stay readable; nothing more goes in.
+//   - STREAM_POLICY_MISMATCH: a create naming a stream that already exists
+//     with a different lifecycle. A create that repeats the existing
+//     lifecycle is an idempotent retry and answers AlreadyExists instead.
 //
 // [Refusal] builds one and [ReasonOf] reads one back.
 //
