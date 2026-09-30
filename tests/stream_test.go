@@ -15,8 +15,18 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
+
+// requireReason checks a refusal the way an SDK reads it off a raw gRPC
+// client: by status code and by the reason token in the message prefix.
+func requireReason(t *testing.T, err error, code codes.Code, reason string) {
+	t.Helper()
+	require.Equal(t, code, status.Code(err), "%v", err)
+	require.Equal(t, reason, chasmstream.ReasonOf(status.Convert(err).Message()), "%v", err)
+}
 
 // End-to-end coverage of the native stream path: append through the frontend,
 // read back by offset, and the lifecycle transitions around it. This is the
@@ -211,6 +221,19 @@ func TestStreamProducerDedup(t *testing.T) {
 		Records: streamMsgs("", "different"), ProducerId: "p1", Sequence: 1,
 	})
 	require.ErrorContains(t, err, "different content")
+	requireReason(t, err, codes.FailedPrecondition, chasmstream.ReasonProducerConflict)
+
+	// The table keeps the producer's most recent sequence only, so once a later
+	// one lands an earlier one cannot be answered and is refused as stale.
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{
+		Records: streamMsgs("", "c"), ProducerId: "p1", Sequence: 2,
+	})
+	require.NoError(t, err)
+	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{
+		Records: streamMsgs("", "a", "b"), ProducerId: "p1", Sequence: 1,
+	})
+	requireReason(t, err, codes.FailedPrecondition, chasmstream.ReasonProducerStaleSequence)
+	require.Equal(t, []string{"a", "b", "c"}, bodies(s.poll(ctx, t, id, 0).GetRecords()))
 }
 
 func TestStreamTopicFilter(t *testing.T) {
@@ -279,6 +302,7 @@ func TestStreamCloseAndTruncate(t *testing.T) {
 		FrontendRequest: &streamlib.PollMessagesInput{Namespace: s.ns, StreamId: id, FromOffset: 0},
 	})
 	require.ErrorContains(t, err, "truncated")
+	requireReason(t, err, codes.FailedPrecondition, chasmstream.ReasonCursorBelowFloor)
 
 	_, err = s.client.CloseStream(ctx, &streamlib.CloseStreamRequest{
 		FrontendRequest: &streamlib.CloseStreamInput{Namespace: s.ns, StreamId: id},
@@ -477,6 +501,7 @@ func TestStreamCapTruncatesAndReclaims(t *testing.T) {
 		FrontendRequest: &streamlib.PollMessagesInput{Namespace: s.ns, StreamId: id, FromOffset: 0},
 	})
 	require.ErrorContains(t, err, "truncated")
+	requireReason(t, err, codes.FailedPrecondition, chasmstream.ReasonCursorBelowFloor)
 }
 
 func TestStreamClosedStaysReadable(t *testing.T) {
