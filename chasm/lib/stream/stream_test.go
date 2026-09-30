@@ -126,8 +126,53 @@ func TestDedupRejectsDifferentContent(t *testing.T) {
 	_, err = s.AddMessages(nil, AddMessagesRequest{
 		Records: msgs("different"), ProducerID: "p1", Sequence: 1,
 	})
-	require.Error(t, err)
+	var precondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &precondition)
+	require.Equal(t, ReasonProducerConflict, ReasonOf(err.Error()),
+		"the SDK maps the refusal by its token, not by the prose")
 	require.Contains(t, err.Error(), "different content")
+	require.Equal(t, int64(1), s.State.HeadOffset, "a refused repeat writes nothing")
+}
+
+func TestStaleSequenceIsRefusedWithItsReason(t *testing.T) {
+	s := newTestStream(t)
+	for seq := int64(1); seq <= 2; seq++ {
+		_, err := s.AddMessages(nil, AddMessagesRequest{
+			Records: msgs(fmt.Sprint("seq-", seq)), ProducerID: "p1", Sequence: seq,
+		})
+		require.NoError(t, err)
+	}
+
+	// The table keeps one entry per producer, so the earlier sequence cannot
+	// be answered with its offsets any more and is refused rather than
+	// re-appended.
+	_, err := s.AddMessages(nil, AddMessagesRequest{
+		Records: msgs("seq-1"), ProducerID: "p1", Sequence: 1,
+	})
+	var precondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &precondition)
+	require.Equal(t, ReasonProducerStaleSequence, ReasonOf(err.Error()))
+	require.Equal(t, int64(2), s.State.HeadOffset)
+}
+
+func TestReadBelowTheFloorCarriesItsReason(t *testing.T) {
+	s := newTestStream(t)
+	_, err := s.AddMessages(nil, AddMessagesRequest{Records: msgs("a", "b", "c")})
+	require.NoError(t, err)
+	require.NoError(t, s.Truncate(nil, 2))
+
+	_, err = s.ReadWindow(nil, WindowRequest{From: 1})
+	var precondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &precondition)
+	require.Equal(t, ReasonCursorBelowFloor, ReasonOf(err.Error()))
+	require.Contains(t, err.Error(), "starts at 2", "the message names where the stream begins")
+}
+
+func TestReasonOfIgnoresMessagesWithoutAToken(t *testing.T) {
+	require.Empty(t, ReasonOf("stream is closed"))
+	require.Empty(t, ReasonOf("SOMETHING_ELSE: with a separator"))
+	require.Equal(t, ReasonProducerConflict,
+		ReasonOf(Refusal(ReasonProducerConflict, "sequence %d", 3).Error()))
 }
 
 func TestExpectedOffsetMismatchReportsHead(t *testing.T) {
@@ -359,6 +404,7 @@ func TestRegisterConsumerRejectsAnOffsetBelowTheFloor(t *testing.T) {
 		ConsumerID: "workflow:output", WorkflowID: "wf-1", RunID: "run-1", Offset: 1,
 	})
 	require.ErrorContains(t, err, "below the stream's floor")
+	require.Equal(t, ReasonCursorBelowFloor, ReasonOf(err.Error()))
 }
 
 // Resubscribing reactivates the existing pin rather than resetting it, so a

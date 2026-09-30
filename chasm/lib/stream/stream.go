@@ -347,7 +347,7 @@ func (s *Stream) checkProducer(req AddMessagesRequest, hash []byte) (*AddMessage
 		return nil, nil
 	}
 	if req.Sequence < cursor.Seq {
-		return nil, serviceerror.NewInvalidArgumentf(
+		return nil, Refusal(ReasonProducerStaleSequence,
 			"stale producer sequence %d, last accepted for producer %q is %d; a producer id "+
 				"carries one append at a time, so use a separate id per concurrent lane",
 			req.Sequence, req.ProducerID, cursor.Seq)
@@ -356,7 +356,7 @@ func (s *Stream) checkProducer(req AddMessagesRequest, hash []byte) (*AddMessage
 	// client bug, and returning the recorded offsets would report success while
 	// silently dropping the caller's data.
 	if !bytes.Equal(cursor.ContentHash, hash) {
-		return nil, serviceerror.NewInvalidArgumentf(
+		return nil, Refusal(ReasonProducerConflict,
 			"producer sequence %d already used with different content", req.Sequence)
 	}
 	return &AddMessagesResult{
@@ -517,7 +517,7 @@ type Window struct {
 // moves while the bytes are being fetched.
 func (s *Stream) ReadWindow(ctx chasm.Context, req WindowRequest) (Window, error) {
 	if req.From < s.State.BaseOffset {
-		return Window{}, serviceerror.NewFailedPreconditionf(
+		return Window{}, Refusal(ReasonCursorBelowFloor,
 			"offset %d has been truncated, the stream starts at %d", req.From, s.State.BaseOffset)
 	}
 	if req.From > s.State.HeadOffset {
@@ -691,7 +691,7 @@ func (s *Stream) RegisterConsumer(_ chasm.MutableContext, reg ConsumerRegistrati
 		offset = s.State.HeadOffset
 	}
 	if offset < s.State.BaseOffset {
-		return 0, serviceerror.NewFailedPreconditionf(
+		return 0, Refusal(ReasonCursorBelowFloor,
 			"offset %d is below the stream's floor of %d", offset, s.State.BaseOffset)
 	}
 	if _, known := s.State.Consumers[reg.ConsumerID]; !known &&
@@ -716,7 +716,7 @@ func (s *Stream) RegisterConsumer(_ chasm.MutableContext, reg ConsumerRegistrati
 		// stream has moved past what its History refers to. Saying so here is
 		// the only chance to say it before the workflow depends on it again.
 		if existing.GetReplayFloor() < s.State.BaseOffset {
-			return 0, serviceerror.NewFailedPreconditionf(
+			return 0, Refusal(ReasonCursorBelowFloor,
 				"consumer %q recorded offset %d, and the stream now starts at %d",
 				reg.ConsumerID, existing.GetReplayFloor(), s.State.BaseOffset)
 		}
