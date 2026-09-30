@@ -20,6 +20,8 @@
 //   - STREAM_CURSOR_BELOW_FLOOR: a read or a subscription start below the
 //     stream's retention floor. The message names the offset the stream now
 //     starts at.
+//   - STREAM_CLOSED: an append on a stream that has been sealed. Its records
+//     stay readable; nothing more goes in.
 //
 // [Refusal] builds one and [ReasonOf] reads one back.
 //
@@ -29,20 +31,34 @@
 // comparing a fingerprint. By default the fingerprint is taken over the
 // encoded batch, so a payload codec that encrypts with a fresh nonce on every
 // call makes every retry look divergent. A producer avoids that by declaring
-// each record's identity before the codec runs: in the record's metadata map,
-// under the key [ContentHashMetadataKey], a payload whose data is the
-// lowercase hex SHA-256 of the converted body, computed before any codec or
-// offload. The value is read as sent and must not itself be encoded.
+// each record's identity before the codec runs, in the record's metadata map
+// under the key [ContentHashMetadataKey]. The value is a payload whose
+// metadata "encoding" is "binary/plain" and whose data is 64 lowercase hex
+// ASCII bytes: the SHA-256 over the deterministic proto serialization of the
+// converted body payload, metadata and data, taken before any codec or
+// external storage ([ContentHashOf] computes the same thing here). A FINISH
+// record carries none.
 //
 // With the key present, the fingerprint is derived from the declared hash and
 // the record's topic, kind, sequence, attempt and producer id, and never from
 // the body or the other metadata payloads. A record without the key keeps the
-// default. A malformed value is refused as an invalid argument, since a
-// producer that sets the key means to be deduplicated by it.
+// default, and so does a record whose value is not a hex SHA-256: that is
+// what the key looks like after a codec has encoded it, and refusing the
+// append would be worse than deduplicating it by its bytes.
 //
-// The metadata map is stored with the record and is separate from the body
-// payload. The server applies no codec anywhere, so a codec on the client is
-// the only thing that could hide the key, and it must leave the map alone.
+// The key is read only on an append that names a producer, which is every
+// outside append and never a workflow's own publish. A workflow's publish has
+// no producer to repeat under, the task being its boundary, and the worker's
+// codec runs over its record metadata payloads too, so the value may arrive
+// encoded on that path. The server applies no codec anywhere.
+//
+// # Replay re-supply
+//
+// A cold replay is handed every range the consumer's completed tasks
+// recorded, re-read from the streams, within one response's budget. A
+// re-supply the budget cuts short is refused as a whole rather than marked:
+// paging it needs a short flag on the poll response, or on the last
+// StreamSlice, that this package does not have on the wire yet.
 //
 // # Reset
 //
