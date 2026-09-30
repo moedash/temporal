@@ -2,7 +2,6 @@ package stream
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"maps"
 	"slices"
 	"time"
@@ -179,11 +178,15 @@ func (s *Stream) AddMessages(
 	if err := checkBatchBytes(req.Records, limits); err != nil {
 		return AddMessagesResult{}, err
 	}
-	blob, err := marshalBatch(settleKinds(req.Records))
+	settled := settleKinds(req.Records)
+	blob, err := marshalBatch(settled)
 	if err != nil {
 		return AddMessagesResult{}, err
 	}
-	hash := contentHash(blob.Data)
+	hash, err := batchFingerprint(settled, blob.Data)
+	if err != nil {
+		return AddMessagesResult{}, err
+	}
 
 	if replay, err := s.checkProducer(req, hash); err != nil || replay != nil {
 		if err != nil {
@@ -375,7 +378,7 @@ func (s *Stream) checkProducer(req AddMessagesRequest, hash []byte) (*AddMessage
 		return nil, nil
 	}
 	if req.Sequence < cursor.Seq {
-		return nil, serviceerror.NewInvalidArgumentf(
+		return nil, Refusal(ReasonProducerStaleSequence,
 			"stale producer sequence %d, last accepted for producer %q is %d; a producer id "+
 				"carries one append at a time, so use a separate id per concurrent lane",
 			req.Sequence, req.ProducerID, cursor.Seq)
@@ -384,7 +387,7 @@ func (s *Stream) checkProducer(req AddMessagesRequest, hash []byte) (*AddMessage
 	// client bug, and returning the recorded offsets would report success while
 	// silently dropping the caller's data.
 	if !bytes.Equal(cursor.ContentHash, hash) {
-		return nil, serviceerror.NewInvalidArgumentf(
+		return nil, Refusal(ReasonProducerConflict,
 			"producer sequence %d already used with different content", req.Sequence)
 	}
 	return &AddMessagesResult{
@@ -558,7 +561,7 @@ func (s *Stream) ReadWindow(ctx chasm.Context, req WindowRequest) (Window, error
 		req.From = from
 	}
 	if req.From < s.State.BaseOffset {
-		return Window{}, serviceerror.NewFailedPreconditionf(
+		return Window{}, Refusal(ReasonCursorBelowFloor,
 			"offset %d has been truncated, the stream starts at %d", req.From, s.State.BaseOffset)
 	}
 	if req.From > s.State.HeadOffset {
@@ -734,7 +737,7 @@ func (s *Stream) RegisterConsumer(_ chasm.MutableContext, reg ConsumerRegistrati
 		return 0, err
 	}
 	if offset < s.State.BaseOffset {
-		return 0, serviceerror.NewFailedPreconditionf(
+		return 0, Refusal(ReasonCursorBelowFloor,
 			"offset %d is below the stream's floor of %d", offset, s.State.BaseOffset)
 	}
 	if _, known := s.State.Consumers[reg.ConsumerID]; !known &&
@@ -759,7 +762,7 @@ func (s *Stream) RegisterConsumer(_ chasm.MutableContext, reg ConsumerRegistrati
 		// stream has moved past what its History refers to. Saying so here is
 		// the only chance to say it before the workflow depends on it again.
 		if existing.GetReplayFloor() < s.State.BaseOffset {
-			return 0, serviceerror.NewFailedPreconditionf(
+			return 0, Refusal(ReasonCursorBelowFloor,
 				"consumer %q recorded offset %d, and the stream now starts at %d",
 				reg.ConsumerID, existing.GetReplayFloor(), s.State.BaseOffset)
 		}
@@ -837,8 +840,7 @@ func marshalBatch(records []*streamlib.StreamRecord) (*commonpb.DataBlob, error)
 	// protobuf map iteration order is not stable. A record carrying payload or
 	// record metadata would otherwise hash differently on a retry and be
 	// refused as a conflicting duplicate of itself.
-	data, err := (proto.MarshalOptions{Deterministic: true}).Marshal(
-		&streamlib.StreamRecordBatch{Records: records})
+	data, err := marshalDeterministic(&streamlib.StreamRecordBatch{Records: records})
 	if err != nil {
 		return nil, err
 	}
@@ -848,7 +850,6 @@ func marshalBatch(records []*streamlib.StreamRecord) (*commonpb.DataBlob, error)
 	}, nil
 }
 
-func contentHash(data []byte) []byte {
-	sum := sha256.Sum256(data)
-	return sum[:]
+func marshalDeterministic(m proto.Message) ([]byte, error) {
+	return (proto.MarshalOptions{Deterministic: true}).Marshal(m)
 }
