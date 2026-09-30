@@ -310,7 +310,7 @@ func TestStreamCloseAndTruncate(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "d")})
-	require.Error(t, err)
+	requireReason(t, err, codes.FailedPrecondition, chasmstream.ReasonStreamClosed)
 
 	// Closed is a state a reader observes, not an error, and the data stays
 	// readable rather than requiring a shutdown handshake with the producer.

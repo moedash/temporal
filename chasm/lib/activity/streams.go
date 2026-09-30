@@ -1,7 +1,6 @@
 package activity
 
 import (
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/stream"
 )
@@ -37,7 +36,7 @@ func (a *Activity) AppendToOwnedStream(
 	req stream.AddMessagesRequest,
 ) (stream.AddMessagesResult, error) {
 	if a.isTerminal() {
-		return stream.AddMessagesResult{}, serviceerror.NewFailedPreconditionf(
+		return stream.AddMessagesResult{}, stream.Refusal(stream.ReasonStreamClosed,
 			"activity execution closed with status %v, so its streams take no more records",
 			InternalStatusToAPIStatus(a.GetStatus()))
 	}
