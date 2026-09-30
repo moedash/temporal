@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -667,7 +668,15 @@ func (h *handler) PollMessages(
 	// feature: the state clone walks the producer and consumer tables, which
 	// hold up to a thousand entries each.
 	if in.GetWaitNewMessages() {
+		// One budget for the whole call, however it is spent: on the stream
+		// coming into existence, and then on it moving.
+		pollCtx, cancel := pollBudget(ctx)
+		defer cancel()
+
 		state, err := chasm.ReadComponent(ctx, ref, (*stream.Stream).Snapshot, struct{}{})
+		if executionAbsent(err) && in.GetRunId() == "" {
+			state, err = h.waitForStream(pollCtx, ctx, ref, err)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -678,7 +687,7 @@ func (h *handler) PollMessages(
 		// Blocking is only worth it once the reader is genuinely caught up.
 		if waitFrom == state.GetHeadOffset() && !state.GetClosed() {
 			// The window is re-read below, so only the blocking matters here.
-			if _, err := h.waitForMessages(ctx, ref, waitFrom, state); err != nil {
+			if _, err := h.waitForMessages(pollCtx, ctx, ref, waitFrom, state); err != nil {
 				return nil, err
 			}
 			from, start = waitFrom, nil
@@ -728,7 +737,9 @@ func (h *handler) PollWorkflowMessages(
 			return nil, err
 		}
 		if waitFrom == state.GetHeadOffset() && !state.GetClosed() {
-			if _, err := h.waitForOwnedMessages(ctx, target, waitFrom, state); err != nil {
+			pollCtx, cancel := pollBudget(ctx)
+			defer cancel()
+			if _, err := h.waitForOwnedMessages(pollCtx, ctx, target, waitFrom, state); err != nil {
 				return nil, err
 			}
 			from, start = waitFrom, nil
@@ -851,20 +862,59 @@ func readOwnedStream(
 	return state, nil
 }
 
+// pollBudget is how long one blocking poll may hold its caller, whatever it is
+// waiting for. It ends before the caller's own deadline, so expiry can be
+// answered with an empty response rather than an error.
+func pollBudget(ctx context.Context) (context.Context, context.CancelFunc) {
+	return contextutil.WithDeadlineBuffer(ctx, stream.LongPollTimeout, stream.LongPollBuffer)
+}
+
+// waitForStream parks a blocking poll on a standalone stream id that names
+// nothing yet, asking again on an interval until the stream exists or the
+// poll's budget runs out. A reader can then attach before the producer's first
+// write, as it can on an owned stream, whose owner is there to wait on. On
+// expiry the caller gets the refusal it would have got at once.
+//
+// Only an unpinned reference waits. A run id names one execution, and a stream
+// created later is another run, so that wait could never be answered.
+func (h *handler) waitForStream(
+	pollCtx, callerCtx context.Context,
+	ref chasm.ComponentRef,
+	absent error,
+) (*streamlib.StreamState, error) {
+	ticker := time.NewTicker(h.config.CreateWaitRecheckInterval())
+	defer ticker.Stop()
+	for {
+		select {
+		case <-pollCtx.Done():
+			if callerCtx.Err() != nil {
+				return nil, callerCtx.Err()
+			}
+			return nil, absent
+		case <-ticker.C:
+		}
+		state, err := chasm.ReadComponent(pollCtx, ref, (*stream.Stream).Snapshot, struct{}{})
+		switch {
+		case err == nil:
+			return state, nil
+		case executionAbsent(err), pollCtx.Err() != nil:
+			continue
+		default:
+			return nil, err
+		}
+	}
+}
+
 // waitForMessages blocks until the head passes the reader's offset or the
 // stream closes. On the server's long-poll timeout it returns the state it last
 // saw, so the caller gets an empty response and polls again rather than an
 // error it would have to distinguish from a real failure.
 func (h *handler) waitForMessages(
-	ctx context.Context,
+	pollCtx, callerCtx context.Context,
 	ref chasm.ComponentRef,
 	from int64,
 	current *streamlib.StreamState,
 ) (*streamlib.StreamState, error) {
-	pollCtx, cancel := contextutil.WithDeadlineBuffer(
-		ctx, stream.LongPollTimeout, stream.LongPollBuffer)
-	defer cancel()
-
 	state, _, err := chasm.PollComponent(pollCtx, ref,
 		func(s *stream.Stream, _ chasm.Context, offset int64) (*streamlib.StreamState, bool, error) {
 			// Monotonic, as PollComponent requires: the head only advances and
@@ -874,22 +924,18 @@ func (h *handler) waitForMessages(
 			}
 			return common.CloneProto(s.State), true, nil
 		}, from)
-	return pollOutcome(pollCtx, ctx, state, err, current)
+	return pollOutcome(pollCtx, callerCtx, state, err, current)
 }
 
 // waitForOwnedMessages is waitForMessages against a stream reached through its
 // owner. The predicate has to re-resolve the stream on every evaluation,
 // because what the poll observes is the owning execution.
 func (h *handler) waitForOwnedMessages(
-	ctx context.Context,
+	pollCtx, callerCtx context.Context,
 	target ownedTarget,
 	from int64,
 	current *streamlib.StreamState,
 ) (*streamlib.StreamState, error) {
-	pollCtx, cancel := contextutil.WithDeadlineBuffer(
-		ctx, stream.LongPollTimeout, stream.LongPollBuffer)
-	defer cancel()
-
 	state, _, err := chasm.PollComponent(pollCtx, target.ref,
 		func(
 			owner stream.Owner, cctx chasm.Context, offset int64,
@@ -903,7 +949,7 @@ func (h *handler) waitForOwnedMessages(
 			}
 			return owned, true, nil
 		}, from)
-	return pollOutcome(pollCtx, ctx, state, err, current)
+	return pollOutcome(pollCtx, callerCtx, state, err, current)
 }
 
 // waitOffset is the offset a blocking poll waits past. A first poll that names

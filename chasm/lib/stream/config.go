@@ -176,6 +176,12 @@ terminate the workflow.`,
 		`How long a closed stream past its retention waits before asking again whether the
 consumers holding it are still running.`,
 	)
+	CreateWaitRecheckIntervalSetting = dynamicconfig.NewGlobalDurationSetting(
+		"stream.createWaitRecheckInterval",
+		250*time.Millisecond,
+		`How often a blocking poll on a standalone stream id that names nothing yet asks
+again whether the stream has been created, until the poll's wait expires.`,
+	)
 )
 
 // Config holds the settings as live property functions.
@@ -185,6 +191,7 @@ type Config struct {
 	// execution's business id, and a stream name a key in mutable state.
 	MaxIDLength                dynamicconfig.IntPropertyFn
 	RetentionRecheckInterval   dynamicconfig.DurationPropertyFn
+	CreateWaitRecheckInterval  dynamicconfig.DurationPropertyFn
 	MaxConsumeItemsPerTask     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxConsumeBytesPerTask     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxProducersPerStream      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -204,6 +211,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		Enabled:                    EnabledSetting.Get(dc),
 		MaxIDLength:                dynamicconfig.MaxIDLengthLimit.Get(dc),
 		RetentionRecheckInterval:   RetentionRecheckIntervalSetting.Get(dc),
+		CreateWaitRecheckInterval:  CreateWaitRecheckIntervalSetting.Get(dc),
 		MaxConsumeItemsPerTask:     MaxConsumeItemsPerTaskSetting.Get(dc),
 		MaxConsumeBytesPerTask:     MaxConsumeBytesPerTaskSetting.Get(dc),
 		MaxProducersPerStream:      MaxProducersPerStreamSetting.Get(dc),

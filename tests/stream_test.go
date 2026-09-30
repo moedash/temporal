@@ -472,6 +472,72 @@ func TestStreamLongPollReturnsImmediatelyWhenBehind(t *testing.T) {
 	require.Less(t, time.Since(start), 5*time.Second)
 }
 
+// A blocking poll on a standalone stream id that names nothing yet parks until
+// the stream exists and then reads it, so a reader can attach before the
+// producer's first write without racing the create.
+func TestStreamLongPollWaitsForTheStreamToBeCreated(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-longpoll-create"
+
+	type outcome struct {
+		out  *streamlib.PollMessagesOutput
+		err  error
+		took time.Duration
+	}
+	done := make(chan outcome, 1)
+	started := time.Now()
+	go func() {
+		out, err := s.pollWait(ctx, id, 0)
+		done <- outcome{out: out, err: err, took: time.Since(started)}
+	}()
+
+	// Long enough for the poll to have found nothing at least once. There is
+	// nothing to await: a parked poll gives no signal that it has parked.
+	const createAfter = 600 * time.Millisecond
+	time.Sleep(createAfter) //nolint:forbidigo
+	s.create(ctx, t, id)
+	_, err := s.add(ctx, t, id, &streamlib.AddMessagesInput{Records: streamMsgs("", "first")})
+	require.NoError(t, err)
+
+	got := <-done
+	require.NoError(t, got.err)
+	require.Equal(t, []string{"first"}, bodies(got.out.GetRecords()))
+	require.GreaterOrEqual(t, got.took, createAfter, "the poll parked rather than failing")
+}
+
+func TestStreamPollOnAMissingStreamIsNotFoundUnlessItWaits(t *testing.T) {
+	s := newStreamTestEnv(t)
+	ctx := streamCtx(t)
+	const id = "stream-missing"
+
+	// Not asked to wait: the answer comes at once.
+	_, err := s.client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+		FrontendRequest: &streamlib.PollMessagesInput{Namespace: s.ns, StreamId: id, FromOffset: 0},
+	})
+	require.Equal(t, codes.NotFound, status.Code(err), "%v", err)
+
+	// Asked to wait: the poll parks for the caller's budget, then gives the
+	// same answer. The budget is the caller's deadline less the long-poll
+	// buffer, so a short deadline keeps the test short.
+	short, cancel := context.WithTimeout(ctx, chasmstream.LongPollBuffer+time.Second)
+	defer cancel()
+	started := time.Now()
+	_, err = s.pollWait(short, id, 0)
+	require.Equal(t, codes.NotFound, status.Code(err), "%v", err)
+	require.GreaterOrEqual(t, time.Since(started), 500*time.Millisecond)
+
+	// Pinned to a run there is nothing to wait for: a stream created later
+	// would be another run.
+	_, err = s.client.PollMessages(ctx, &streamlib.PollMessagesRequest{
+		FrontendRequest: &streamlib.PollMessagesInput{
+			Namespace: s.ns, StreamId: id, RunId: "00000000-0000-0000-0000-000000000000",
+			WaitNewMessages: true,
+		},
+	})
+	require.Equal(t, codes.NotFound, status.Code(err), "%v", err)
+}
+
 func TestStreamCapTruncatesAndReclaims(t *testing.T) {
 	s := newStreamTestEnv(t)
 	ctx := streamCtx(t)
