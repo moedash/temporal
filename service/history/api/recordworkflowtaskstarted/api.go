@@ -107,6 +107,10 @@ func Invoke(
 					if err != nil {
 						return nil, err
 					}
+					resp.Wakes, err = pendingWakes(ctx, mutableState, workflowTask)
+					if err != nil {
+						return nil, err
+					}
 					// Redelivers whatever range is already staged, so a
 					// duplicate of the same request hands back the same slice.
 					resp.StreamSlices, streamAddresses, err = deliverStreamSlices(
@@ -252,6 +256,11 @@ func Invoke(
 				req.PollRequest.GetIdentity(),
 				false,
 			)
+			if err != nil {
+				return nil, err
+			}
+
+			resp.Wakes, err = TakeWakes(ctx, shardContext, mutableState, workflowTask)
 			if err != nil {
 				return nil, err
 			}
@@ -493,6 +502,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 		Clock:                      rawResp.Clock,
 		Messages:                   rawResp.Messages,
 		StreamSlices:               rawResp.StreamSlices,
+		Wakes:                      rawResp.Wakes,
 		Version:                    rawResp.Version,
 		NextPageToken:              rawResp.NextPageToken,
 	}, nil

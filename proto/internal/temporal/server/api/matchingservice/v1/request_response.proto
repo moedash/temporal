@@ -15,6 +15,7 @@ import "temporal/api/query/v1/message.proto";
 import "temporal/api/stream/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/worker/v1/message.proto";
+import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/deployment/v1/message.proto";
@@ -67,6 +68,8 @@ message PollWorkflowTaskQueueResponse {
   // range the task may deliver. Payloads ride here and never enter History;
   // only the consumed range is recorded, on WorkflowTaskCompleted.
   repeated temporal.api.stream.v1.StreamSlice stream_slices = 23;
+  // Wakes pending when the task started. Nothing about them is in History.
+  repeated temporal.api.workflow.v1.Wake wakes = 24;
 }
 
 // PollWorkflowTaskQueueResponseWithRawHistory is wire-compatible with PollWorkflowTaskQueueResponse.
@@ -121,6 +124,8 @@ message PollWorkflowTaskQueueResponseWithRawHistory {
   // range the task may deliver. Payloads ride here and never enter History;
   // only the consumed range is recorded, on WorkflowTaskCompleted.
   repeated temporal.api.stream.v1.StreamSlice stream_slices = 23;
+  // Wakes pending when the task started. Nothing about them is in History.
+  repeated temporal.api.workflow.v1.Wake wakes = 24;
 }
 
 message PollActivityTaskQueueRequest {

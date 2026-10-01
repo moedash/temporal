@@ -59,6 +59,10 @@ type Workflow struct {
 	// than silently handed the wrong cursor.
 	StreamCursors chasm.Map[string, *stream.Cursor]
 
+	// Latest wake accepted per source. A wake asks for a Workflow Task and
+	// writes nothing to History, so this table is the only record of it.
+	Wakes chasm.Map[string, *chasmworkflowpb.WakeEntry]
+
 	// Subscribe commands whose stream is in another execution, so the addressing
 	// has to be looked up before a cursor can be made. In memory only, drained
 	// by the flush before commit.

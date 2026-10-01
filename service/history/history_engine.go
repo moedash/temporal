@@ -87,6 +87,7 @@ import (
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/api/verifyfirstworkflowtaskscheduled"
+	"go.temporal.io/server/service/history/api/wakeworkflow"
 	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
@@ -737,6 +738,15 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 	req *historyservice.SignalWorkflowExecutionRequest,
 ) (resp *historyservice.SignalWorkflowExecutionResponse, retError error) {
 	return signalworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+// WakeWorkflowExecution records that a source the workflow consumes moved,
+// scheduling a Workflow Task without writing to History.
+func (e *historyEngineImpl) WakeWorkflowExecution(
+	ctx context.Context,
+	req *historyservice.WakeWorkflowExecutionRequest,
+) (*historyservice.WakeWorkflowExecutionResponse, error) {
+	return wakeworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }
 
 // SignalWithStartWorkflowExecution signals current workflow (if running) or creates & signals a new workflow

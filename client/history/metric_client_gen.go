@@ -1072,3 +1072,17 @@ func (c *metricClient) VerifyFirstWorkflowTaskScheduled(
 
 	return c.client.VerifyFirstWorkflowTaskScheduled(ctx, request, opts...)
 }
+
+func (c *metricClient) WakeWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.WakeWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.WakeWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientWakeWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.WakeWorkflowExecution(ctx, request, opts...)
+}
