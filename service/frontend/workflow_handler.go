@@ -2359,6 +2359,15 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 	}, nil
 }
 
+// WakeWorkflowExecution is declared by the pinned API and served by a later
+// layer of this series.
+func (wh *WorkflowHandler) WakeWorkflowExecution(
+	_ context.Context,
+	_ *workflowservice.WakeWorkflowExecutionRequest,
+) (*workflowservice.WakeWorkflowExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("WakeWorkflowExecution is not implemented")
+}
+
 // SignalWithStartWorkflowExecution is used to ensure sending signal to a workflow.
 // If the workflow is running, this results in WorkflowExecutionSignaled event being recorded in the history
 // and a workflow task being created for the execution.

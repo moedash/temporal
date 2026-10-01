@@ -109,6 +109,7 @@ var (
 		"RespondNexusTaskFailed":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"RequestCancelWorkflowExecution":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"SignalWorkflowExecution":                      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
+		"WakeWorkflowExecution":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"SignalWithStartWorkflowExecution":             {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"ResetWorkflowExecution":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"TerminateWorkflowExecution":                   {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},

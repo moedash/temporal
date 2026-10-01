@@ -1238,3 +1238,13 @@ func (c *clientImpl) ValidateWorkerDeploymentVersionComputeConfig(
 	defer cancel()
 	return c.client.ValidateWorkerDeploymentVersionComputeConfig(ctx, request, opts...)
 }
+
+func (c *clientImpl) WakeWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.WakeWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.WakeWorkflowExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.WakeWorkflowExecution(ctx, request, opts...)
+}
