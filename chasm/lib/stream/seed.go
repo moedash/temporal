@@ -1,6 +1,8 @@
 package stream
 
 import (
+	"time"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -53,13 +55,20 @@ func (s *Stream) Seed(
 			return serviceerror.NewInternalf(
 				"seeding a stream at %d with a batch starting at %d", s.State.HeadOffset, first)
 		}
-		encoded, err := marshalBatch(kept)
+		// The copy keeps the source batch's age: the records are as old as
+		// they were, whichever stream holds them.
+		var appendedAt time.Time
+		if batch.GetAppendedAt() != nil {
+			appendedAt = batch.GetAppendedAt().AsTime()
+		}
+		encoded, err := marshalBatch(kept, appendedAt)
 		if err != nil {
 			return err
 		}
 		s.Batches[first] = chasm.NewDataField(mctx, encoded)
 		s.State.HeadOffset = first + int64(len(kept))
 		s.State.AppendedBytes += int64(len(encoded.Data))
+		s.State.HeldBytes += int64(len(encoded.Data))
 	}
 	if s.State.HeadOffset != to {
 		return serviceerror.NewInternalf(

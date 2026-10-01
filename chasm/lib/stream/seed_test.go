@@ -2,9 +2,12 @@ package stream
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 )
 
@@ -19,9 +22,15 @@ func bodiesOf(records []*streamlib.StreamRecord) []string {
 // A copy that begins inside a batch trims it and keys what it kept at the
 // copy's start, so the seeded stream begins exactly at the inherited offset.
 func TestSeedTrimsTheBatchStraddlingTheStart(t *testing.T) {
+	// A clock on the source, so its batches carry an age the copy must keep.
+	written := time.Unix(1_700_000_000, 0).UTC()
+	mctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
+		HandleNow: func(chasm.Component) time.Time { return written },
+	}}
 	source := newTestStream(t)
+	source.Batches = make(chasm.Map[int64, *commonpb.DataBlob])
 	for _, batch := range [][]string{{"a", "b", "c"}, {"d", "e"}} {
-		_, err := source.AddMessages(nil, AddMessagesRequest{Records: msgs(batch...)})
+		_, err := source.AddMessages(mctx, AddMessagesRequest{Records: msgs(batch...)})
 		require.NoError(t, err)
 	}
 	blobs, starts, err := source.ReadBatches(nil, 1, 4, 0)
@@ -32,7 +41,12 @@ func TestSeedTrimsTheBatchStraddlingTheStart(t *testing.T) {
 	require.Equal(t, int64(4), target.State.HeadOffset)
 	require.Equal(t, []int64{1, 3}, target.batchStarts())
 	require.Positive(t, target.State.AppendedBytes, "the copy counts against the budget")
+	require.Equal(t, target.State.AppendedBytes, target.State.HeldBytes, "and is held")
 	require.Empty(t, target.State.Producers)
+	appendedAt, ok, err := target.batchAppendedAt(nil, 1)
+	require.NoError(t, err)
+	require.True(t, ok, "the copy keeps the source batch's age")
+	require.Equal(t, written, appendedAt)
 
 	copied, copiedStarts, err := target.ReadBatches(nil, 1, 4, 0)
 	require.NoError(t, err)
