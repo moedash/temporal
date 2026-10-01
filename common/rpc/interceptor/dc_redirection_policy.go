@@ -55,6 +55,7 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 	"StartWorkflowExecution":           {},
 	"SignalWithStartWorkflowExecution": {},
 	"SignalWorkflowExecution":          {},
+	"WakeWorkflowExecution":            {},
 	"UpdateWorkflowExecution":          {},
 	"RequestCancelWorkflowExecution":   {},
 	"TerminateWorkflowExecution":       {},

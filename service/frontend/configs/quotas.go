@@ -95,6 +95,7 @@ var (
 
 		// P1: External Event APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/SignalWorkflowExecution":          1,
+		"/temporal.api.workflowservice.v1.WorkflowService/WakeWorkflowExecution":            1,
 		"/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution":           1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":          1,
