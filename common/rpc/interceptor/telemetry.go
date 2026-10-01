@@ -70,6 +70,7 @@ var (
 		"RecordActivityTaskHeartbeatById":  {},
 		"ResetWorkflowExecution":           {},
 		"SignalWorkflowExecution":          {},
+		"WakeWorkflowExecution":            {},
 		"SignalWithStartWorkflowExecution": {},
 		"CreateSchedule":                   {},
 		"UpdateSchedule":                   {},

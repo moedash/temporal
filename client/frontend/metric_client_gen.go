@@ -1730,3 +1730,17 @@ func (c *metricClient) ValidateWorkerDeploymentVersionComputeConfig(
 
 	return c.client.ValidateWorkerDeploymentVersionComputeConfig(ctx, request, opts...)
 }
+
+func (c *metricClient) WakeWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.WakeWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.WakeWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientWakeWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.WakeWorkflowExecution(ctx, request, opts...)
+}

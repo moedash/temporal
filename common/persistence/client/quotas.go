@@ -29,6 +29,7 @@ var (
 		"StartWorkflowExecution":           1,
 		"SignalWithStartWorkflowExecution": 1,
 		"SignalWorkflowExecution":          1,
+		"WakeWorkflowExecution":            1,
 		"RequestCancelWorkflowExecution":   1,
 		"TerminateWorkflowExecution":       1,
 		"GetWorkflowExecutionHistory":      1,
