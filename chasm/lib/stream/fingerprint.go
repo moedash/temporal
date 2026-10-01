@@ -28,11 +28,14 @@ func ContentHashOf(body *commonpb.Payload) ([]byte, error) {
 
 // batchFingerprint is what the producer table compares a repeat against.
 //
-// A batch with no declared hash is fingerprinted over its encoded bytes, which
-// is exact and costs nothing extra. Once any record declares a hash, the
-// fingerprint is built per record instead, so an encoding that changes on
-// every call cannot turn a retry into a conflict.
-func batchFingerprint(records []*streamlib.StreamRecord, encoded []byte) ([]byte, error) {
+// A batch with no declared hash is fingerprinted over the deterministic
+// serialization of its records, which is exact. Once any record declares a
+// hash, the fingerprint is built per record instead, so an encoding that
+// changes on every call cannot turn a retry into a conflict. Protobuf map
+// iteration order is not stable, which is why the serialization has to be the
+// deterministic one: a record carrying payload or record metadata would
+// otherwise hash differently on a retry.
+func batchFingerprint(records []*streamlib.StreamRecord) ([]byte, error) {
 	declared := false
 	digests := make([]byte, 0, sha256.Size*len(records))
 	for _, record := range records {
@@ -63,6 +66,10 @@ func batchFingerprint(records []*streamlib.StreamRecord, encoded []byte) ([]byte
 		digests = append(digests, contentHash(append(digest, plain...))...)
 	}
 	if !declared {
+		encoded, err := marshalDeterministic(&streamlib.StreamRecordBatch{Records: records})
+		if err != nil {
+			return nil, err
+		}
 		return contentHash(encoded), nil
 	}
 	return contentHash(digests), nil

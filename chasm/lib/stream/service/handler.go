@@ -298,11 +298,44 @@ func (h *handler) CreateStream(
 		in,
 	)
 	if err != nil {
+		if started, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
+			return nil, h.existingStreamRefusal(ctx, req.GetNamespaceId(), in, started.CurrentRunID)
+		}
 		return nil, err
 	}
 	return &streamlib.CreateStreamResponse{
 		FrontendResponse: &streamlib.CreateStreamOutput{RunId: result.ExecutionKey.RunID},
 	}, nil
+}
+
+// existingStreamRefusal answers a create that names a stream already there.
+// The engine's own error is not a service error and reaches the caller as
+// Unknown, so it is read here and answered in two ways a client can tell
+// apart without a describe: a repeat of the existing lifecycle is an
+// idempotent retry and says AlreadyExists; a different lifecycle is a change
+// the caller has to make on purpose, under a new id, and is refused with its
+// own reason.
+func (h *handler) existingStreamRefusal(
+	ctx context.Context,
+	namespaceID string,
+	in *streamlib.CreateStreamInput,
+	runID string,
+) error {
+	state, err := chasm.ReadComponent(ctx,
+		refForRun(namespaceID, in.GetStreamId(), runID), (*stream.Stream).Snapshot, struct{}{})
+	if err != nil {
+		return err
+	}
+	existing := state.GetLifecycle()
+	if proto.Equal(existing, in.GetLifecycle()) {
+		return serviceerror.NewAlreadyExistsf(
+			"stream %q already exists with this lifecycle", in.GetStreamId())
+	}
+	return stream.Refusal(stream.ReasonPolicyMismatch,
+		"stream %q already exists with a different lifecycle: retention %v, max items %d, "+
+			"max bytes %d",
+		in.GetStreamId(), existing.GetRetention().AsDuration(), existing.GetMaxItems(),
+		existing.GetMaxBytes())
 }
 
 func (h *handler) AddMessages(
