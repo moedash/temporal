@@ -11,6 +11,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -576,6 +577,17 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}
 
+	// Drop the wakes the task carried. A failed task drops none: its mutable
+	// state was reloaded above and still holds them for the next attempt. A
+	// wake that arrived while the task ran stays owed.
+	wakesOwed := false
+	if wtFailedCause == nil && !wtHeartbeatTimedOut && completedEvent != nil {
+		wakesOwed, err = ackDeliveredWakes(ctx, ms)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
 	// Do not schedule a new workflow task if the workflow is paused. Accepting the in-flight
 	// WT completion is intentional (see HistoryBuilder buffering of WORKFLOW_EXECUTION_PAUSED),
@@ -586,6 +598,9 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
 			hasBufferedEventsOrMessages ||
+			// Scheduled here as well as by the transaction close, so a worker
+			// asking for its next task inline gets one that carries the wake.
+			wakesOwed ||
 			activityNotStartedCancelled ||
 			// If the workflow has an ongoing transition to another deployment version, we should ensure
 			// it has a pending wft so it does not remain in the transition phase for long.
@@ -614,6 +629,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	var newWorkflowTask *historyi.WorkflowTaskInfo
+	var inlineWakes []*workflowpb.Wake
 
 	// Speculative workflow task will be created after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
@@ -671,6 +687,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				nil,
 				-1, // sentinel: inline path didn't consult matching, has no routing revision
 			)
+			if err != nil {
+				return nil, err
+			}
+			inlineWakes, err = recordworkflowtaskstarted.TakeWakes(
+				ctx, handler.shardContext, ms, newWorkflowTask)
 			if err != nil {
 				return nil, err
 			}
@@ -836,6 +857,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
 		resp.StartedResponse.StickyExecutionEnabled = true
+		resp.StartedResponse.Wakes = inlineWakes
 
 		// The poll path delivers from its own handler, so this one has to ask
 		// as well or a subscribed workflow gets an inline task with no data.
@@ -1018,6 +1040,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		Queries:                    matchingResp.Queries,
 		Messages:                   matchingResp.Messages,
 		StreamSlices:               matchingResp.StreamSlices,
+		Wakes:                      matchingResp.Wakes,
 	}
 
 	return resp, nil
@@ -1220,4 +1243,27 @@ func (handler *WorkflowTaskCompletedHandler) clearStickyTaskQueue(ctx context.Co
 		return err
 	}
 	return nil
+}
+
+// ackDeliveredWakes drops the wakes the completing task carried and reports
+// whether one is still owed to the workflow.
+func ackDeliveredWakes(ctx context.Context, ms historyi.MutableState) (bool, error) {
+	if !ms.HasChasmWorkflowComponent() {
+		return false, nil
+	}
+	// Read-only first, so a workflow that has never been woken does not pay a
+	// node write on every task it completes.
+	readOnly, _, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !readOnly.HasPendingWakes() {
+		return false, nil
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(ctx)
+	if err != nil {
+		return false, err
+	}
+	wf.AckDeliveredWakes(chasmCtx)
+	return wf.HasUndeliveredWakes(chasmCtx), nil
 }

@@ -215,6 +215,7 @@ type Config struct {
 	MaximumBufferedEventsSizeInBytes dynamicconfig.IntPropertyFn
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaximumRequestIDsPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaximumWakeSourcesPerExecution   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RequestIDMaxAge                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaximumEventBatchSizeInBytes     dynamicconfig.IntPropertyFn
 
@@ -697,6 +698,7 @@ func NewConfig(
 		MaximumBufferedEventsSizeInBytes: dynamicconfig.MaximumBufferedEventsSizeInBytes.Get(dc),
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
 		MaximumRequestIDsPerExecution:    dynamicconfig.MaximumRequestIDsPerExecution.Get(dc),
+		MaximumWakeSourcesPerExecution:   dynamicconfig.MaximumWakeSourcesPerExecution.Get(dc),
 		RequestIDMaxAge:                  dynamicconfig.RequestIDMaxAge.Get(dc),
 		MaximumEventBatchSizeInBytes:     dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),
