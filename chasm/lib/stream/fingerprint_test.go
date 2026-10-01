@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -216,15 +217,23 @@ func TestTheKeyIsIgnoredWithoutAProducer(t *testing.T) {
 	require.Empty(t, s.State.Producers)
 }
 
-// Without the key the fingerprint is the encoded batch, exactly as before, so
-// producer entries written before the key existed stay comparable.
-func TestUndeclaredBatchIsFingerprintedOverItsBytes(t *testing.T) {
+// Without the key the fingerprint is the deterministic serialization of the
+// records, so producer entries written before the key existed stay comparable,
+// and the stamp the stored batch carries plays no part in it.
+func TestUndeclaredBatchIsFingerprintedOverItsRecords(t *testing.T) {
 	records := msgs("a", "b")
-	blob, err := marshalBatch(records)
+	unstamped, err := marshalBatch(records, time.Time{})
 	require.NoError(t, err)
-	got, err := batchFingerprint(records, blob.Data)
+	got, err := batchFingerprint(records)
 	require.NoError(t, err)
-	require.Equal(t, contentHash(blob.Data), got)
+	require.Equal(t, contentHash(unstamped.Data), got)
+
+	stamped, err := marshalBatch(records, time.Unix(1_700_000_000, 0))
+	require.NoError(t, err)
+	require.NotEqual(t, unstamped.Data, stamped.Data, "the stamp is stored")
+	again, err := batchFingerprint(records)
+	require.NoError(t, err)
+	require.Equal(t, got, again, "and ignored by the fingerprint")
 }
 
 func TestDeclaredHashIsCaseInsensitive(t *testing.T) {

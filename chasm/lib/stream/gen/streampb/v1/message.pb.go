@@ -15,6 +15,7 @@ import (
 	v11 "go.temporal.io/api/stream/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -140,11 +141,15 @@ func (x *StreamRecord) GetAttempt() int64 {
 }
 
 // One append is one batch, and one batch is one data node. The server stores
-// this serialized and opaque; it decodes only to trim a partial first page or
-// to apply a topic filter.
+// this serialized and opaque; it decodes only to trim a partial first page, to
+// apply a topic filter, or to learn the batch's age.
 type StreamRecordBatch struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Records       []*StreamRecord        `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Records []*StreamRecord        `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
+	// When the batch was appended, for the lifecycle's retention age. Kept here
+	// rather than in the stream's state so the state stays free of a per-batch
+	// index; the age check reads the oldest batches to find it.
+	AppendedAt    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=appended_at,json=appendedAt,proto3" json:"appended_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -186,11 +191,18 @@ func (x *StreamRecordBatch) GetRecords() []*StreamRecord {
 	return nil
 }
 
+func (x *StreamRecordBatch) GetAppendedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AppendedAt
+	}
+	return nil
+}
+
 var File_temporal_server_chasm_lib_stream_proto_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/stream/proto/v1/message.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/stream/v1/message.proto\"\xc7\x03\n" +
+	"7temporal/server/chasm/lib/stream/proto/v1/message.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/stream/v1/message.proto\"\xc7\x03\n" +
 	"\fStreamRecord\x123\n" +
 	"\x04body\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x04body\x12a\n" +
 	"\bmetadata\x18\x02 \x03(\v2E.temporal.server.chasm.lib.stream.proto.v1.StreamRecord.MetadataEntryR\bmetadata\x12\x14\n" +
@@ -203,9 +215,11 @@ const file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDesc = "" 
 	"\aattempt\x18\b \x01(\x03R\aattempt\x1a\\\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
-	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\"f\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\"\xa3\x01\n" +
 	"\x11StreamRecordBatch\x12Q\n" +
-	"\arecords\x18\x01 \x03(\v27.temporal.server.chasm.lib.stream.proto.v1.StreamRecordR\arecordsB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
+	"\arecords\x18\x01 \x03(\v27.temporal.server.chasm.lib.stream.proto.v1.StreamRecordR\arecords\x12;\n" +
+	"\vappended_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"appendedAtB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDescOnce sync.Once
@@ -221,23 +235,25 @@ func file_temporal_server_chasm_lib_stream_proto_v1_message_proto_rawDescGZIP() 
 
 var file_temporal_server_chasm_lib_stream_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_temporal_server_chasm_lib_stream_proto_v1_message_proto_goTypes = []any{
-	(*StreamRecord)(nil),      // 0: temporal.server.chasm.lib.stream.proto.v1.StreamRecord
-	(*StreamRecordBatch)(nil), // 1: temporal.server.chasm.lib.stream.proto.v1.StreamRecordBatch
-	nil,                       // 2: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.MetadataEntry
-	(*v1.Payload)(nil),        // 3: temporal.api.common.v1.Payload
-	(v11.StreamRecordKind)(0), // 4: temporal.api.stream.v1.StreamRecordKind
+	(*StreamRecord)(nil),          // 0: temporal.server.chasm.lib.stream.proto.v1.StreamRecord
+	(*StreamRecordBatch)(nil),     // 1: temporal.server.chasm.lib.stream.proto.v1.StreamRecordBatch
+	nil,                           // 2: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.MetadataEntry
+	(*v1.Payload)(nil),            // 3: temporal.api.common.v1.Payload
+	(v11.StreamRecordKind)(0),     // 4: temporal.api.stream.v1.StreamRecordKind
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
 }
 var file_temporal_server_chasm_lib_stream_proto_v1_message_proto_depIdxs = []int32{
 	3, // 0: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.body:type_name -> temporal.api.common.v1.Payload
 	2, // 1: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.metadata:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord.MetadataEntry
 	4, // 2: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.kind:type_name -> temporal.api.stream.v1.StreamRecordKind
 	0, // 3: temporal.server.chasm.lib.stream.proto.v1.StreamRecordBatch.records:type_name -> temporal.server.chasm.lib.stream.proto.v1.StreamRecord
-	3, // 4: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.MetadataEntry.value:type_name -> temporal.api.common.v1.Payload
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	5, // 4: temporal.server.chasm.lib.stream.proto.v1.StreamRecordBatch.appended_at:type_name -> google.protobuf.Timestamp
+	3, // 5: temporal.server.chasm.lib.stream.proto.v1.StreamRecord.MetadataEntry.value:type_name -> temporal.api.common.v1.Payload
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_stream_proto_v1_message_proto_init() }
