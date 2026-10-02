@@ -138,7 +138,6 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"RespondNexusTaskFailed":             {},
 		"SignalWithStartWorkflowExecution":   {},
 		"SignalWorkflowExecution":            {},
-		"WakeWorkflowExecution":              {},
 		"NotifyChannel":                      {},
 		"RegisterChannelListener":            {},
 		"UnregisterChannelListener":          {},

@@ -129,7 +129,6 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestSelectedAPIs() {
 		"StartWorkflowExecution":           {},
 		"SignalWithStartWorkflowExecution": {},
 		"SignalWorkflowExecution":          {},
-		"WakeWorkflowExecution":            {},
 		"NotifyChannel":                    {},
 		"RegisterChannelListener":          {},
 		"UnregisterChannelListener":        {},

@@ -29,7 +29,6 @@ var (
 		"StartWorkflowExecution":           1,
 		"SignalWithStartWorkflowExecution": 1,
 		"SignalWorkflowExecution":          1,
-		"WakeWorkflowExecution":            1,
 		"NotifyChannel":                    1,
 		"RegisterChannelListener":          1,
 		"UnregisterChannelListener":        1,
