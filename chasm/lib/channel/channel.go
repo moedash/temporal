@@ -209,8 +209,8 @@ func (c *Channel) touch(mctx chasm.MutableContext) {
 type FanOut struct {
 	Latest            *channelpb.Notification
 	WorkflowListeners []*channelpb.WorkflowListener
-	// Callback listeners whose newest notification replaced one still waiting
-	// behind an in-flight delivery.
+	// Callback listeners that already held the notification, in flight or
+	// pending, or whose pending one it replaced.
 	CallbackFolded int
 	// Callback listeners a delivery was started for.
 	CallbackStarted int
@@ -233,33 +233,82 @@ func (c *Channel) TakeFanOut(mctx chasm.MutableContext, _ struct{}) (FanOut, err
 		return out, nil
 	}
 
-	view := readOnly(mctx)
-	for _, id := range slices.Sorted(maps.Keys(c.CallbackListeners)) {
-		if c.CallbackListeners[id].Get(view).GetHandedCounter() >= latest.GetCounter() {
-			continue
-		}
-		listener := c.CallbackListeners[id].Get(mctx)
-		listener.HandedCounter = latest.GetCounter()
-		if listener.GetInFlight() != nil {
-			if listener.GetPending() != nil {
-				out.CallbackFolded++
-			}
-			listener.Pending = common.CloneProto(latest)
-			continue
-		}
-		listener.InFlight = common.CloneProto(latest)
-		listener.Attempt = 0
-		if err := c.scheduleCallback(mctx, listener); err != nil {
-			return FanOut{}, err
-		}
-		out.CallbackStarted++
+	started, folded, err := c.HandToCallbacks(mctx, latest)
+	if err != nil {
+		return FanOut{}, err
 	}
+	out.CallbackStarted, out.CallbackFolded = started, folded
 
+	view := readOnly(mctx)
 	for _, id := range slices.Sorted(maps.Keys(c.WorkflowListeners)) {
 		out.WorkflowListeners = append(out.WorkflowListeners,
 			common.CloneProto(c.WorkflowListeners[id].Get(view)))
 	}
 	return out, nil
+}
+
+// callbackHolds reports whether a callback listener already holds a
+// notification at this counter or above, in flight or pending. Only what it
+// holds counts: once a post is done, the same counter is news again.
+func callbackHolds(listener *channelpb.CallbackListener, counter int64) bool {
+	return (listener.GetInFlight() != nil && listener.GetInFlight().GetCounter() >= counter) ||
+		(listener.GetPending() != nil && listener.GetPending().GetCounter() >= counter)
+}
+
+// CallbacksNeed reports whether any callback listener does not hold the
+// notification, which is when handing it over writes the channel.
+func (c *Channel) CallbacksNeed(ctx chasm.Context, counter int64) bool {
+	view := readOnly(ctx)
+	for _, field := range c.CallbackListeners {
+		if !callbackHolds(field.Get(view), counter) {
+			return true
+		}
+	}
+	return false
+}
+
+// HandToCallbacks gives the notification to every callback listener that
+// does not hold it: one with nothing in flight starts a post, and one that is
+// busy keeps it as its pending notification, replacing an older one. A
+// listener that holds it already is left untouched. It reports how many posts
+// it started and how many listeners folded it.
+func (c *Channel) HandToCallbacks(
+	mctx chasm.MutableContext,
+	n *channelpb.Notification,
+) (started int, folded int, err error) {
+	view := readOnly(mctx)
+	for _, id := range slices.Sorted(maps.Keys(c.CallbackListeners)) {
+		if callbackHolds(c.CallbackListeners[id].Get(view), n.GetCounter()) {
+			folded++
+			continue
+		}
+		listener := c.CallbackListeners[id].Get(mctx)
+		listener.HandedCounter = max(listener.GetHandedCounter(), n.GetCounter())
+		if listener.GetInFlight() != nil {
+			if listener.GetPending() != nil {
+				folded++
+			}
+			listener.Pending = common.CloneProto(n)
+			continue
+		}
+		listener.InFlight = common.CloneProto(n)
+		listener.Attempt = 0
+		if err = c.scheduleCallback(mctx, listener); err != nil {
+			return 0, 0, err
+		}
+		started++
+	}
+	return started, folded, nil
+}
+
+// WorkflowListenerList returns the workflow listeners in workflow id order.
+func (c *Channel) WorkflowListenerList(ctx chasm.Context) []*channelpb.WorkflowListener {
+	view := readOnly(ctx)
+	out := make([]*channelpb.WorkflowListener, 0, len(c.WorkflowListeners))
+	for _, id := range slices.Sorted(maps.Keys(c.WorkflowListeners)) {
+		out = append(out, common.CloneProto(c.WorkflowListeners[id].Get(view)))
+	}
+	return out
 }
 
 // CallbackDestination keys a callback's deliveries on the outbound queue,

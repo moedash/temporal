@@ -1476,7 +1476,8 @@ type DeliverChannelNotificationOutput struct {
 	SuccessorRunId string `protobuf:"bytes,2,opt,name=successor_run_id,json=successorRunId,proto3" json:"successor_run_id,omitempty"`
 	// The notification joined one the run had not seen yet.
 	Folded bool `protobuf:"varint,3,opt,name=folded,proto3" json:"folded,omitempty"`
-	// The run had already seen this counter, so nothing changed.
+	// The run holds a pending notification at this counter or above, so
+	// nothing changed.
 	Duplicate     bool `protobuf:"varint,4,opt,name=duplicate,proto3" json:"duplicate,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

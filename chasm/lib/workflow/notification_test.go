@@ -42,7 +42,7 @@ func TestChannelNotificationsFoldAndSnapshot(t *testing.T) {
 	require.True(t, folded)
 	folded, err = w.AcceptChannelNotification(ctx, channelNote("orders", 2))
 	require.NoError(t, err)
-	require.False(t, folded, "a lower counter is dropped, not folded")
+	require.True(t, folded, "a lower counter folds into the pending one and changes nothing")
 	_, err = w.AcceptChannelNotification(ctx, channelNote("billing", 7))
 	require.NoError(t, err)
 	require.True(t, w.HasPendingChannelNotifications())
@@ -58,21 +58,28 @@ func TestChannelNotificationsFoldAndSnapshot(t *testing.T) {
 	require.Empty(t, w.TakeChannelNotifications(ctx))
 }
 
-// What a scheduled event carried is in History, so a redelivery of the same
-// counter after the snapshot changes nothing.
-func TestChannelNotificationRedeliveryIsDuplicate(t *testing.T) {
+// Folding is against the pending entry only. While one is pending, the same
+// or a lower counter changes nothing; once a scheduled event has carried it,
+// the same counter is a new reason to run, since a watcher that finds a
+// record with no task open sends the counter it already sent.
+func TestChannelNotificationFoldsOnlyWhilePending(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	w := &Workflow{}
 	subscribe(t, w, ctx, "orders")
 	_, err := w.AcceptChannelNotification(ctx, channelNote("orders", 4))
 	require.NoError(t, err)
-	w.TakeChannelNotifications(ctx)
 
 	require.True(t, w.ChannelNotificationIsDuplicate(ctx, "orders", 4))
+	require.True(t, w.ChannelNotificationIsDuplicate(ctx, "orders", 3))
 	require.False(t, w.ChannelNotificationIsDuplicate(ctx, "orders", 5))
-	_, err = w.AcceptChannelNotification(ctx, channelNote("orders", 4))
+
+	w.TakeChannelNotifications(ctx)
+	require.False(t, w.ChannelNotificationIsDuplicate(ctx, "orders", 4), "carried, so news again")
+	folded, err := w.AcceptChannelNotification(ctx, channelNote("orders", 4))
 	require.NoError(t, err)
-	require.False(t, w.HasPendingChannelNotifications())
+	require.False(t, folded)
+	require.True(t, w.HasPendingChannelNotifications())
+	require.Equal(t, int64(4), w.ChannelSubscriptions["orders"].Get(ctx).GetLastCounter())
 }
 
 func TestChannelSubscriptionRules(t *testing.T) {

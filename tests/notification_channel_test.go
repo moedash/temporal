@@ -760,9 +760,52 @@ func TestNotificationChannelSubscribeOnEmptyChannel(t *testing.T) {
 	require.Len(t, c.describe(name).GetListeners(), 1)
 	require.False(t, c.hasPendingTask(id), "the latest is not handed out again")
 
-	// A notify that does not raise the latest counter changes nothing and
-	// wakes nobody.
-	require.Equal(t, int32(1), c.mustNotify(name, 1))
-	require.Equal(t, int32(1), c.describe(name).GetRetainedCount())
+}
+
+// channelTransitions reads the channel execution's state transition count,
+// which moves on every write.
+func (c *channelTestEnv) channelTransitions(name string) int64 {
+	c.t.Helper()
+	resp, err := c.env.AdminClient().DescribeMutableState(c.ctx(),
+		&adminservice.DescribeMutableStateRequest{
+			Namespace: c.ns,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: name},
+			Archetype: channelservice.Archetype,
+		})
+	require.NoError(c.t, err)
+	return resp.GetDatabaseMutableState().GetExecutionInfo().GetStateTransitionCount()
+}
+
+// The stall the wake round fixed: a listener's task runs to completion, and a
+// watcher that later finds the same record with no task open notifies the
+// same counter again. That is a new reason to run, so it schedules a task
+// whose scheduled event carries the counter. It does not join the ring again.
+func TestNotificationChannelRepeatAfterTaskWakesAgain(t *testing.T) {
+	c := newChannelTestEnv(t)
+	id := "channel-repeat-" + uuid.NewString()
+	name := "orders-" + uuid.NewString()
+	c.subscribe(id, name)
+
+	c.mustNotify(name, 1)
+	task := c.poll(id)
+	requireNotifications(t, c.scheduledNotifications(id, task), map[string]int64{name: 1})
+	c.complete(task, false)
 	require.False(t, c.hasPendingTask(id))
+
+	require.Equal(t, int32(1), c.mustNotify(name, 1))
+	task = c.poll(id)
+	requireNotifications(t, c.scheduledNotifications(id, task), map[string]int64{name: 1})
+	require.Equal(t, int32(1), c.describe(name).GetRetainedCount())
+
+	// While the open task keeps the repeat pending, the same counter again
+	// writes neither the run nor the channel.
+	c.mustNotify(name, 2)
+	c.awaitPending(id, name, 2)
+	runWrites, channelWrites := c.stateTransitions(id), c.channelTransitions(name)
+	require.Equal(t, int32(1), c.mustNotify(name, 2))
+	require.Equal(t, runWrites, c.stateTransitions(id), "folded into the pending entry")
+	require.Equal(t, channelWrites, c.channelTransitions(name), "the ring and the table are unchanged")
+	c.complete(task, false)
+	next := c.poll(id)
+	requireNotifications(t, c.scheduledNotifications(id, next), map[string]int64{name: 2})
 }

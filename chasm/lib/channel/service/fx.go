@@ -14,6 +14,7 @@ var HistoryModule = fx.Module(
 	"channel-history",
 	fx.Provide(
 		channelpb.NewChannelServiceLayeredClient,
+		newWorkflowDeliverer,
 		newHandler,
 		newFanOutTaskHandler,
 		newCallbackTaskHandler,

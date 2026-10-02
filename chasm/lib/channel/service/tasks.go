@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -56,25 +55,19 @@ type fanOutTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*channelpb.ChannelFanOutTask]
 
 	namespaceRegistry namespace.Registry
-	logger            log.Logger
 	metricsHandler    metrics.Handler
-	config            *channel.Config
-	routed            channelpb.ChannelServiceClient
+	deliverer         *workflowDeliverer
 }
 
 func newFanOutTaskHandler(
 	namespaceRegistry namespace.Registry,
-	logger log.Logger,
 	metricsHandler metrics.Handler,
-	config *channel.Config,
-	routed channelpb.ChannelServiceClient,
+	deliverer *workflowDeliverer,
 ) *fanOutTaskHandler {
 	return &fanOutTaskHandler{
 		namespaceRegistry: namespaceRegistry,
-		logger:            logger,
 		metricsHandler:    metricsHandler,
-		config:            config,
-		routed:            routed,
+		deliverer:         deliverer,
 	}
 }
 
@@ -112,68 +105,7 @@ func (h *fanOutTaskHandler) Execute(
 		return nil
 	}
 
-	// No cancelling context on purpose: one unreachable listener must not stop
-	// the others being told.
-	var group errgroup.Group
-	group.SetLimit(fanOutConcurrency)
-	for _, listener := range fanOut.WorkflowListeners {
-		group.Go(func() error {
-			return h.deliverOne(ctx, ref, ns, listener, fanOut.Latest)
-		})
-	}
-	return group.Wait()
-}
-
-// deliverOne tells one workflow listener and acts on its answer. The call
-// carries its own deadline, so a listener on a slow host does not take the
-// whole task's.
-func (h *fanOutTaskHandler) deliverOne(
-	ctx context.Context,
-	ref chasm.ComponentRef,
-	ns string,
-	listener *channelpb.WorkflowListener,
-	n *channelpb.Notification,
-) error {
-	callCtx, cancel := context.WithTimeout(ctx, channel.RoutedCallTimeout)
-	defer cancel()
-	response, err := h.routed.DeliverChannelNotification(callCtx, &channelpb.DeliverChannelNotificationRequest{
-		NamespaceId: ref.NamespaceID,
-		FrontendRequest: &channelpb.DeliverChannelNotificationInput{
-			Namespace:    ns,
-			WorkflowId:   listener.GetWorkflowId(),
-			RunId:        listener.GetRunId(),
-			Notification: n,
-		},
-	})
-	if err != nil {
-		// Not taken as proof the listener is gone. The handler already reads a
-		// missing run as closed and says so in its answer, so an error here is
-		// the transport's, and dropping a listener on that would be a guess.
-		h.logger.Warn("failed to deliver a channel notification to a workflow",
-			tag.NewStringTag("channel", ref.BusinessID),
-			tag.WorkflowID(listener.GetWorkflowId()),
-			tag.Error(err))
-		return err
-	}
-	out := response.GetFrontendResponse()
-	limits := h.config.LimitsFor(ns)
-	switch {
-	case out.GetListenerClosed():
-		_, _, err = chasm.UpdateComponent(ctx, ref,
-			func(c *channel.Channel, mctx chasm.MutableContext, l *channelpb.WorkflowListener) (struct{}, error) {
-				c.ForgetWorkflowListener(mctx, l.GetWorkflowId(), l.GetRunId(), limits)
-				return struct{}{}, nil
-			}, listener)
-	case out.GetSuccessorRunId() != "":
-		_, _, err = chasm.UpdateComponent(ctx, ref,
-			func(c *channel.Channel, mctx chasm.MutableContext, l *channelpb.WorkflowListener) (struct{}, error) {
-				c.RekeyWorkflowListener(mctx, l.GetWorkflowId(), l.GetRunId(), out.GetSuccessorRunId())
-				return struct{}{}, nil
-			}, listener)
-	default:
-		// Delivered, or a duplicate. The listener stays as it is.
-	}
-	return err
+	return h.deliverer.deliverAll(ctx, ref, ns, fanOut.WorkflowListeners, fanOut.Latest)
 }
 
 // Discard lowers the coalescing flag the scheduling notify raised. Left up, no

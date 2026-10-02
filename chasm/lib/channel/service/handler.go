@@ -27,6 +27,7 @@ type handler struct {
 	timeSource        clock.TimeSource
 	config            *channel.Config
 	limiters          *notifyLimiters
+	deliverer         *workflowDeliverer
 }
 
 func newHandler(
@@ -35,6 +36,7 @@ func newHandler(
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	config *channel.Config,
+	deliverer *workflowDeliverer,
 ) *handler {
 	return &handler{
 		namespaceRegistry: namespaceRegistry,
@@ -43,6 +45,7 @@ func newHandler(
 		timeSource:        timeSource,
 		config:            config,
 		limiters:          newNotifyLimiters(config),
+		deliverer:         deliverer,
 	}
 }
 
@@ -155,14 +158,20 @@ func (h *handler) NotifyChannel(
 		return nil, err
 	}
 
-	// Read first: a notify that would not raise the channel's latest counter
-	// changes nothing, and answering it from a read keeps it from writing.
-	if stale, count, err := h.staleNotify(ctx, req.GetNamespaceId(), in.GetNotification()); err != nil {
+	// Read first. A notify that would not raise the channel's latest counter
+	// leaves the ring alone, but it still reaches every listener: one that
+	// holds it pending folds it, and one that does not, because its last
+	// task already ran, is woken again.
+	repeat, err := h.readRepeat(ctx, req.GetNamespaceId(), in.GetNotification())
+	if err != nil {
 		return nil, err
-	} else if stale {
-		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(1, metrics.NamespaceTag(ns))
+	}
+	if repeat.repeat {
+		if err := h.redeliver(ctx, req.GetNamespaceId(), ns, in.GetNotification(), repeat); err != nil {
+			return nil, err
+		}
 		return &channelpb.NotifyChannelResponse{
-			FrontendResponse: &channelpb.NotifyChannelOutput{ListenerCount: int64(count)},
+			FrontendResponse: &channelpb.NotifyChannelOutput{ListenerCount: int64(repeat.listeners)},
 		}, nil
 	}
 	count, err := h.notify(ctx, req.GetNamespaceId(), in, limits)
@@ -190,29 +199,73 @@ func (h *handler) NotifyChannel(
 	}, nil
 }
 
-// staleNotify reports whether the channel already holds a notification at
-// this counter or above, and how many listeners it has. A channel that does
-// not exist is not stale: the notify creates it.
-func (h *handler) staleNotify(
+// repeatRead is what a notify learns from reading the channel first.
+type repeatRead struct {
+	// The counter is not above the channel's latest, so the ring is left as
+	// it is.
+	repeat    bool
+	listeners int
+	workflows []*channelpb.WorkflowListener
+	// Some callback listener does not hold the notification.
+	callbacksNeed bool
+}
+
+// readRepeat reads whether the notification would advance the channel. A
+// channel that does not exist, or is closed, is not a repeat: the notify
+// creates a channel.
+func (h *handler) readRepeat(
 	ctx context.Context,
 	namespaceID string,
 	n *channelpb.Notification,
-) (bool, int, error) {
-	type answer struct {
-		stale     bool
-		listeners int
-	}
+) (repeatRead, error) {
 	got, err := chasm.ReadComponent(ctx, channelRef(namespaceID, n.GetChannel()),
-		func(c *channel.Channel, _ chasm.Context, counter int64) (answer, error) {
-			if c.State.GetClosed() {
-				return answer{}, nil
+		func(c *channel.Channel, cctx chasm.Context, counter int64) (repeatRead, error) {
+			if c.State.GetClosed() || c.Advances(counter) {
+				return repeatRead{}, nil
 			}
-			return answer{stale: !c.Advances(counter), listeners: c.ListenerCount()}, nil
+			return repeatRead{
+				repeat:        true,
+				listeners:     c.ListenerCount(),
+				workflows:     c.WorkflowListenerList(cctx),
+				callbacksNeed: c.CallbacksNeed(cctx, counter),
+			}, nil
 		}, n.GetCounter())
 	if executionAbsent(err) {
-		return false, 0, nil
+		return repeatRead{}, nil
 	}
-	return got.stale, got.listeners, err
+	return got, err
+}
+
+// redeliver hands a notification that does not advance the channel to every
+// listener. The channel is written only when a callback listener needs it;
+// each workflow listener decides on its own shard, and one that holds it
+// pending writes nothing.
+func (h *handler) redeliver(
+	ctx context.Context,
+	namespaceID, ns string,
+	n *channelpb.Notification,
+	read repeatRead,
+) error {
+	ref := channelRef(namespaceID, n.GetChannel())
+	if read.callbacksNeed {
+		folded, _, err := chasm.UpdateComponent(ctx, ref,
+			func(c *channel.Channel, mctx chasm.MutableContext, n *channelpb.Notification) (int, error) {
+				_, folded, err := c.HandToCallbacks(mctx, n)
+				return folded, err
+			}, n)
+		if err != nil && !executionAbsent(err) {
+			return err
+		}
+		if folded > 0 {
+			metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
+				int64(folded), metrics.NamespaceTag(ns), callbackKindTag)
+		}
+	}
+	if holders := read.listeners - len(read.workflows); !read.callbacksNeed && holders > 0 {
+		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
+			int64(holders), metrics.NamespaceTag(ns), callbackKindTag)
+	}
+	return h.deliverer.deliverAll(ctx, ref, ns, read.workflows, n)
 }
 
 // notify accepts the notification on the channel, creating it if absent. A

@@ -382,3 +382,34 @@ func TestNewWorkflowListenerGetsLatest(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(3), latest.GetCounter(), "a successor run is new")
 }
+
+// A notification that does not advance the channel still reaches a callback
+// listener that does not hold it, and changes nothing for one that does.
+func TestRepeatHandsOnlyToCallbacksThatLackIt(t *testing.T) {
+	c, mctx, _ := newTestChannel(t)
+	id, err := c.RegisterCallbackListener(mctx, CallbackRegistration{
+		RequestID: "req-1", Callback: testCallback(),
+	})
+	require.NoError(t, err)
+	_, err = c.Notify(mctx, note(5), Limits{})
+	require.NoError(t, err)
+	_, err = c.TakeFanOut(mctx, struct{}{})
+	require.NoError(t, err)
+	require.Len(t, tasksOf[*channelpb.ChannelCallbackTask](mctx), 1)
+
+	require.False(t, c.CallbacksNeed(mctx, 5), "in flight, so held")
+	started, folded, err := c.HandToCallbacks(mctx, note(5))
+	require.NoError(t, err)
+	require.Zero(t, started)
+	require.Equal(t, 1, folded)
+
+	task := tasksOf[*channelpb.ChannelCallbackTask](mctx)[0].Payload.(*channelpb.ChannelCallbackTask)
+	_, err = c.CompleteCallbackDelivery(mctx, CallbackOutcome{ListenerID: id, Sequence: task.GetSequence()})
+	require.NoError(t, err)
+	require.True(t, c.CallbacksNeed(mctx, 5), "posted, so the same counter is news again")
+	started, _, err = c.HandToCallbacks(mctx, note(5))
+	require.NoError(t, err)
+	require.Equal(t, 1, started)
+	require.Len(t, tasksOf[*channelpb.ChannelCallbackTask](mctx), 2)
+	require.Empty(t, c.WorkflowListenerList(mctx))
+}

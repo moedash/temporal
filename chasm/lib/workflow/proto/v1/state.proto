@@ -47,8 +47,8 @@ message WakeEntry {
 message ChannelSubscription {
   // The WorkflowNotificationChannelSubscribed event that recorded it.
   int64 event_id = 1;
-  // Highest counter this run accepted from the channel. A redelivery at or
-  // below it changes nothing, since the run may already have it in History.
+  // Highest counter this run accepted from the channel. Kept for describing
+  // the subscription; folding compares against the pending entry instead.
   int64 last_counter = 2;
 }
 

@@ -71,18 +71,24 @@ func (w *Workflow) DrainChannelRegistrations() []string {
 }
 
 // ChannelNotificationIsDuplicate reports whether accepting the notification
-// would change nothing: the run already accepted this counter or a higher one
-// from the channel, or does not listen to it at all.
+// would change nothing: the run holds a pending notification from the channel
+// at this counter or a higher one, or does not listen to it at all.
+//
+// Only a pending entry counts. Once a scheduled event has carried a
+// notification the entry is gone, and the same counter arriving again is a
+// new reason to run: a watcher that finds a record with no task open sends
+// the counter it already sent, and folding that away would leave its reader
+// waiting.
 func (w *Workflow) ChannelNotificationIsDuplicate(
 	ctx chasm.Context,
 	channel string,
 	counter int64,
 ) bool {
-	field, ok := w.ChannelSubscriptions[channel]
-	if !ok {
+	if _, ok := w.ChannelSubscriptions[channel]; !ok {
 		return true
 	}
-	return counter <= field.Get(readOnly(ctx)).GetLastCounter()
+	field, ok := w.ChannelNotifications[channel]
+	return ok && counter <= field.Get(readOnly(ctx)).GetCounter()
 }
 
 // AcceptChannelNotification records a notification from a channel this run
@@ -90,24 +96,26 @@ func (w *Workflow) ChannelNotificationIsDuplicate(
 // written to History here; the transaction close schedules the Workflow Task
 // whose scheduled event carries it.
 //
-// One entry per channel. A newer notification replaces one no scheduled event
-// has carried yet, and the report says it folded. A counter at or below the
-// highest this run accepted is dropped: a run may already have that one in
-// History, and the channel redelivers after a fan-out it has to retry.
+// One entry per channel. A notification at or below the pending entry's
+// counter is folded into it and changes nothing; a higher one replaces it;
+// with no pending entry it starts one, whatever its counter. It reports
+// whether the notification folded into a pending entry.
 func (w *Workflow) AcceptChannelNotification(
 	mctx chasm.MutableContext,
 	n *channelpb.Notification,
 ) (bool, error) {
 	channel := n.GetChannel()
-	field, ok := w.ChannelSubscriptions[channel]
+	subscription, ok := w.ChannelSubscriptions[channel]
 	if !ok {
 		return false, serviceerror.NewFailedPreconditionf(
 			"workflow does not listen to notification channel %q", channel)
 	}
-	if n.GetCounter() <= field.Get(readOnly(mctx)).GetLastCounter() {
-		return false, nil
+	if w.ChannelNotificationIsDuplicate(mctx, channel, n.GetCounter()) {
+		return true, nil
 	}
-	field.Get(mctx).LastCounter = n.GetCounter()
+	if n.GetCounter() > subscription.Get(readOnly(mctx)).GetLastCounter() {
+		subscription.Get(mctx).LastCounter = n.GetCounter()
+	}
 
 	entry := &chasmworkflowpb.ChannelNotificationEntry{
 		Position: n.GetPosition(),

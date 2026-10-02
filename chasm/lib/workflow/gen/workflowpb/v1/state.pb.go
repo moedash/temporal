@@ -253,8 +253,8 @@ type ChannelSubscription struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The WorkflowNotificationChannelSubscribed event that recorded it.
 	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	// Highest counter this run accepted from the channel. A redelivery at or
-	// below it changes nothing, since the run may already have it in History.
+	// Highest counter this run accepted from the channel. Kept for describing
+	// the subscription; folding compares against the pending entry instead.
 	LastCounter   int64 `protobuf:"varint,2,opt,name=last_counter,json=lastCounter,proto3" json:"last_counter,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

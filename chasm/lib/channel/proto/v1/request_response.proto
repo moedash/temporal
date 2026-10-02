@@ -175,7 +175,8 @@ message DeliverChannelNotificationOutput {
   string successor_run_id = 2;
   // The notification joined one the run had not seen yet.
   bool folded = 3;
-  // The run had already seen this counter, so nothing changed.
+  // The run holds a pending notification at this counter or above, so
+  // nothing changed.
   bool duplicate = 4;
 }
 
