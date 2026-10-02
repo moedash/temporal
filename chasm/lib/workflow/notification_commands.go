@@ -39,15 +39,14 @@ func handleSubscribeNotificationChannelCommand(
 		return FailWorkflowTaskError{Cause: badAttributes, Message: err.Error()}
 	}
 
-	// A run already subscribed changes nothing and writes no event, so an SDK
-	// that re-emits the command after a crash is harmless.
-	if wf.SubscribedToChannel(name) {
-		return nil
-	}
+	// A run already subscribed still gets the event, since every SDK matches
+	// the commands it issued against the events they produced, in order. It
+	// changes nothing else: no new listener and no latest notification.
+	already := wf.SubscribedToChannel(name)
 
 	// Refused before the event is written, so a refusal leaves nothing behind
 	// even before the failed task is rolled back.
-	if maxSubscriptions > 0 && wf.ChannelSubscriptionCount() >= maxSubscriptions {
+	if !already && maxSubscriptions > 0 && wf.ChannelSubscriptionCount() >= maxSubscriptions {
 		return FailWorkflowTaskError{
 			Cause: badAttributes,
 			Message: fmt.Sprintf(
@@ -65,6 +64,9 @@ func handleSubscribeNotificationChannelCommand(
 				},
 			}
 		})
+	if already {
+		return nil
+	}
 	if _, err := wf.RecordChannelSubscription(chasmCtx, name, event.GetEventId(), 0); err != nil {
 		return err
 	}
