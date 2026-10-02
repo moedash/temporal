@@ -79,7 +79,6 @@ var (
 		"RespondNexusTaskFailed":             func() any { return &workflowservice.RespondNexusTaskFailedResponse{} },
 		"SignalWithStartWorkflowExecution":   func() any { return &workflowservice.SignalWithStartWorkflowExecutionResponse{} },
 		"SignalWorkflowExecution":            func() any { return &workflowservice.SignalWorkflowExecutionResponse{} },
-		"WakeWorkflowExecution":              func() any { return &workflowservice.WakeWorkflowExecutionResponse{} },
 		"NotifyChannel":                      func() any { return &workflowservice.NotifyChannelResponse{} },
 		"RegisterChannelListener":            func() any { return &workflowservice.RegisterChannelListenerResponse{} },
 		"UnregisterChannelListener":          func() any { return &workflowservice.UnregisterChannelListenerResponse{} },
