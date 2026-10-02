@@ -11,6 +11,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -610,6 +611,10 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			// started in this write and hands it back with the response, where
 			// the transaction close would schedule it for matching to start.
 			ms.HasPendingChannelNotifications() ||
+			// The same for a native stream whose frontier moved past a
+			// subscription's cursor while this task ran: the next task carries
+			// the slice, and it is handed back rather than left to matching.
+			ms.HasPendingStreamData() ||
 			activityNotStartedCancelled ||
 			// If the workflow has an ongoing transition to another deployment version, we should ensure
 			// it has a pending wft so it does not remain in the transition phase for long.
@@ -638,6 +643,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	var newWorkflowTask *historyi.WorkflowTaskInfo
+	var inlineStreamSlices []*streampb.StreamSlice
 
 	// Speculative workflow task will be created after mutable state is persisted.
 	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
@@ -695,6 +701,16 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				nil,
 				-1, // sentinel: inline path didn't consult matching, has no routing revision
 			)
+			if err != nil {
+				return nil, err
+			}
+			// The poll path delivers from its own handler, so this one has to
+			// ask as well or a subscribed workflow gets an inline task with no
+			// data. Asked before the commit: staging a range on the cursor is a
+			// write of this transaction, and the release refuses a mutable
+			// state dirtied after it.
+			inlineStreamSlices, err = recordworkflowtaskstarted.DeliverStreamSlices(
+				ctx, handler.shardContext, ms, newWorkflowTask)
 			if err != nil {
 				return nil, err
 			}
@@ -860,14 +876,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
 		resp.StartedResponse.StickyExecutionEnabled = true
-
-		// The poll path delivers from its own handler, so this one has to ask
-		// as well or a subscribed workflow gets an inline task with no data.
-		resp.StartedResponse.StreamSlices, err = recordworkflowtaskstarted.DeliverStreamSlices(
-			ctx, handler.shardContext, ms, newWorkflowTask)
-		if err != nil {
-			return nil, err
-		}
+		resp.StartedResponse.StreamSlices = inlineStreamSlices
 
 		resp.NewWorkflowTask, err = handler.withNewWorkflowTask(ctx, namespaceEntry.Name(), req, resp.StartedResponse)
 		if err != nil {
