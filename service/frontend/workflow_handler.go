@@ -2368,6 +2368,51 @@ func (wh *WorkflowHandler) WakeWorkflowExecution(
 	return nil, serviceerror.NewUnimplemented("WakeWorkflowExecution is not implemented")
 }
 
+// NotifyChannel is declared by the pinned API and served by a later layer of
+// this series.
+func (wh *WorkflowHandler) NotifyChannel(
+	_ context.Context,
+	_ *workflowservice.NotifyChannelRequest,
+) (*workflowservice.NotifyChannelResponse, error) {
+	return nil, serviceerror.NewUnimplemented("NotifyChannel is not implemented")
+}
+
+// RegisterChannelListener is declared by the pinned API and served by a later
+// layer of this series.
+func (wh *WorkflowHandler) RegisterChannelListener(
+	_ context.Context,
+	_ *workflowservice.RegisterChannelListenerRequest,
+) (*workflowservice.RegisterChannelListenerResponse, error) {
+	return nil, serviceerror.NewUnimplemented("RegisterChannelListener is not implemented")
+}
+
+// UnregisterChannelListener is declared by the pinned API and served by a
+// later layer of this series.
+func (wh *WorkflowHandler) UnregisterChannelListener(
+	_ context.Context,
+	_ *workflowservice.UnregisterChannelListenerRequest,
+) (*workflowservice.UnregisterChannelListenerResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UnregisterChannelListener is not implemented")
+}
+
+// PollChannel is declared by the pinned API and served by a later layer of
+// this series.
+func (wh *WorkflowHandler) PollChannel(
+	_ context.Context,
+	_ *workflowservice.PollChannelRequest,
+) (*workflowservice.PollChannelResponse, error) {
+	return nil, serviceerror.NewUnimplemented("PollChannel is not implemented")
+}
+
+// DescribeChannel is declared by the pinned API and served by a later layer of
+// this series.
+func (wh *WorkflowHandler) DescribeChannel(
+	_ context.Context,
+	_ *workflowservice.DescribeChannelRequest,
+) (*workflowservice.DescribeChannelResponse, error) {
+	return nil, serviceerror.NewUnimplemented("DescribeChannel is not implemented")
+}
+
 // SignalWithStartWorkflowExecution is used to ensure sending signal to a workflow.
 // If the workflow is running, this results in WorkflowExecutionSignaled event being recorded in the history
 // and a workflow task being created for the execution.
