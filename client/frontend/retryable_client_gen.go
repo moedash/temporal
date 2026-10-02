@@ -296,6 +296,21 @@ func (c *retryableClient) DescribeBatchOperation(
 	return resp, err
 }
 
+func (c *retryableClient) DescribeChannel(
+	ctx context.Context,
+	request *workflowservice.DescribeChannelRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeChannelResponse, error) {
+	var resp *workflowservice.DescribeChannelResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeChannel(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DescribeDeployment(
 	ctx context.Context,
 	request *workflowservice.DescribeDeploymentRequest,
@@ -851,6 +866,21 @@ func (c *retryableClient) ListWorkflowRules(
 	return resp, err
 }
 
+func (c *retryableClient) NotifyChannel(
+	ctx context.Context,
+	request *workflowservice.NotifyChannelRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.NotifyChannelResponse, error) {
+	var resp *workflowservice.NotifyChannelResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.NotifyChannel(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PatchSchedule(
 	ctx context.Context,
 	request *workflowservice.PatchScheduleRequest,
@@ -935,6 +965,21 @@ func (c *retryableClient) PollActivityTaskQueue(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.PollActivityTaskQueue(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) PollChannel(
+	ctx context.Context,
+	request *workflowservice.PollChannelRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollChannelResponse, error) {
+	var resp *workflowservice.PollChannelResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.PollChannel(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -1070,6 +1115,21 @@ func (c *retryableClient) RecordWorkerHeartbeat(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.RecordWorkerHeartbeat(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) RegisterChannelListener(
+	ctx context.Context,
+	request *workflowservice.RegisterChannelListenerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RegisterChannelListenerResponse, error) {
+	var resp *workflowservice.RegisterChannelListenerResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.RegisterChannelListener(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -1655,6 +1715,21 @@ func (c *retryableClient) UnpauseWorkflowExecution(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.UnpauseWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UnregisterChannelListener(
+	ctx context.Context,
+	request *workflowservice.UnregisterChannelListenerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UnregisterChannelListenerResponse, error) {
+	var resp *workflowservice.UnregisterChannelListenerResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UnregisterChannelListener(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

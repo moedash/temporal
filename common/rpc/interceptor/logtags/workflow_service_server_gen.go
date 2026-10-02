@@ -99,6 +99,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.DescribeBatchOperationResponse:
 		return nil
+	case *workflowservice.DescribeChannelRequest:
+		return nil
+	case *workflowservice.DescribeChannelResponse:
+		return nil
 	case *workflowservice.DescribeDeploymentRequest:
 		return nil
 	case *workflowservice.DescribeDeploymentResponse:
@@ -261,6 +265,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.ListWorkflowRulesResponse:
 		return nil
+	case *workflowservice.NotifyChannelRequest:
+		return nil
+	case *workflowservice.NotifyChannelResponse:
+		return nil
 	case *workflowservice.PatchScheduleRequest:
 		return nil
 	case *workflowservice.PatchScheduleResponse:
@@ -303,6 +311,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
+	case *workflowservice.PollChannelRequest:
+		return nil
+	case *workflowservice.PollChannelResponse:
+		return nil
 	case *workflowservice.PollNexusOperationExecutionRequest:
 		return []tag.Tag{
 			tag.OperationID(r.GetOperationId()),
@@ -362,6 +374,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.RecordWorkerHeartbeatRequest:
 		return nil
 	case *workflowservice.RecordWorkerHeartbeatResponse:
+		return nil
+	case *workflowservice.RegisterChannelListenerRequest:
+		return nil
+	case *workflowservice.RegisterChannelListenerResponse:
 		return nil
 	case *workflowservice.RegisterNamespaceRequest:
 		return nil
@@ -595,6 +611,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *workflowservice.UnpauseWorkflowExecutionResponse:
+		return nil
+	case *workflowservice.UnregisterChannelListenerRequest:
+		return nil
+	case *workflowservice.UnregisterChannelListenerResponse:
 		return nil
 	case *workflowservice.UpdateActivityExecutionOptionsRequest:
 		return []tag.Tag{
