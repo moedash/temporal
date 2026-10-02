@@ -2275,6 +2275,7 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED:                           true,
 		enumspb.EVENT_TYPE_WORKFLOW_STREAM_RECORDS_APPENDED:                     true,
 		enumspb.EVENT_TYPE_WORKFLOW_NOTIFICATION_CHANNEL_SUBSCRIBED:             true,
+		enumspb.EVENT_TYPE_WORKFLOW_NOTIFICATION_CHANNEL_UNSUBSCRIBED:           true,
 	}
 
 	// events corresponding to message from client will be assigned an event ID immediately
