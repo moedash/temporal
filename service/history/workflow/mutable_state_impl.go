@@ -744,16 +744,7 @@ func (ms *MutableStateImpl) carryStreamSubscriptionsTo(newMutableState *MutableS
 // have a subscription or a notification, so it resolves the root component
 // once rather than asking whether it exists and then asking for it.
 func (ms *MutableStateImpl) HasPendingStreamData() bool {
-	node, ok := ms.chasmTree.(*chasm.Node)
-	if !ok {
-		return false
-	}
-	chasmCtx := chasm.NewContext(context.Background(), node)
-	rootComponent, err := node.ComponentByPath(chasmCtx, nil)
-	if err != nil {
-		return false
-	}
-	wf, ok := rootComponent.(*chasmworkflow.Workflow)
+	wf, chasmCtx, ok := ms.chasmWorkflowView()
 	if !ok {
 		return false
 	}
@@ -764,6 +755,35 @@ func (ms *MutableStateImpl) HasPendingStreamData() bool {
 		return false
 	}
 	return !ms.IsWorkflowPendingOnWorkflowTaskBackoff()
+}
+
+// HasPendingChannelNotifications reports whether a channel notification waits
+// for a scheduled event. Asked at workflow task completion, so that the task
+// which will carry it is created in the completion's write and handed to the
+// completing worker, the way a task for a buffered Signal is, rather than
+// scheduled by the transaction close and started through matching.
+func (ms *MutableStateImpl) HasPendingChannelNotifications() bool {
+	wf, chasmCtx, ok := ms.chasmWorkflowView()
+	return ok && wf.HasPendingChannelNotifications(chasmCtx)
+}
+
+// chasmWorkflowView resolves the Workflow component through a read-only
+// context, for checks that must leave the tree untouched.
+func (ms *MutableStateImpl) chasmWorkflowView() (*chasmworkflow.Workflow, chasm.Context, bool) {
+	node, ok := ms.chasmTree.(*chasm.Node)
+	if !ok {
+		return nil, nil, false
+	}
+	chasmCtx := chasm.NewContext(context.Background(), node)
+	rootComponent, err := node.ComponentByPath(chasmCtx, nil)
+	if err != nil {
+		return nil, nil, false
+	}
+	wf, ok := rootComponent.(*chasmworkflow.Workflow)
+	if !ok {
+		return nil, nil, false
+	}
+	return wf, chasmCtx, true
 }
 
 // attachChannelNotifications puts the pending channel notifications on a

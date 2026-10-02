@@ -380,6 +380,9 @@ type (
 		// offsets to deliver, which is the only case where stream traffic
 		// schedules a workflow task.
 		HasPendingStreamData() bool
+		// HasPendingChannelNotifications reports whether a notification from a
+		// channel waits for the next WorkflowTaskScheduled event to carry it.
+		HasPendingChannelNotifications() bool
 		ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error)
 		// Ensures that the chasm workflow component is installed in the mutable state CHASM tree.
 		// Must be called before adding any components to the tree.

@@ -3108,6 +3108,20 @@ func (mr *MockMutableStateMockRecorder) HasParentExecution() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasParentExecution", reflect.TypeOf((*MockMutableState)(nil).HasParentExecution))
 }
 
+// HasPendingChannelNotifications mocks base method.
+func (m *MockMutableState) HasPendingChannelNotifications() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasPendingChannelNotifications")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasPendingChannelNotifications indicates an expected call of HasPendingChannelNotifications.
+func (mr *MockMutableStateMockRecorder) HasPendingChannelNotifications() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPendingChannelNotifications", reflect.TypeOf((*MockMutableState)(nil).HasPendingChannelNotifications))
+}
+
 // HasPendingStreamData mocks base method.
 func (m *MockMutableState) HasPendingStreamData() bool {
 	m.ctrl.T.Helper()

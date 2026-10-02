@@ -604,6 +604,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
 			hasBufferedEventsOrMessages ||
+			// A channel notification that arrived while this task ran, or that
+			// a subscribe command in it was handed, is carried by the next
+			// scheduled event. Creating that task here puts scheduled and
+			// started in this write and hands it back with the response, where
+			// the transaction close would schedule it for matching to start.
+			ms.HasPendingChannelNotifications() ||
 			activityNotStartedCancelled ||
 			// If the workflow has an ongoing transition to another deployment version, we should ensure
 			// it has a pending wft so it does not remain in the transition phase for long.
