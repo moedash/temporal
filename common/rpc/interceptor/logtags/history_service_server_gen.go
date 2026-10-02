@@ -494,15 +494,6 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.VerifyFirstWorkflowTaskScheduledResponse:
 		return nil
-	case *historyservice.WakeWorkflowExecutionRequest:
-		return []tag.Tag{
-			tag.WorkflowID(r.GetWakeRequest().GetWorkflowExecution().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetWakeRequest().GetWorkflowExecution().GetRunId()),
-		}
-	case *historyservice.WakeWorkflowExecutionResponse:
-		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
-		}
 	default:
 		return nil
 	}

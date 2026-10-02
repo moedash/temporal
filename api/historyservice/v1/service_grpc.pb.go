@@ -36,7 +36,6 @@ const (
 	HistoryService_RespondActivityTaskCanceled_FullMethodName            = "/temporal.server.api.historyservice.v1.HistoryService/RespondActivityTaskCanceled"
 	HistoryService_IsActivityTaskValid_FullMethodName                    = "/temporal.server.api.historyservice.v1.HistoryService/IsActivityTaskValid"
 	HistoryService_SignalWorkflowExecution_FullMethodName                = "/temporal.server.api.historyservice.v1.HistoryService/SignalWorkflowExecution"
-	HistoryService_WakeWorkflowExecution_FullMethodName                  = "/temporal.server.api.historyservice.v1.HistoryService/WakeWorkflowExecution"
 	HistoryService_SignalWithStartWorkflowExecution_FullMethodName       = "/temporal.server.api.historyservice.v1.HistoryService/SignalWithStartWorkflowExecution"
 	HistoryService_ExecuteMultiOperation_FullMethodName                  = "/temporal.server.api.historyservice.v1.HistoryService/ExecuteMultiOperation"
 	HistoryService_RemoveSignalMutableState_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/RemoveSignalMutableState"
@@ -177,14 +176,8 @@ type HistoryServiceClient interface {
 	// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
 	// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 	SignalWorkflowExecution(ctx context.Context, in *SignalWorkflowExecutionRequest, opts ...grpc.CallOption) (*SignalWorkflowExecutionResponse, error)
-	// WakeWorkflowExecution tells a running execution that a source it consumes
-	// moved. It schedules a Workflow Task that carries the wake and writes
-	// nothing to History; a wake the run already holds folds into it.
-	WakeWorkflowExecution(ctx context.Context, in *WakeWorkflowExecutionRequest, opts ...grpc.CallOption) (*WakeWorkflowExecutionResponse, error)
 	// (-- api-linter: core::0136::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "With" is needed here. --)
-	//
+	//     aip.dev/not-precedent: "With" is needed here. --)
 	// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
 	// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
 	// and a workflow task being created for the execution.
@@ -271,9 +264,7 @@ type HistoryServiceClient interface {
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
-	//
+	//     aip.dev/not-precedent:  --)
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(ctx context.Context, in *PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
@@ -294,12 +285,10 @@ type HistoryServiceClient interface {
 	// visibility manager doesn't support write operations
 	DeleteWorkflowVisibilityRecord(ctx context.Context, in *DeleteWorkflowVisibilityRecordRequest, opts ...grpc.CallOption) (*DeleteWorkflowVisibilityRecordResponse, error)
 	// (-- api-linter: core::0134=disabled
-	//
-	//	aip.dev/not-precedent: This service does not follow the update method API --)
+	//     aip.dev/not-precedent: This service does not follow the update method API --)
 	UpdateWorkflowExecution(ctx context.Context, in *UpdateWorkflowExecutionRequest, opts ...grpc.CallOption) (*UpdateWorkflowExecutionResponse, error)
 	// (-- api-linter: core::0134=disabled
-	//
-	//	aip.dev/not-precedent: This service does not follow the update method API --)
+	//     aip.dev/not-precedent: This service does not follow the update method API --)
 	PollWorkflowExecutionUpdate(ctx context.Context, in *PollWorkflowExecutionUpdateRequest, opts ...grpc.CallOption) (*PollWorkflowExecutionUpdateResponse, error)
 	StreamWorkflowReplicationMessages(ctx context.Context, opts ...grpc.CallOption) (HistoryService_StreamWorkflowReplicationMessagesClient, error)
 	GetWorkflowExecutionHistory(ctx context.Context, in *GetWorkflowExecutionHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionHistoryResponse, error)
@@ -341,14 +330,13 @@ type HistoryServiceClient interface {
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	//
 	// Pausing an activity means:
-	//   - If the activity is currently waiting for a retry or is running and subsequently fails,
-	//     it will not be rescheduled until it is unpause.
-	//   - If the activity is already paused, calling this method will have no effect.
-	//   - If the activity is running and finishes successfully, the activity will be completed.
-	//   - If the activity is running and finishes with failure:
-	//   - if there is no retry left - the activity will be completed.
-	//   - if there are more retries left - the activity will be paused.
-	//
+	// - If the activity is currently waiting for a retry or is running and subsequently fails,
+	//   it will not be rescheduled until it is unpause.
+	// - If the activity is already paused, calling this method will have no effect.
+	// - If the activity is running and finishes successfully, the activity will be completed.
+	// - If the activity is running and finishes with failure:
+	//   * if there is no retry left - the activity will be completed.
+	//   * if there are more retries left - the activity will be paused.
 	// For long-running activities:
 	// - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
 	// - The activity should respond to the cancellation accordingly.
@@ -376,10 +364,10 @@ type HistoryServiceClient interface {
 	// ResetActivity resets the execution of an activity specified by its ID.
 	//
 	// Resetting an activity means:
-	//   - number of attempts will be reset to 0.
-	//   - activity timeouts will be reset.
-	//   - if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
-	//     it will be scheduled immediately (* see 'jitter' flag),
+	// * number of attempts will be reset to 0.
+	// * activity timeouts will be reset.
+	// * if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
+	//    it will be scheduled immediately (* see 'jitter' flag),
 	//
 	// Flags:
 	//
@@ -549,15 +537,6 @@ func (c *historyServiceClient) IsActivityTaskValid(ctx context.Context, in *IsAc
 func (c *historyServiceClient) SignalWorkflowExecution(ctx context.Context, in *SignalWorkflowExecutionRequest, opts ...grpc.CallOption) (*SignalWorkflowExecutionResponse, error) {
 	out := new(SignalWorkflowExecutionResponse)
 	err := c.cc.Invoke(ctx, HistoryService_SignalWorkflowExecution_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *historyServiceClient) WakeWorkflowExecution(ctx context.Context, in *WakeWorkflowExecutionRequest, opts ...grpc.CallOption) (*WakeWorkflowExecutionResponse, error) {
-	out := new(WakeWorkflowExecutionResponse)
-	err := c.cc.Invoke(ctx, HistoryService_WakeWorkflowExecution_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1228,14 +1207,8 @@ type HistoryServiceServer interface {
 	// SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
 	// WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 	SignalWorkflowExecution(context.Context, *SignalWorkflowExecutionRequest) (*SignalWorkflowExecutionResponse, error)
-	// WakeWorkflowExecution tells a running execution that a source it consumes
-	// moved. It schedules a Workflow Task that carries the wake and writes
-	// nothing to History; a wake the run already holds folds into it.
-	WakeWorkflowExecution(context.Context, *WakeWorkflowExecutionRequest) (*WakeWorkflowExecutionResponse, error)
 	// (-- api-linter: core::0136::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "With" is needed here. --)
-	//
+	//     aip.dev/not-precedent: "With" is needed here. --)
 	// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
 	// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
 	// and a workflow task being created for the execution.
@@ -1322,9 +1295,7 @@ type HistoryServiceServer interface {
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
-	//
+	//     aip.dev/not-precedent:  --)
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(context.Context, *PurgeDLQMessagesRequest) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
@@ -1345,12 +1316,10 @@ type HistoryServiceServer interface {
 	// visibility manager doesn't support write operations
 	DeleteWorkflowVisibilityRecord(context.Context, *DeleteWorkflowVisibilityRecordRequest) (*DeleteWorkflowVisibilityRecordResponse, error)
 	// (-- api-linter: core::0134=disabled
-	//
-	//	aip.dev/not-precedent: This service does not follow the update method API --)
+	//     aip.dev/not-precedent: This service does not follow the update method API --)
 	UpdateWorkflowExecution(context.Context, *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
 	// (-- api-linter: core::0134=disabled
-	//
-	//	aip.dev/not-precedent: This service does not follow the update method API --)
+	//     aip.dev/not-precedent: This service does not follow the update method API --)
 	PollWorkflowExecutionUpdate(context.Context, *PollWorkflowExecutionUpdateRequest) (*PollWorkflowExecutionUpdateResponse, error)
 	StreamWorkflowReplicationMessages(HistoryService_StreamWorkflowReplicationMessagesServer) error
 	GetWorkflowExecutionHistory(context.Context, *GetWorkflowExecutionHistoryRequest) (*GetWorkflowExecutionHistoryResponseWithRaw, error)
@@ -1392,14 +1361,13 @@ type HistoryServiceServer interface {
 	// Returns a `NotFound` error if there is no pending activity with the provided ID.
 	//
 	// Pausing an activity means:
-	//   - If the activity is currently waiting for a retry or is running and subsequently fails,
-	//     it will not be rescheduled until it is unpause.
-	//   - If the activity is already paused, calling this method will have no effect.
-	//   - If the activity is running and finishes successfully, the activity will be completed.
-	//   - If the activity is running and finishes with failure:
-	//   - if there is no retry left - the activity will be completed.
-	//   - if there are more retries left - the activity will be paused.
-	//
+	// - If the activity is currently waiting for a retry or is running and subsequently fails,
+	//   it will not be rescheduled until it is unpause.
+	// - If the activity is already paused, calling this method will have no effect.
+	// - If the activity is running and finishes successfully, the activity will be completed.
+	// - If the activity is running and finishes with failure:
+	//   * if there is no retry left - the activity will be completed.
+	//   * if there are more retries left - the activity will be paused.
 	// For long-running activities:
 	// - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
 	// - The activity should respond to the cancellation accordingly.
@@ -1427,10 +1395,10 @@ type HistoryServiceServer interface {
 	// ResetActivity resets the execution of an activity specified by its ID.
 	//
 	// Resetting an activity means:
-	//   - number of attempts will be reset to 0.
-	//   - activity timeouts will be reset.
-	//   - if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
-	//     it will be scheduled immediately (* see 'jitter' flag),
+	// * number of attempts will be reset to 0.
+	// * activity timeouts will be reset.
+	// * if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
+	//    it will be scheduled immediately (* see 'jitter' flag),
 	//
 	// Flags:
 	//
@@ -1506,9 +1474,6 @@ func (UnimplementedHistoryServiceServer) IsActivityTaskValid(context.Context, *I
 }
 func (UnimplementedHistoryServiceServer) SignalWorkflowExecution(context.Context, *SignalWorkflowExecutionRequest) (*SignalWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SignalWorkflowExecution not implemented")
-}
-func (UnimplementedHistoryServiceServer) WakeWorkflowExecution(context.Context, *WakeWorkflowExecutionRequest) (*WakeWorkflowExecutionResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method WakeWorkflowExecution not implemented")
 }
 func (UnimplementedHistoryServiceServer) SignalWithStartWorkflowExecution(context.Context, *SignalWithStartWorkflowExecutionRequest) (*SignalWithStartWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SignalWithStartWorkflowExecution not implemented")
@@ -1996,24 +1961,6 @@ func _HistoryService_SignalWorkflowExecution_Handler(srv interface{}, ctx contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HistoryServiceServer).SignalWorkflowExecution(ctx, req.(*SignalWorkflowExecutionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _HistoryService_WakeWorkflowExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WakeWorkflowExecutionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(HistoryServiceServer).WakeWorkflowExecution(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: HistoryService_WakeWorkflowExecution_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HistoryServiceServer).WakeWorkflowExecution(ctx, req.(*WakeWorkflowExecutionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3230,10 +3177,6 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SignalWorkflowExecution",
 			Handler:    _HistoryService_SignalWorkflowExecution_Handler,
-		},
-		{
-			MethodName: "WakeWorkflowExecution",
-			Handler:    _HistoryService_WakeWorkflowExecution_Handler,
 		},
 		{
 			MethodName: "SignalWithStartWorkflowExecution",

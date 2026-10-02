@@ -783,20 +783,6 @@ var (
 		"stream_polls",
 		WithDescription("The number of stream polls admitted by the stream service."),
 	)
-	// Wake meters, per namespace. A folded wake scheduled nothing of its own,
-	// so accepted and folded together count every wake that arrived.
-	WorkflowWakeAccepted = NewCounterDef(
-		"workflow_wake_accepted",
-		WithDescription("The number of wakes that recorded a new position for their source."),
-	)
-	WorkflowWakeFolded = NewCounterDef(
-		"workflow_wake_folded",
-		WithDescription("The number of wakes folded into one no started task had carried yet."),
-	)
-	WorkflowWakeDelivered = NewCounterDef(
-		"workflow_wake_delivered",
-		WithDescription("The number of wakes handed to a started Workflow Task."),
-	)
 	NexusRequests = NewCounterDef(
 		"nexus_requests",
 		WithDescription("The number of Nexus requests received by the service."),

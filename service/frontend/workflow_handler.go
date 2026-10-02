@@ -1201,7 +1201,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		Queries:                    matchingResp.Queries,
 		Messages:                   matchingResp.Messages,
 		StreamSlices:               matchingResp.StreamSlices,
-		Wakes:                      matchingResp.Wakes,
 		PollerScalingDecision:      matchingResp.PollerScalingDecision,
 	}, nil
 }
@@ -2361,64 +2360,13 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 	}, nil
 }
 
-// maxWakePositionBytes bounds the position a wake carries. It is a cursor for the
-// workflow to read from, not data, and it is held per source on the execution.
-const maxWakePositionBytes = 1024
-
-// WakeWorkflowExecution tells a running execution that a source it consumes
-// moved. It schedules a Workflow Task that carries the wake and records nothing
-// in History; a wake that no started task has carried yet folds into it.
+// WakeWorkflowExecution is declared by the pinned API and served by a later
+// layer of this series.
 func (wh *WorkflowHandler) WakeWorkflowExecution(
-	ctx context.Context,
-	request *workflowservice.WakeWorkflowExecutionRequest,
-) (_ *workflowservice.WakeWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-	if err := validateExecution(request.GetWorkflowExecution()); err != nil {
-		return nil, err
-	}
-	if len(request.GetWorkflowExecution().GetWorkflowId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errWorkflowIDTooLong
-	}
-	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
-		return nil, errIdentityTooLong
-	}
-	wake := request.GetWake()
-	if wake == nil {
-		return nil, errWakeNotSet
-	}
-	if wake.GetSource() == "" {
-		return nil, errWakeSourceNotSet
-	}
-	if len(wake.GetSource()) > wh.config.MaxIDLengthLimit() {
-		return nil, errWakeSourceTooLong
-	}
-	if len(wake.GetPosition()) > maxWakePositionBytes {
-		return nil, errWakePositionTooLarge
-	}
-	if wake.GetCounter() <= 0 {
-		return nil, errWakeCounterNotPositive
-	}
-
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := wh.historyClient.WakeWorkflowExecution(ctx, &historyservice.WakeWorkflowExecutionRequest{
-		NamespaceId: namespaceID.String(),
-		WakeRequest: request,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &workflowservice.WakeWorkflowExecutionResponse{
-		RunId:  resp.GetRunId(),
-		Folded: resp.GetFolded(),
-	}, nil
+	_ context.Context,
+	_ *workflowservice.WakeWorkflowExecutionRequest,
+) (*workflowservice.WakeWorkflowExecutionResponse, error) {
+	return nil, serviceerror.NewUnimplemented("WakeWorkflowExecution is not implemented")
 }
 
 // NotifyChannel is declared by the pinned API and served by a later layer of
