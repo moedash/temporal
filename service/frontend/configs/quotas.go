@@ -96,7 +96,6 @@ var (
 
 		// P1: External Event APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/SignalWorkflowExecution":          1,
-		"/temporal.api.workflowservice.v1.WorkflowService/WakeWorkflowExecution":            1,
 		"/temporal.api.workflowservice.v1.WorkflowService/NotifyChannel":                    1,
 		"/temporal.api.workflowservice.v1.WorkflowService/RegisterChannelListener":          1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UnregisterChannelListener":        1,

@@ -2366,15 +2366,6 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 	}, nil
 }
 
-// WakeWorkflowExecution is declared by the pinned API and served by a later
-// layer of this series.
-func (wh *WorkflowHandler) WakeWorkflowExecution(
-	_ context.Context,
-	_ *workflowservice.WakeWorkflowExecutionRequest,
-) (*workflowservice.WakeWorkflowExecutionResponse, error) {
-	return nil, serviceerror.NewUnimplemented("WakeWorkflowExecution is not implemented")
-}
-
 // channelNamespaceID resolves the namespace of a channel call.
 func (wh *WorkflowHandler) channelNamespaceID(name string) (string, error) {
 	if name == "" {
