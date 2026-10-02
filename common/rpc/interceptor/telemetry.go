@@ -70,7 +70,6 @@ var (
 		"RecordActivityTaskHeartbeatById":  {},
 		"ResetWorkflowExecution":           {},
 		"SignalWorkflowExecution":          {},
-		"WakeWorkflowExecution":            {},
 		"NotifyChannel":                    {},
 		"RegisterChannelListener":          {},
 		"UnregisterChannelListener":        {},
