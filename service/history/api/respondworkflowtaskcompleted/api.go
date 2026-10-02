@@ -486,6 +486,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// shard before the commit. Skipped once the task has failed, since the
 		// subscription and its event are about to be rolled back.
 		if workflowTaskHandler.workflowTaskFailedCause == nil && !workflowTaskHandler.stopProcessing {
+			if err = forgetStagedChannelListeners(
+				ctx, ms, workflowTaskHandler.stagedChannelDeregistrations,
+			); err != nil {
+				return nil, err
+			}
 			err = registerStagedChannelListeners(
 				ctx,
 				ms,

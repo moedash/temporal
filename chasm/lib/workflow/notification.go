@@ -63,6 +63,25 @@ func (w *Workflow) RecordChannelSubscription(
 	return true, nil
 }
 
+// RemoveChannelSubscription forgets this run's subscription to the channel
+// and the notification waiting on it, and reports the event that recorded
+// the subscription. A channel the run does not listen to reports false and
+// changes nothing. A notification a scheduled event already carries stays in
+// History.
+func (w *Workflow) RemoveChannelSubscription(
+	mctx chasm.MutableContext,
+	channel string,
+) (int64, bool) {
+	field, ok := w.ChannelSubscriptions[channel]
+	if !ok {
+		return 0, false
+	}
+	eventID := field.Get(readOnly(mctx)).GetEventId()
+	delete(w.ChannelSubscriptions, channel)
+	delete(w.ChannelNotifications, channel)
+	return eventID, true
+}
+
 // StageChannelRegistration queues a channel for the completion path to
 // register this run on. A command handler holds the state lock and cannot
 // reach the channel's shard, so the registration happens after the commands
@@ -75,6 +94,19 @@ func (w *Workflow) StageChannelRegistration(channel string) {
 func (w *Workflow) DrainChannelRegistrations() []string {
 	out := w.pendingChannelRegistrations
 	w.pendingChannelRegistrations = nil
+	return out
+}
+
+// StageChannelDeregistration queues a channel for the completion path to drop
+// this run from, for the reason the registration is staged.
+func (w *Workflow) StageChannelDeregistration(channel string) {
+	w.pendingChannelDeregistrations = append(w.pendingChannelDeregistrations, channel)
+}
+
+// DrainChannelDeregistrations returns and clears the staged deregistrations.
+func (w *Workflow) DrainChannelDeregistrations() []string {
+	out := w.pendingChannelDeregistrations
+	w.pendingChannelDeregistrations = nil
 	return out
 }
 

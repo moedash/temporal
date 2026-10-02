@@ -52,6 +52,11 @@ func registerStagedChannelListeners(
 	namespaceName := ms.GetNamespaceEntry().Name().String()
 	firstRunID := ms.GetExecutionInfo().GetFirstExecutionRunId()
 	for _, name := range staged {
+		// An unsubscribe later in the same task took the subscription off
+		// again, so there is nothing to register and no latest to take.
+		if !wf.SubscribedToChannel(name) {
+			continue
+		}
 		callCtx, cancel := context.WithTimeout(ctx, channel.RoutedCallTimeout)
 		resp, err := client.RegisterWorkflowListener(callCtx, &channelpb.RegisterWorkflowListenerRequest{
 			NamespaceId: key.NamespaceID,
@@ -71,6 +76,57 @@ func registerStagedChannelListeners(
 			if _, err := wf.AcceptChannelNotification(chasmCtx, latest); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// forgetStagedChannelListeners drops this run from every channel an
+// unsubscribe command in the task named, on each channel's own shard, the
+// registration path reversed. It runs before the registrations, and leaves
+// alone a channel the run subscribes to again by the end of the task, so a
+// run that unsubscribed and subscribed again in one task keeps its listener
+// and one that did the reverse ends without one. A channel that is gone has
+// nothing to drop.
+func forgetStagedChannelListeners(
+	ctx context.Context,
+	ms historyi.MutableState,
+	staged []string,
+) error {
+	if len(staged) == 0 {
+		return nil
+	}
+	client, ok := channel.ClientFromContext(ctx)
+	if !ok {
+		return serviceerror.NewInternal(
+			"channel service client is not available on the workflow task completion path")
+	}
+	ctx, cancelBudget := recordworkflowtaskstarted.WithRoutedBudget(ctx)
+	defer cancelBudget()
+
+	wf, _, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+	if err != nil {
+		return err
+	}
+	key := ms.GetWorkflowKey()
+	namespaceName := ms.GetNamespaceEntry().Name().String()
+	for _, name := range staged {
+		if wf.SubscribedToChannel(name) {
+			continue
+		}
+		callCtx, cancel := context.WithTimeout(ctx, channel.RoutedCallTimeout)
+		_, err := client.UnregisterWorkflowListener(callCtx, &channelpb.UnregisterWorkflowListenerRequest{
+			NamespaceId: key.NamespaceID,
+			FrontendRequest: &channelpb.UnregisterWorkflowListenerInput{
+				Namespace:  namespaceName,
+				Channel:    name,
+				WorkflowId: key.WorkflowID,
+				RunId:      key.RunID,
+			},
+		})
+		cancel()
+		if err != nil {
+			return err
 		}
 	}
 	return nil

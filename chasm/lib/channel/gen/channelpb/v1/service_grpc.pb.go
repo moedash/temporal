@@ -31,6 +31,7 @@ const (
 	ChannelService_PollLinkedChannel_FullMethodName               = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/PollLinkedChannel"
 	ChannelService_DescribeLinkedChannel_FullMethodName           = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/DescribeLinkedChannel"
 	ChannelService_RegisterWorkflowListener_FullMethodName        = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/RegisterWorkflowListener"
+	ChannelService_UnregisterWorkflowListener_FullMethodName      = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/UnregisterWorkflowListener"
 	ChannelService_DeliverChannelNotification_FullMethodName      = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/DeliverChannelNotification"
 )
 
@@ -53,6 +54,9 @@ type ChannelServiceClient interface {
 	// Internal. The completion of a Workflow Task that subscribed calls this on
 	// the channel's shard, creating the channel if it is absent.
 	RegisterWorkflowListener(ctx context.Context, in *RegisterWorkflowListenerRequest, opts ...grpc.CallOption) (*RegisterWorkflowListenerResponse, error)
+	// Internal. The completion of a Workflow Task that unsubscribed calls this
+	// on the channel's shard. A channel that is absent has no listener to drop.
+	UnregisterWorkflowListener(ctx context.Context, in *UnregisterWorkflowListenerRequest, opts ...grpc.CallOption) (*UnregisterWorkflowListenerResponse, error)
 	// Internal. The channel's fan-out calls this on the listener's shard.
 	DeliverChannelNotification(ctx context.Context, in *DeliverChannelNotificationRequest, opts ...grpc.CallOption) (*DeliverChannelNotificationResponse, error)
 }
@@ -164,6 +168,15 @@ func (c *channelServiceClient) RegisterWorkflowListener(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *channelServiceClient) UnregisterWorkflowListener(ctx context.Context, in *UnregisterWorkflowListenerRequest, opts ...grpc.CallOption) (*UnregisterWorkflowListenerResponse, error) {
+	out := new(UnregisterWorkflowListenerResponse)
+	err := c.cc.Invoke(ctx, ChannelService_UnregisterWorkflowListener_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *channelServiceClient) DeliverChannelNotification(ctx context.Context, in *DeliverChannelNotificationRequest, opts ...grpc.CallOption) (*DeliverChannelNotificationResponse, error) {
 	out := new(DeliverChannelNotificationResponse)
 	err := c.cc.Invoke(ctx, ChannelService_DeliverChannelNotification_FullMethodName, in, out, opts...)
@@ -192,6 +205,9 @@ type ChannelServiceServer interface {
 	// Internal. The completion of a Workflow Task that subscribed calls this on
 	// the channel's shard, creating the channel if it is absent.
 	RegisterWorkflowListener(context.Context, *RegisterWorkflowListenerRequest) (*RegisterWorkflowListenerResponse, error)
+	// Internal. The completion of a Workflow Task that unsubscribed calls this
+	// on the channel's shard. A channel that is absent has no listener to drop.
+	UnregisterWorkflowListener(context.Context, *UnregisterWorkflowListenerRequest) (*UnregisterWorkflowListenerResponse, error)
 	// Internal. The channel's fan-out calls this on the listener's shard.
 	DeliverChannelNotification(context.Context, *DeliverChannelNotificationRequest) (*DeliverChannelNotificationResponse, error)
 	mustEmbedUnimplementedChannelServiceServer()
@@ -233,6 +249,9 @@ func (UnimplementedChannelServiceServer) DescribeLinkedChannel(context.Context, 
 }
 func (UnimplementedChannelServiceServer) RegisterWorkflowListener(context.Context, *RegisterWorkflowListenerRequest) (*RegisterWorkflowListenerResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterWorkflowListener not implemented")
+}
+func (UnimplementedChannelServiceServer) UnregisterWorkflowListener(context.Context, *UnregisterWorkflowListenerRequest) (*UnregisterWorkflowListenerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnregisterWorkflowListener not implemented")
 }
 func (UnimplementedChannelServiceServer) DeliverChannelNotification(context.Context, *DeliverChannelNotificationRequest) (*DeliverChannelNotificationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeliverChannelNotification not implemented")
@@ -448,6 +467,24 @@ func _ChannelService_RegisterWorkflowListener_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChannelService_UnregisterWorkflowListener_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnregisterWorkflowListenerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelServiceServer).UnregisterWorkflowListener(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelService_UnregisterWorkflowListener_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelServiceServer).UnregisterWorkflowListener(ctx, req.(*UnregisterWorkflowListenerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChannelService_DeliverChannelNotification_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeliverChannelNotificationRequest)
 	if err := dec(in); err != nil {
@@ -516,6 +553,10 @@ var ChannelService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RegisterWorkflowListener",
 			Handler:    _ChannelService_RegisterWorkflowListener_Handler,
+		},
+		{
+			MethodName: "UnregisterWorkflowListener",
+			Handler:    _ChannelService_UnregisterWorkflowListener_Handler,
 		},
 		{
 			MethodName: "DeliverChannelNotification",

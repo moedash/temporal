@@ -30,6 +30,10 @@ func (x *RegisterWorkflowListenerRequest) GetNamespace() string {
 	return x.GetFrontendRequest().GetNamespace()
 }
 
+func (x *UnregisterWorkflowListenerRequest) GetNamespace() string {
+	return x.GetFrontendRequest().GetNamespace()
+}
+
 func (x *DeliverChannelNotificationRequest) GetNamespace() string {
 	return x.GetFrontendRequest().GetNamespace()
 }
