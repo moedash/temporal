@@ -55,6 +55,27 @@ func (c *Channel) NotifyLinked(
 	n *channelpb.Notification,
 	limits Limits,
 ) (LinkedNotifyResult, error) {
+	return c.notifyLinked(mctx, n, limits, true)
+}
+
+// NotifyLinkedListeners accepts a notification for the ring and the callback
+// listeners without handing it to the owner. The channel a stream drives
+// uses it: the owning run learns of its own stream through its cursor, and a
+// Workflow Task per append would be a cost the stream did not have.
+func (c *Channel) NotifyLinkedListeners(
+	mctx chasm.MutableContext,
+	n *channelpb.Notification,
+	limits Limits,
+) (LinkedNotifyResult, error) {
+	return c.notifyLinked(mctx, n, limits, false)
+}
+
+func (c *Channel) notifyLinked(
+	mctx chasm.MutableContext,
+	n *channelpb.Notification,
+	limits Limits,
+	wakeOwner bool,
+) (LinkedNotifyResult, error) {
 	limits = limits.withDefaults()
 	if err := CheckNotification(n, limits.MaxMetadataBytes); err != nil {
 		return LinkedNotifyResult{}, err
@@ -69,9 +90,12 @@ func (c *Channel) NotifyLinked(
 		out.Advanced = true
 	}
 	c.touch(mctx)
-	if c.OwnerHolds(n.GetCounter()) {
+	switch {
+	case !wakeOwner:
 		out.OwnerHeld = true
-	} else {
+	case c.OwnerHolds(n.GetCounter()):
+		out.OwnerHeld = true
+	default:
 		out.OwnerFolded = c.State.GetOwnerPending() != nil
 		c.State.OwnerPending = n
 	}

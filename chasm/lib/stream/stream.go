@@ -245,6 +245,7 @@ func (s *Stream) AddMessages(
 	s.State.HeadOffset = first + count
 	s.State.AppendedBytes += int64(len(blob.Data))
 	s.State.HeldBytes += int64(len(blob.Data))
+	s.State.ChangeSequence++
 	if req.ProducerID != "" {
 		if s.State.Producers == nil {
 			s.State.Producers = make(map[string]*streamlib.ProducerCursor)
@@ -560,6 +561,7 @@ func (s *Stream) Close(now time.Time, reason *commonpb.Payload) time.Time {
 	s.State.Closed = true
 	s.State.CloseReason = reason
 	s.State.CloseTime = timestamppb.New(now)
+	s.State.ChangeSequence++
 
 	retention := s.State.GetLifecycle().GetRetention().AsDuration()
 	if retention <= 0 {

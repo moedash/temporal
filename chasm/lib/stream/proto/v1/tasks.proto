@@ -20,3 +20,14 @@ message StreamNotifyConsumersTask {}
 // lifecycle's retention. It truncates what aged, stopping at an active
 // consumer's floor, and re-arms itself while the stream holds records.
 message StreamAgeTask {}
+
+// Fires after a change to a stream whose channel lives in another execution:
+// a standalone stream, or one a standalone activity owns. One is outstanding
+// at a time and reads the latest change when it runs, so changes reach the
+// channel in order and a burst reaches it as its newest change.
+message StreamNotifyChannelTask {
+  string channel = 1;
+  // What a native position pairs the offset with: the owning run, or the
+  // stream's own id for a standalone stream.
+  string run = 2;
+}

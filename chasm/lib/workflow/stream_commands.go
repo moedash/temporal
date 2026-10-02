@@ -71,9 +71,20 @@ func (w *Workflow) HasOpenActivityStreams(ctx chasm.Context, activityID string) 
 // be released: the workflow is still running, so the rule that ends a stream
 // with its execution does not reach these. A retry is not terminal, so the
 // next attempt keeps writing to the same streams.
-func (w *Workflow) CloseActivityStreams(mctx chasm.MutableContext, activityID string) error {
+func (w *Workflow) CloseActivityStreams(
+	mctx chasm.MutableContext,
+	activityID string,
+	limits stream.Limits,
+) error {
 	for _, key := range w.activityStreamKeys(activityID) {
-		if err := w.Streams[key].Get(mctx).CloseAndSchedule(mctx, nil); err != nil {
+		s := w.Streams[key].Get(mctx)
+		if s.State.GetClosed() {
+			continue
+		}
+		if err := s.CloseAndSchedule(mctx, nil); err != nil {
+			return err
+		}
+		if err := w.notifyStreamChannel(mctx, key, s, limits); err != nil {
 			return err
 		}
 	}
@@ -184,7 +195,7 @@ func handleAppendStreamRecordsCommand(
 	}
 	wf.RecordStreamRecordsAppended(
 		name, result.FirstOffset, result.NextOffset, opts.WorkflowTaskCompletedEventID)
-	return nil
+	return wf.notifyStreamChannel(chasmCtx, name, s, limits)
 }
 
 // handleSubscribeStreamCommand registers this workflow as a consumer.

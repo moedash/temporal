@@ -22,6 +22,7 @@ type library struct {
 	handler         *handler
 	retention       *retentionTaskHandler
 	notifyConsumers *notifyConsumersTaskHandler
+	notifyChannel   *notifyChannelTaskHandler
 	age             *ageTaskHandler
 }
 
@@ -29,9 +30,16 @@ func newLibrary(
 	h *handler,
 	retention *retentionTaskHandler,
 	notifyConsumers *notifyConsumersTaskHandler,
+	notifyChannel *notifyChannelTaskHandler,
 	age *ageTaskHandler,
 ) *library {
-	return &library{handler: h, retention: retention, notifyConsumers: notifyConsumers, age: age}
+	return &library{
+		handler:         h,
+		retention:       retention,
+		notifyConsumers: notifyConsumers,
+		notifyChannel:   notifyChannel,
+		age:             age,
+	}
 }
 
 // componentOnlyLibrary registers the component without the service, which is
@@ -82,6 +90,10 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrableSideEffectTask(
 			"streamNotifyConsumers",
 			l.notifyConsumers,
+		),
+		chasm.NewRegistrableSideEffectTask(
+			"streamNotifyChannel",
+			l.notifyChannel,
 		),
 		chasm.NewRegistrablePureTask(
 			"streamAge",

@@ -63,6 +63,12 @@ message StreamState {
   // schedule none of their own; the check re-arms itself while the stream
   // holds records and lowers the flag when it holds none.
   bool age_task_pending = 18;
+  // One per append and one per close, the counter of the notification each
+  // sends to the channel named by the stream. Grows for the life of the stream.
+  int64 change_sequence = 19;
+  // A task to notify the stream's channel is outstanding. Changes while it is
+  // set schedule none of their own; the task reads the latest when it runs.
+  bool channel_notify_pending = 20;
 }
 
 // Hard bounds on what a stream may hold. Distinct from StreamLifecycle.max_items,

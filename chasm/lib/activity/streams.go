@@ -40,5 +40,14 @@ func (a *Activity) AppendToOwnedStream(
 			"activity execution closed with status %v, so its streams take no more records",
 			InternalStatusToAPIStatus(a.GetStatus()))
 	}
-	return a.ownedStreams().Append(mctx, key, req)
+	result, err := a.ownedStreams().Append(mctx, key, req)
+	if err != nil || result.Deduplicated {
+		return result, err
+	}
+	// A standalone activity has no linked channels, so its streams notify an
+	// independent channel named by the activity and the stream.
+	owner := mctx.ExecutionKey()
+	a.ownedStreams().Get(mctx, key).ScheduleChannelNotify(mctx,
+		stream.ActivityChannelName(owner.BusinessID, key), owner.RunID, req.Limits)
+	return result, nil
 }
