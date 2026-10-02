@@ -64,6 +64,7 @@ type (
 		// Subscribe commands for streams in other executions, resolved before
 		// this workflow task commits.
 		stagedStreamSubscriptions           []chasmworkflow.PendingStreamSubscription
+		stagedChannelRegistrations          []string
 		hasBufferedEventsOrMessages         bool
 		workflowTaskFailedCause             *workflowTaskFailedCause
 		activityNotStartedCancelled         bool
@@ -363,6 +364,10 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 				// resolution that has to precede this task's commit.
 				handler.stagedStreamSubscriptions = append(
 					handler.stagedStreamSubscriptions, chasmWorkflow.DrainStreamSubscriptions()...)
+				// A notification channel subscription stages its registration
+				// for the same reason.
+				handler.stagedChannelRegistrations = append(
+					handler.stagedChannelRegistrations, chasmWorkflow.DrainChannelRegistrations()...)
 				// Fall back to the HSM handler either when the command type is not supported by CHASM (disabled
 				// feature flag) or when the targeted entity is not owned by the CHASM tree (e.g. an operation
 				// scheduled in HSM before the flag was flipped on).

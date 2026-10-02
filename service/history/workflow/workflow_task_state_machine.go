@@ -367,6 +367,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 			attempt,
 			scheduleTime,
 		)
+		m.ms.attachChannelNotifications(scheduledEvent)
 		scheduledEventID = scheduledEvent.GetEventId()
 	} else {
 		// WorkflowTaskScheduledEvent will be created later.
@@ -584,6 +585,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			workflowTask.Attempt,
 			startTime,
 		)
+		// The worker has not seen this task yet, so its scheduled event can
+		// carry what is pending.
+		m.ms.attachChannelNotifications(scheduledEvent)
 		scheduledEventID = scheduledEvent.GetEventId()
 	}
 
@@ -672,6 +676,7 @@ func (m *workflowTaskStateMachine) processBuildIdRedirectInfo(
 			workflowTask.Attempt,
 			workflowTask.ScheduledTime,
 		)
+		m.ms.attachChannelNotifications(scheduledEvent)
 		newWorkflowTask = m.getWorkflowTaskInfo()
 		newWorkflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 		// Using 1 as the attempt in MS. it's needed so that the new WFT is not considered transient.
@@ -1566,6 +1571,12 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 
 	if scheduledEvent.EventId != wt.ScheduledEventID {
 		return serviceerror.NewInternalf("it could be a bug, scheduled event Id: %d for normal workflow task doesn't match the one from speculative workflow task: %d", scheduledEvent.EventId, wt.ScheduledEventID)
+	}
+	// A started speculative task already went out without notifications, and
+	// its History has to say what the worker saw. One not started yet carries
+	// what is pending.
+	if wt.StartedEventID == common.EmptyEventID {
+		m.ms.attachChannelNotifications(scheduledEvent)
 	}
 
 	if wtAlreadyStarted := wt.StartedEventID != common.EmptyEventID; wtAlreadyStarted {

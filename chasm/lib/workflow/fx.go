@@ -23,6 +23,8 @@ var Module = fx.Module(
 		library *library,
 		config *nexusoperation.Config,
 		streamConfig *stream.Config,
+		workflowConfig Config,
+		channelConfig *channel.Config,
 	) error {
 		if err := library.registry.Register(
 			newNexusLibrary(config, chasmRegistry.NexusEndpointProcessor),
@@ -30,6 +32,11 @@ var Module = fx.Module(
 			return err
 		}
 		if err := library.registry.Register(newStreamLibrary(streamConfig)); err != nil {
+			return err
+		}
+		if err := library.registry.Register(
+			newNotificationLibrary(workflowConfig, channelConfig),
+		); err != nil {
 			return err
 		}
 		return chasmRegistry.Register(library)

@@ -17,7 +17,9 @@ import (
 //
 // The command handler recorded the subscription and wrote its event, but it
 // holds the state lock with nowhere to do I/O from, so the registration
-// happens here, between the commands and the commit. A refusal fails the task
+// happens here, between the commands and the commit. The channel hands back
+// its latest notification, which the run takes as pending so the task this
+// completion schedules carries it. A refusal fails the task
 // with the given cause, which rolls the subscription and its event back with
 // it. A registration that succeeded before a later one was refused stays on
 // its channel; the channel's next fan-out finds the run does not listen and
@@ -42,12 +44,16 @@ func registerStagedChannelListeners(
 	ctx, cancelBudget := recordworkflowtaskstarted.WithRoutedBudget(ctx)
 	defer cancelBudget()
 
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(ctx)
+	if err != nil {
+		return err
+	}
 	key := ms.GetWorkflowKey()
 	namespaceName := ms.GetNamespaceEntry().Name().String()
 	firstRunID := ms.GetExecutionInfo().GetFirstExecutionRunId()
 	for _, name := range staged {
 		callCtx, cancel := context.WithTimeout(ctx, channel.RoutedCallTimeout)
-		_, err := client.RegisterWorkflowListener(callCtx, &channelpb.RegisterWorkflowListenerRequest{
+		resp, err := client.RegisterWorkflowListener(callCtx, &channelpb.RegisterWorkflowListenerRequest{
 			NamespaceId: key.NamespaceID,
 			FrontendRequest: &channelpb.RegisterWorkflowListenerInput{
 				Namespace:           namespaceName,
@@ -60,6 +66,11 @@ func registerStagedChannelListeners(
 		cancel()
 		if err != nil {
 			return chasmworkflow.StreamAdmissionFailure(cause, err)
+		}
+		if latest := resp.GetFrontendResponse().GetLatest(); latest != nil {
+			if _, err := wf.AcceptChannelNotification(chasmCtx, latest); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

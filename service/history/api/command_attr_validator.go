@@ -667,7 +667,10 @@ func (v *CommandAttrValidator) ValidateCommandSequence(
 			enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
 			// Subscribing to a stream. Also not closing: it records a cursor
 			// and the workflow carries on.
-			enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM:
+			enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM,
+			// Listening on a notification channel. Not closing either: it
+			// records a subscription for the run.
+			enumspb.COMMAND_TYPE_SUBSCRIBE_NOTIFICATION_CHANNEL:
 			// noop
 		case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,

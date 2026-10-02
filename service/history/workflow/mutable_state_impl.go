@@ -37,6 +37,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/channel"
 	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
@@ -764,6 +765,20 @@ func (ms *MutableStateImpl) HasPendingStreamData() bool {
 		return false
 	}
 	return !ms.IsWorkflowPendingOnWorkflowTaskBackoff()
+}
+
+// attachChannelNotifications puts the pending channel notifications on a
+// WorkflowTaskScheduled event being written for a task no worker has seen.
+// Scheduled events written after the fact, for a transient or speculative
+// task a worker already ran, carry none: History has to match what that
+// worker saw, and the notifications wait for the next scheduled event.
+func (ms *MutableStateImpl) attachChannelNotifications(event *historypb.HistoryEvent) {
+	notifications := ms.takeChannelNotifications()
+	if len(notifications) == 0 {
+		return
+	}
+	event.GetWorkflowTaskScheduledEventAttributes().Notifications =
+		channel.ToAPINotifications(notifications)
 }
 
 // takeChannelNotifications hands the pending channel notifications to a
