@@ -199,6 +199,16 @@ func (c *clientImpl) DescribeBatchOperation(
 	return c.client.DescribeBatchOperation(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeChannel(
+	ctx context.Context,
+	request *workflowservice.DescribeChannelRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeChannelResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeChannel(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeDeployment(
 	ctx context.Context,
 	request *workflowservice.DescribeDeploymentRequest,
@@ -569,6 +579,16 @@ func (c *clientImpl) ListWorkflowRules(
 	return c.client.ListWorkflowRules(ctx, request, opts...)
 }
 
+func (c *clientImpl) NotifyChannel(
+	ctx context.Context,
+	request *workflowservice.NotifyChannelRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.NotifyChannelResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.NotifyChannel(ctx, request, opts...)
+}
+
 func (c *clientImpl) PatchSchedule(
 	ctx context.Context,
 	request *workflowservice.PatchScheduleRequest,
@@ -627,6 +647,16 @@ func (c *clientImpl) PollActivityTaskQueue(
 	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
 	return c.client.PollActivityTaskQueue(ctx, request, opts...)
+}
+
+func (c *clientImpl) PollChannel(
+	ctx context.Context,
+	request *workflowservice.PollChannelRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PollChannelResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.PollChannel(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollNexusOperationExecution(
@@ -717,6 +747,16 @@ func (c *clientImpl) RecordWorkerHeartbeat(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.RecordWorkerHeartbeat(ctx, request, opts...)
+}
+
+func (c *clientImpl) RegisterChannelListener(
+	ctx context.Context,
+	request *workflowservice.RegisterChannelListenerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RegisterChannelListenerResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.RegisterChannelListener(ctx, request, opts...)
 }
 
 func (c *clientImpl) RegisterNamespace(
@@ -1107,6 +1147,16 @@ func (c *clientImpl) UnpauseWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) UnregisterChannelListener(
+	ctx context.Context,
+	request *workflowservice.UnregisterChannelListenerRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UnregisterChannelListenerResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UnregisterChannelListener(ctx, request, opts...)
 }
 
 func (c *clientImpl) UpdateActivityExecutionOptions(
