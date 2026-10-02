@@ -267,6 +267,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskTimedOutEvent(timeoutType en
 func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 	workflowTask *historyi.WorkflowTaskInfo,
 ) (*historypb.HistoryEvent, error) {
+	m.ms.clearScheduledChannelCounters()
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
 	if m.ms.executionInfo.WorkflowTaskScheduledEventId != workflowTask.ScheduledEventID || m.ms.executionInfo.WorkflowTaskStartedEventId > 0 {
 		m.ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
@@ -630,6 +631,10 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 
 	m.emitWorkflowTaskAttemptStats(workflowTask.Attempt)
 
+	// The task is reading from here on, so a repeated notification can no
+	// longer be assumed to reach it and goes to the next task instead.
+	m.ms.clearScheduledChannelCounters()
+
 	// TODO merge active & passive task generation
 	if err = m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
 		scheduledEventID,
@@ -917,6 +922,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 	newRunID string,
 	forkEventVersion int64,
 ) (*historypb.HistoryEvent, error) {
+	m.ms.clearScheduledChannelCounters()
 
 	// IMPORTANT: returned event can be nil under some circumstances. Specifically, if WT is transient.
 
@@ -992,6 +998,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	workflowTask *historyi.WorkflowTaskInfo,
 ) (*historypb.HistoryEvent, error) {
+	m.ms.clearScheduledChannelCounters()
 
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()

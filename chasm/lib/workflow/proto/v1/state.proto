@@ -50,6 +50,10 @@ message ChannelSubscription {
   // Highest counter this run accepted from the channel. Kept for describing
   // the subscription; folding compares against the pending entry instead.
   int64 last_counter = 2;
+  // Counter the scheduled event of the run's current task carried, while that
+  // task has not started. A repeat at or below it folds into that task, which
+  // has not read anything yet. Zero once the task starts, fails or times out.
+  int64 scheduled_counter = 3;
 }
 
 // ChannelNotificationEntry is the latest notification from one channel that

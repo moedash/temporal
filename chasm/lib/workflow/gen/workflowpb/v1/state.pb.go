@@ -255,9 +255,13 @@ type ChannelSubscription struct {
 	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	// Highest counter this run accepted from the channel. Kept for describing
 	// the subscription; folding compares against the pending entry instead.
-	LastCounter   int64 `protobuf:"varint,2,opt,name=last_counter,json=lastCounter,proto3" json:"last_counter,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	LastCounter int64 `protobuf:"varint,2,opt,name=last_counter,json=lastCounter,proto3" json:"last_counter,omitempty"`
+	// Counter the scheduled event of the run's current task carried, while that
+	// task has not started. A repeat at or below it folds into that task, which
+	// has not read anything yet. Zero once the task starts, fails or times out.
+	ScheduledCounter int64 `protobuf:"varint,3,opt,name=scheduled_counter,json=scheduledCounter,proto3" json:"scheduled_counter,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ChannelSubscription) Reset() {
@@ -300,6 +304,13 @@ func (x *ChannelSubscription) GetEventId() int64 {
 func (x *ChannelSubscription) GetLastCounter() int64 {
 	if x != nil {
 		return x.LastCounter
+	}
+	return 0
+}
+
+func (x *ChannelSubscription) GetScheduledCounter() int64 {
+	if x != nil {
+		return x.ScheduledCounter
 	}
 	return 0
 }
@@ -384,10 +395,11 @@ const file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc = "" 
 	"\n" +
 	"generation\x18\x03 \x01(\x03R\n" +
 	"generation\x121\n" +
-	"\x14delivered_generation\x18\x04 \x01(\x03R\x13deliveredGeneration\"S\n" +
+	"\x14delivered_generation\x18\x04 \x01(\x03R\x13deliveredGeneration\"\x80\x01\n" +
 	"\x13ChannelSubscription\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12!\n" +
-	"\flast_counter\x18\x02 \x01(\x03R\vlastCounter\"\x9f\x02\n" +
+	"\flast_counter\x18\x02 \x01(\x03R\vlastCounter\x12+\n" +
+	"\x11scheduled_counter\x18\x03 \x01(\x03R\x10scheduledCounter\"\x9f\x02\n" +
 	"\x18ChannelNotificationEntry\x12\x1a\n" +
 	"\bposition\x18\x01 \x01(\fR\bposition\x12\x18\n" +
 	"\acounter\x18\x02 \x01(\x03R\acounter\x12o\n" +

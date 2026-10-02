@@ -797,6 +797,11 @@ func TestNotificationChannelRepeatAfterTaskWakesAgain(t *testing.T) {
 	requireNotifications(t, c.scheduledNotifications(id, task), map[string]int64{name: 1})
 	require.Equal(t, int32(1), c.describe(name).GetRetainedCount())
 
+	// The task has started, so the same counter again may stand for a write
+	// its read missed: it goes pending for the next task.
+	c.mustNotify(name, 1)
+	c.awaitPending(id, name, 1)
+
 	// While the open task keeps the repeat pending, the same counter again
 	// writes neither the run nor the channel.
 	c.mustNotify(name, 2)
@@ -808,4 +813,29 @@ func TestNotificationChannelRepeatAfterTaskWakesAgain(t *testing.T) {
 	c.complete(task, false)
 	next := c.poll(id)
 	requireNotifications(t, c.scheduledNotifications(id, next), map[string]int64{name: 2})
+}
+
+// A repeat that arrives while the task carrying the counter is scheduled and
+// not yet started folds into that task: it has not read anything, so it will
+// see the write the repeat stands for. One task, and neither the run nor the
+// channel is written.
+func TestNotificationChannelFoldsIntoUnstartedTask(t *testing.T) {
+	c := newChannelTestEnv(t)
+	id := "channel-unstarted-" + uuid.NewString()
+	name := "orders-" + uuid.NewString()
+	c.subscribe(id, name)
+
+	c.mustNotify(name, 1)
+	await.Require(c.ctx(), t, func(t *await.T) {
+		require.True(t, c.hasPendingTask(id))
+	}, 20*time.Second, 50*time.Millisecond)
+	runWrites, channelWrites := c.stateTransitions(id), c.channelTransitions(name)
+	require.Equal(t, int32(1), c.mustNotify(name, 1))
+	require.Equal(t, runWrites, c.stateTransitions(id), "folded into the unstarted task")
+	require.Equal(t, channelWrites, c.channelTransitions(name))
+
+	task := c.poll(id)
+	requireNotifications(t, c.scheduledNotifications(id, task), map[string]int64{name: 1})
+	c.complete(task, false)
+	require.False(t, c.hasPendingTask(id), "one task")
 }

@@ -58,10 +58,10 @@ func TestChannelNotificationsFoldAndSnapshot(t *testing.T) {
 	require.Empty(t, w.TakeChannelNotifications(ctx))
 }
 
-// Folding is against the pending entry only. While one is pending, the same
-// or a lower counter changes nothing; once a scheduled event has carried it,
-// the same counter is a new reason to run, since a watcher that finds a
-// record with no task open sends the counter it already sent.
+// Folding is against the pending entry and the unstarted task. While one is
+// pending, the same or a lower counter changes nothing; once a task carrying
+// it has started, the same counter is a new reason to run, since a watcher
+// that finds a record with no task open sends the counter it already sent.
 func TestChannelNotificationFoldsOnlyWhilePending(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	w := &Workflow{}
@@ -74,7 +74,8 @@ func TestChannelNotificationFoldsOnlyWhilePending(t *testing.T) {
 	require.False(t, w.ChannelNotificationIsDuplicate(ctx, "orders", 5))
 
 	w.TakeChannelNotifications(ctx)
-	require.False(t, w.ChannelNotificationIsDuplicate(ctx, "orders", 4), "carried, so news again")
+	w.ClearScheduledChannelCounters(ctx)
+	require.False(t, w.ChannelNotificationIsDuplicate(ctx, "orders", 4), "carried and started, so news again")
 	folded, err := w.AcceptChannelNotification(ctx, channelNote("orders", 4))
 	require.NoError(t, err)
 	require.False(t, folded)
@@ -107,4 +108,30 @@ func TestChannelSubscriptionRules(t *testing.T) {
 	w.StageChannelRegistration("orders")
 	require.Equal(t, []string{"orders"}, w.DrainChannelRegistrations())
 	require.Empty(t, w.DrainChannelRegistrations())
+}
+
+// The scheduled event of a task that has not started remembers what it
+// carries, so a repeat in that window folds into the task; once the task
+// starts, fails or times out, the memory is cleared and a repeat is news.
+func TestChannelNotificationFoldsIntoUnstartedTask(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	w := &Workflow{}
+	subscribe(t, w, ctx, "orders")
+	_, err := w.AcceptChannelNotification(ctx, channelNote("orders", 4))
+	require.NoError(t, err)
+	w.TakeChannelNotifications(ctx)
+	require.True(t, w.HasScheduledChannelCounters(ctx))
+
+	folded, err := w.AcceptChannelNotification(ctx, channelNote("orders", 4))
+	require.NoError(t, err)
+	require.True(t, folded, "the unstarted task carries it")
+	require.False(t, w.HasPendingChannelNotifications())
+	require.False(t, w.ChannelNotificationIsDuplicate(ctx, "orders", 5))
+
+	w.ClearScheduledChannelCounters(ctx)
+	require.False(t, w.HasScheduledChannelCounters(ctx))
+	folded, err = w.AcceptChannelNotification(ctx, channelNote("orders", 4))
+	require.NoError(t, err)
+	require.False(t, folded, "the task started, so the repeat goes to the next one")
+	require.True(t, w.HasPendingChannelNotifications())
 }

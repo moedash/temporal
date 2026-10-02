@@ -781,6 +781,29 @@ func (ms *MutableStateImpl) attachChannelNotifications(event *historypb.HistoryE
 		channel.ToAPINotifications(notifications)
 }
 
+// clearScheduledChannelCounters forgets the counters the scheduled task
+// carries, once that task starts, fails or times out. Checked through a
+// read-only view first, since almost no workflow has any.
+func (ms *MutableStateImpl) clearScheduledChannelCounters() {
+	node, ok := ms.chasmTree.(*chasm.Node)
+	if !ok {
+		return
+	}
+	view := chasm.NewContext(context.Background(), node)
+	rootComponent, err := node.ComponentByPath(view, nil)
+	if err != nil {
+		return
+	}
+	if wf, ok := rootComponent.(*chasmworkflow.Workflow); !ok || !wf.HasScheduledChannelCounters(view) {
+		return
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return
+	}
+	wf.ClearScheduledChannelCounters(chasmCtx)
+}
+
 // takeChannelNotifications hands the pending channel notifications to a
 // WorkflowTaskScheduled event that is being written, and clears them. The
 // event is the acknowledgment: once History carries a notification nothing
