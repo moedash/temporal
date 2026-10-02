@@ -22,6 +22,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	notificationpb "go.temporal.io/api/notification/v1"
 	querypb "go.temporal.io/api/query/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
@@ -38,6 +39,8 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/channel"
+	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -147,6 +150,7 @@ type (
 		matchingClient                  matchingservice.MatchingServiceClient
 		workerDeploymentClient          workerdeployment.Client
 		schedulerClient                 schedulerpb.SchedulerServiceClient
+		channelClient                   channelpb.ChannelServiceClient
 		archiverProvider                provider.ArchiverProvider
 		payloadSerializer               serialization.Serializer
 		namespaceRegistry               namespace.Registry
@@ -324,6 +328,7 @@ func NewWorkflowHandler(
 	matchingClient matchingservice.MatchingServiceClient,
 	workerDeploymentClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
+	channelClient channelpb.ChannelServiceClient,
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
 	namespaceRegistry namespace.Registry,
@@ -381,6 +386,7 @@ func NewWorkflowHandler(
 		matchingClient:                  matchingClient,
 		workerDeploymentClient:          workerDeploymentClient,
 		schedulerClient:                 schedulerClient,
+		channelClient:                   channelClient,
 		archiverProvider:                archiverProvider,
 		payloadSerializer:               payloadSerializer,
 		namespaceRegistry:               namespaceRegistry,
@@ -2421,49 +2427,271 @@ func (wh *WorkflowHandler) WakeWorkflowExecution(
 	}, nil
 }
 
-// NotifyChannel is declared by the pinned API and served by a later layer of
-// this series.
+// channelNamespaceID resolves the namespace of a channel call.
+func (wh *WorkflowHandler) channelNamespaceID(name string) (string, error) {
+	if name == "" {
+		return "", errNamespaceNotSet
+	}
+	id, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(name))
+	if err != nil {
+		return "", err
+	}
+	return id.String(), nil
+}
+
+// validateChannelName refuses a channel name that cannot key an execution.
+func (wh *WorkflowHandler) validateChannelName(name string) error {
+	if name == "" {
+		return errChannelNotSet
+	}
+	if len(name) > wh.config.MaxIDLengthLimit() {
+		return errChannelTooLong
+	}
+	return nil
+}
+
+// validateCallerFields checks the identity and request id a channel call
+// carries, the same way Signal checks them.
+func (wh *WorkflowHandler) validateCallerFields(identity, requestID string) error {
+	if len(identity) > wh.config.MaxIDLengthLimit() {
+		return errIdentityTooLong
+	}
+	if len(requestID) > wh.config.MaxIDLengthLimit() {
+		return errRequestIDTooLong
+	}
+	return nil
+}
+
+// NotifyChannel tells every listener of a channel that a source they consume
+// moved. The writer never learns who listens; the channel's shard wakes each
+// one. A channel with no listeners retains the notification for pollers.
 func (wh *WorkflowHandler) NotifyChannel(
-	_ context.Context,
-	_ *workflowservice.NotifyChannelRequest,
-) (*workflowservice.NotifyChannelResponse, error) {
-	return nil, serviceerror.NewUnimplemented("NotifyChannel is not implemented")
+	ctx context.Context,
+	request *workflowservice.NotifyChannelRequest,
+) (_ *workflowservice.NotifyChannelResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	n := request.GetNotification()
+	if n == nil {
+		return nil, errNotificationNotSet
+	}
+	if err := wh.validateChannelName(n.GetChannel()); err != nil {
+		return nil, err
+	}
+	if len(n.GetPosition()) > channel.MaxPositionBytes {
+		return nil, errNotificationPositionTooLarge
+	}
+	if n.GetCounter() <= 0 {
+		return nil, errNotificationCounterNotPositive
+	}
+	if err := wh.validateCallerFields(request.GetIdentity(), request.GetRequestId()); err != nil {
+		return nil, err
+	}
+	namespaceID, err := wh.channelNamespaceID(request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.channelClient.NotifyChannel(ctx, &channelpb.NotifyChannelRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &channelpb.NotifyChannelInput{
+			Namespace:    request.GetNamespace(),
+			Notification: channel.FromAPINotification(n),
+			Identity:     request.GetIdentity(),
+			RequestId:    request.GetRequestId(),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.NotifyChannelResponse{
+		ListenerCount: int32(resp.GetFrontendResponse().GetListenerCount()),
+	}, nil
 }
 
-// RegisterChannelListener is declared by the pinned API and served by a later
-// layer of this series.
+// RegisterChannelListener registers a callback as a listener of a channel.
+// The server posts each notification to it. A retry with the same request id
+// returns the listener the first call made.
 func (wh *WorkflowHandler) RegisterChannelListener(
-	_ context.Context,
-	_ *workflowservice.RegisterChannelListenerRequest,
-) (*workflowservice.RegisterChannelListenerResponse, error) {
-	return nil, serviceerror.NewUnimplemented("RegisterChannelListener is not implemented")
+	ctx context.Context,
+	request *workflowservice.RegisterChannelListenerRequest,
+) (_ *workflowservice.RegisterChannelListenerResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if err := wh.validateChannelName(request.GetChannel()); err != nil {
+		return nil, err
+	}
+	if err := wh.validateCallerFields(request.GetIdentity(), request.GetRequestId()); err != nil {
+		return nil, err
+	}
+	if request.GetCallback() == nil {
+		return nil, errChannelCallbackNotSet
+	}
+	// Only a URL callback is accepted: the server posts the notification to
+	// it, which a Nexus handler callback has no way to receive.
+	opts := callbacks.ValidatorOptions{EnabledKinds: []callbacks.Kind{callbacks.KindNexus}}
+	cbs := []*commonpb.Callback{request.GetCallback()}
+	if err := wh.callbackValidator.Validate(ctx, request.GetNamespace(), cbs, opts); err != nil {
+		return nil, err
+	}
+	namespaceID, err := wh.channelNamespaceID(request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+	requestID := request.GetRequestId()
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+
+	resp, err := wh.channelClient.RegisterChannelListener(ctx, &channelpb.RegisterChannelListenerRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &channelpb.RegisterChannelListenerInput{
+			Namespace: request.GetNamespace(),
+			Channel:   request.GetChannel(),
+			Callback:  request.GetCallback(),
+			RequestId: requestID,
+			Identity:  request.GetIdentity(),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.RegisterChannelListenerResponse{
+		ListenerId: resp.GetFrontendResponse().GetListenerId(),
+	}, nil
 }
 
-// UnregisterChannelListener is declared by the pinned API and served by a
-// later layer of this series.
+// UnregisterChannelListener removes a callback listener. A listener that is
+// already gone is not an error, so a retry succeeds.
 func (wh *WorkflowHandler) UnregisterChannelListener(
-	_ context.Context,
-	_ *workflowservice.UnregisterChannelListenerRequest,
-) (*workflowservice.UnregisterChannelListenerResponse, error) {
-	return nil, serviceerror.NewUnimplemented("UnregisterChannelListener is not implemented")
+	ctx context.Context,
+	request *workflowservice.UnregisterChannelListenerRequest,
+) (_ *workflowservice.UnregisterChannelListenerResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if err := wh.validateChannelName(request.GetChannel()); err != nil {
+		return nil, err
+	}
+	if request.GetListenerId() == "" {
+		return nil, errListenerIDNotSet
+	}
+	if len(request.GetListenerId()) > wh.config.MaxIDLengthLimit() {
+		return nil, errListenerIDTooLong
+	}
+	if err := wh.validateCallerFields(request.GetIdentity(), ""); err != nil {
+		return nil, err
+	}
+	namespaceID, err := wh.channelNamespaceID(request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.channelClient.UnregisterChannelListener(ctx, &channelpb.UnregisterChannelListenerRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &channelpb.UnregisterChannelListenerInput{
+			Namespace:  request.GetNamespace(),
+			Channel:    request.GetChannel(),
+			ListenerId: request.GetListenerId(),
+			Identity:   request.GetIdentity(),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.UnregisterChannelListenerResponse{}, nil
 }
 
-// PollChannel is declared by the pinned API and served by a later layer of
-// this series.
+// PollChannel returns the retained notifications above the caller's counter,
+// waiting up to the requested time for one when none is retained yet.
 func (wh *WorkflowHandler) PollChannel(
-	_ context.Context,
-	_ *workflowservice.PollChannelRequest,
-) (*workflowservice.PollChannelResponse, error) {
-	return nil, serviceerror.NewUnimplemented("PollChannel is not implemented")
+	ctx context.Context,
+	request *workflowservice.PollChannelRequest,
+) (_ *workflowservice.PollChannelResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if err := wh.validateChannelName(request.GetChannel()); err != nil {
+		return nil, err
+	}
+	if request.GetMaxNotifications() < 0 {
+		return nil, errMaxNotificationsNegative
+	}
+	if request.GetWait().AsDuration() < 0 {
+		return nil, errPollWaitNegative
+	}
+	namespaceID, err := wh.channelNamespaceID(request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.channelClient.PollChannel(ctx, &channelpb.PollChannelRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &channelpb.PollChannelInput{
+			Namespace:        request.GetNamespace(),
+			Channel:          request.GetChannel(),
+			AfterCounter:     request.GetAfterCounter(),
+			Wait:             request.GetWait(),
+			MaxNotifications: request.GetMaxNotifications(),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.PollChannelResponse{
+		Notifications: channel.ToAPINotifications(resp.GetFrontendResponse().GetNotifications()),
+	}, nil
 }
 
-// DescribeChannel is declared by the pinned API and served by a later layer of
-// this series.
+// DescribeChannel returns a channel's listeners, its latest notification and
+// how many notifications it retains.
 func (wh *WorkflowHandler) DescribeChannel(
-	_ context.Context,
-	_ *workflowservice.DescribeChannelRequest,
-) (*workflowservice.DescribeChannelResponse, error) {
-	return nil, serviceerror.NewUnimplemented("DescribeChannel is not implemented")
+	ctx context.Context,
+	request *workflowservice.DescribeChannelRequest,
+) (_ *workflowservice.DescribeChannelResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if err := wh.validateChannelName(request.GetChannel()); err != nil {
+		return nil, err
+	}
+	namespaceID, err := wh.channelNamespaceID(request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.channelClient.DescribeChannel(ctx, &channelpb.DescribeChannelRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &channelpb.DescribeChannelInput{
+			Namespace: request.GetNamespace(),
+			Channel:   request.GetChannel(),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := resp.GetFrontendResponse()
+	listeners := make([]*notificationpb.ChannelListener, 0, len(out.GetListeners()))
+	for _, l := range out.GetListeners() {
+		listeners = append(listeners, channel.ToAPIListener(l))
+	}
+	return &workflowservice.DescribeChannelResponse{
+		Listeners:     listeners,
+		Latest:        channel.ToAPINotification(out.GetLatest()),
+		RetainedCount: int32(out.GetRetainedCount()),
+	}, nil
 }
 
 // SignalWithStartWorkflowExecution is used to ensure sending signal to a workflow.
