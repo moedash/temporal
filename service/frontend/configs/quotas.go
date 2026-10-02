@@ -47,6 +47,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionTimeSkipping": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollChannel":                       1,
 
 		// Long-running if activity outcome is not already available
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
@@ -96,6 +97,9 @@ var (
 		// P1: External Event APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/SignalWorkflowExecution":          1,
 		"/temporal.api.workflowservice.v1.WorkflowService/WakeWorkflowExecution":            1,
+		"/temporal.api.workflowservice.v1.WorkflowService/NotifyChannel":                    1,
+		"/temporal.api.workflowservice.v1.WorkflowService/RegisterChannelListener":          1,
+		"/temporal.api.workflowservice.v1.WorkflowService/UnregisterChannelListener":        1,
 		"/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution":           1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":          1,
@@ -165,6 +169,7 @@ var (
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":                    3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeChannel":                              3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":                    3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":                            3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility":                3,
@@ -197,6 +202,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":              4, // TODO(saa-preview): should it be 4 or 3?
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              4,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollChannel":                        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                 4,
