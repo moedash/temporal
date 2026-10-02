@@ -129,13 +129,6 @@ service HistoryService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
-  // WakeWorkflowExecution tells a running execution that a source it consumes
-  // moved. It schedules a Workflow Task that carries the wake and writes
-  // nothing to History; a wake the run already holds folds into it.
-  rpc WakeWorkflowExecution(WakeWorkflowExecutionRequest) returns (WakeWorkflowExecutionResponse) {
-    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
-  }
-
   // (-- api-linter: core::0136::prepositions=disabled
   //     aip.dev/not-precedent: "With" is needed here. --)
   // SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.

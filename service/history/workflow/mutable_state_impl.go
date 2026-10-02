@@ -731,16 +731,12 @@ func (ms *MutableStateImpl) carryStreamSubscriptionsTo(newMutableState *MutableS
 }
 
 // HasPendingStreamData reports whether a subscription of this workflow has
-// offsets left to deliver, or a wake has arrived that no started workflow task
-// carried. These are the conditions under which stream traffic and wakes
-// schedule a workflow task; neither writes an event that would.
-//
-// A wake does not cut short a first workflow task backoff: the task that ends
-// the backoff carries it.
+// offsets left to deliver, which is the one condition under which stream
+// traffic schedules a workflow task.
 //
 // Called on every transaction close for every workflow, almost none of which
-// have a subscription or a wake, so it resolves the root component once rather
-// than asking whether it exists and then asking for it.
+// have a subscription, so it resolves the root component once rather than
+// asking whether it exists and then asking for it.
 func (ms *MutableStateImpl) HasPendingStreamData() bool {
 	node, ok := ms.chasmTree.(*chasm.Node)
 	if !ok {
@@ -755,10 +751,7 @@ func (ms *MutableStateImpl) HasPendingStreamData() bool {
 	if !ok {
 		return false
 	}
-	if wf.StreamCursorsBehind(chasmCtx) {
-		return true
-	}
-	return wf.HasUndeliveredWakes(chasmCtx) && !ms.IsWorkflowPendingOnWorkflowTaskBackoff()
+	return wf.StreamCursorsBehind(chasmCtx)
 }
 
 // ConsumesStreams reports whether this workflow holds a cursor into any
@@ -8112,11 +8105,10 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 		}
 	}
 
-	// A stream subscription with offsets left to deliver, or a wake no task has
-	// carried. Handled here rather than at workflow task completion so it also
-	// covers the transaction that registers a subscription against a stream
-	// that already has data, or accepts a wake, neither of which completes a
-	// workflow task of its own.
+	// A stream subscription with offsets left to deliver. Handled here rather
+	// than at workflow task completion so it also covers the transaction that
+	// registers a subscription against a stream that already has data, which
+	// completes no workflow task of its own.
 	//
 	// The pending-task check comes first because it is cheap: a workflow that
 	// already owes a task needs no further reason to run, so the subscription

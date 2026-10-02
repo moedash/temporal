@@ -2672,12 +2672,6 @@ system.transactionSizeLimit, since each batch is persisted within a single trans
 		10000,
 		`MaximumSignalsPerExecution is max number of signals supported by single execution`,
 	)
-	MaximumWakeSourcesPerExecution = NewNamespaceIntSetting(
-		"history.maximumWakeSourcesPerExecution",
-		32,
-		`MaximumWakeSourcesPerExecution is the max number of sources with a wake pending on a single
-execution. A wake from a new source past the limit is refused with ResourceExhausted.`,
-	)
 	MaximumRequestIDsPerExecution = NewNamespaceIntSetting(
 		"history.maximumRequestIDsPerExecution",
 		25,
