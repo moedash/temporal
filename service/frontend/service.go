@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	channellib "go.temporal.io/server/chasm/lib/channel"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmstream "go.temporal.io/server/chasm/lib/stream/service"
@@ -204,6 +205,10 @@ type Config struct {
 
 	// Enable deployment version RPCs
 	EnableDeploymentVersions dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
+	// Whether the channel calls honour workflow_execution and reach the
+	// channel linked to that workflow.
+	LinkedChannelKindEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Enable batcher RPCs
 	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -408,6 +413,7 @@ func NewConfig(
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
 		EnableDeploymentVersions: dynamicconfig.EnableDeploymentVersions.Get(dc),
+		LinkedChannelKindEnabled: channellib.LinkedKindEnabledSetting.Get(dc),
 
 		EnableBatcher:                                dynamicconfig.FrontendEnableBatcher.Get(dc),
 		MaxConcurrentBatchOperation:                  dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
