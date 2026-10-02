@@ -1254,7 +1254,11 @@ func (x *RegisterWorkflowListenerInput) GetFirstExecutionRunId() string {
 }
 
 type RegisterWorkflowListenerOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The channel's latest notification, when the run is new to the channel.
+	// The run takes it as pending, so a write that landed before the run was
+	// registered still wakes it.
+	Latest        *Notification `protobuf:"bytes,1,opt,name=latest,proto3" json:"latest,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1287,6 +1291,13 @@ func (x *RegisterWorkflowListenerOutput) ProtoReflect() protoreflect.Message {
 // Deprecated: Use RegisterWorkflowListenerOutput.ProtoReflect.Descriptor instead.
 func (*RegisterWorkflowListenerOutput) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *RegisterWorkflowListenerOutput) GetLatest() *Notification {
+	if x != nil {
+		return x.Latest
+	}
+	return nil
 }
 
 type RegisterWorkflowListenerRequest struct {
@@ -1764,8 +1775,9 @@ const file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_raw
 	"\vworkflow_id\x18\x03 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
 	"\x06run_id\x18\x04 \x01(\tR\x05runId\x123\n" +
-	"\x16first_execution_run_id\x18\x05 \x01(\tR\x13firstExecutionRunId\" \n" +
-	"\x1eRegisterWorkflowListenerOutput\"\xba\x01\n" +
+	"\x16first_execution_run_id\x18\x05 \x01(\tR\x13firstExecutionRunId\"r\n" +
+	"\x1eRegisterWorkflowListenerOutput\x12P\n" +
+	"\x06latest\x18\x01 \x01(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\x06latest\"\xba\x01\n" +
 	"\x1fRegisterWorkflowListenerRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12t\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2I.temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerInputR\x0ffrontendRequest\"\x9b\x01\n" +
@@ -1857,16 +1869,17 @@ var file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_depId
 	30, // 16: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
 	16, // 17: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInput
 	18, // 18: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput
-	21, // 19: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerInput
-	22, // 20: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput
-	30, // 21: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput.notification:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
-	25, // 22: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput
-	26, // 23: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationOutput
-	24, // [24:24] is the sub-list for method output_type
-	24, // [24:24] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	30, // 19: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	21, // 20: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerInput
+	22, // 21: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput
+	30, // 22: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput.notification:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	25, // 23: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput
+	26, // 24: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationOutput
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_init() }

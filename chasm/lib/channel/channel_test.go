@@ -106,7 +106,7 @@ func TestNotifyRefusesWhatItCannotAccept(t *testing.T) {
 // highest counter.
 func TestBurstCoalescesIntoOneFanOut(t *testing.T) {
 	c, mctx, _ := newTestChannel(t)
-	require.NoError(t, c.RegisterWorkflowListener(mctx, WorkflowRegistration{
+	require.NoError(t, registerWorkflow(c, mctx, WorkflowRegistration{
 		WorkflowID: "wf", RunID: "run-1",
 	}))
 	for _, counter := range []int64{1, 3, 2} {
@@ -247,9 +247,12 @@ func TestListenerTable(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, first, again)
-	require.Equal(t, int64(5), c.CallbackListeners[first].Get(mctx).GetHandedCounter())
+	listener := c.CallbackListeners[first].Get(mctx)
+	require.Equal(t, int64(5), listener.GetInFlight().GetCounter(), "a new listener is posted the latest")
+	require.Equal(t, int64(5), listener.GetHandedCounter())
+	require.Len(t, tasksOf[*channelpb.ChannelCallbackTask](mctx), 1, "once, not per retry")
 
-	require.NoError(t, c.RegisterWorkflowListener(mctx, WorkflowRegistration{
+	require.NoError(t, registerWorkflow(c, mctx, WorkflowRegistration{
 		WorkflowID: "wf", RunID: "run-1", Limits: limits,
 	}))
 	_, err = c.RegisterCallbackListener(mctx, CallbackRegistration{
@@ -257,7 +260,7 @@ func TestListenerTable(t *testing.T) {
 	})
 	var exhausted *serviceerror.ResourceExhausted
 	require.ErrorAs(t, err, &exhausted)
-	require.NoError(t, c.RegisterWorkflowListener(mctx, WorkflowRegistration{
+	require.NoError(t, registerWorkflow(c, mctx, WorkflowRegistration{
 		WorkflowID: "wf", RunID: "run-2", Limits: limits,
 	}), "a later run of a known workflow takes its entry, not a new one")
 	require.Equal(t, "run-2", c.WorkflowListeners["wf"].Get(mctx).GetRunId())
@@ -284,7 +287,7 @@ func TestListenerTable(t *testing.T) {
 // has already taken.
 func TestWorkflowListenerRekeyAndForget(t *testing.T) {
 	c, mctx, _ := newTestChannel(t)
-	require.NoError(t, c.RegisterWorkflowListener(mctx, WorkflowRegistration{
+	require.NoError(t, registerWorkflow(c, mctx, WorkflowRegistration{
 		WorkflowID: "wf", RunID: "run-1",
 	}))
 
@@ -339,7 +342,7 @@ func TestIdleCheckStandsDownWithListeners(t *testing.T) {
 	limits := Limits{Retention: time.Minute}
 	_, err := c.Notify(mctx, note(1), limits)
 	require.NoError(t, err)
-	require.NoError(t, c.RegisterWorkflowListener(mctx, WorkflowRegistration{
+	require.NoError(t, registerWorkflow(c, mctx, WorkflowRegistration{
 		WorkflowID: "wf", RunID: "run-1",
 	}))
 	*now = now.Add(time.Hour)
@@ -348,4 +351,31 @@ func TestIdleCheckStandsDownWithListeners(t *testing.T) {
 	require.False(t, expired)
 	require.False(t, c.State.GetIdleCheckPending())
 	require.Len(t, tasksOf[*channelpb.ChannelIdleTask](mctx), 1)
+}
+
+func registerWorkflow(c *Channel, mctx chasm.MutableContext, reg WorkflowRegistration) error {
+	_, err := c.RegisterWorkflowListener(mctx, reg)
+	return err
+}
+
+// A run new to the channel is handed the latest notification, so a write that
+// landed before it subscribed still wakes it; a repeat registration and an
+// empty channel hand nothing.
+func TestNewWorkflowListenerGetsLatest(t *testing.T) {
+	c, mctx, _ := newTestChannel(t)
+	latest, err := c.RegisterWorkflowListener(mctx, WorkflowRegistration{WorkflowID: "a", RunID: "r1"})
+	require.NoError(t, err)
+	require.Nil(t, latest, "nothing to hand on an empty channel")
+
+	_, err = c.Notify(mctx, note(3), Limits{})
+	require.NoError(t, err)
+	latest, err = c.RegisterWorkflowListener(mctx, WorkflowRegistration{WorkflowID: "b", RunID: "r1"})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), latest.GetCounter())
+	latest, err = c.RegisterWorkflowListener(mctx, WorkflowRegistration{WorkflowID: "b", RunID: "r1"})
+	require.NoError(t, err)
+	require.Nil(t, latest, "a repeat is not new")
+	latest, err = c.RegisterWorkflowListener(mctx, WorkflowRegistration{WorkflowID: "b", RunID: "r2"})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), latest.GetCounter(), "a successor run is new")
 }

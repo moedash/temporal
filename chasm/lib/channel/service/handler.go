@@ -432,15 +432,15 @@ func (h *handler) RegisterWorkflowListener(
 		FirstExecutionRunID: in.GetFirstExecutionRunId(),
 		Limits:              h.limitsFor(ns),
 	}
-	_, err := upsert(ctx, req.GetNamespaceId(), in.GetChannel(),
-		func(c *channel.Channel, mctx chasm.MutableContext) (struct{}, error) {
-			return struct{}{}, c.RegisterWorkflowListener(mctx, reg)
+	latest, err := upsert(ctx, req.GetNamespaceId(), in.GetChannel(),
+		func(c *channel.Channel, mctx chasm.MutableContext) (*channelpb.Notification, error) {
+			return c.RegisterWorkflowListener(mctx, reg)
 		})
 	if err != nil {
 		return nil, err
 	}
 	return &channelpb.RegisterWorkflowListenerResponse{
-		FrontendResponse: &channelpb.RegisterWorkflowListenerOutput{},
+		FrontendResponse: &channelpb.RegisterWorkflowListenerOutput{Latest: latest},
 	}, nil
 }
 

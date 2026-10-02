@@ -141,7 +141,12 @@ message RegisterWorkflowListenerInput {
   string first_execution_run_id = 5;
 }
 
-message RegisterWorkflowListenerOutput {}
+message RegisterWorkflowListenerOutput {
+  // The channel's latest notification, when the run is new to the channel.
+  // The run takes it as pending, so a write that landed before the run was
+  // registered still wakes it.
+  Notification latest = 1;
+}
 
 message RegisterWorkflowListenerRequest {
   string namespace_id = 1;

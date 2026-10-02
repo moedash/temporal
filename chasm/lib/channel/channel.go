@@ -296,27 +296,33 @@ type WorkflowRegistration struct {
 // RegisterWorkflowListener records a run as a listener. A run of the same
 // workflow already on record is replaced: one workflow id has one open run, so
 // the entry belongs to a run that has closed.
+//
+// A run new to the channel gets the latest notification back, for it to take
+// as pending. A reader that checked its source, found nothing and subscribed
+// can otherwise miss a write that landed in between, since the notify that
+// followed found nobody to tell.
 func (c *Channel) RegisterWorkflowListener(
 	mctx chasm.MutableContext,
 	reg WorkflowRegistration,
-) error {
+) (*channelpb.Notification, error) {
 	if reg.WorkflowID == "" || reg.RunID == "" {
-		return serviceerror.NewInvalidArgument("workflow id and run id are required")
+		return nil, serviceerror.NewInvalidArgument("workflow id and run id are required")
 	}
 	limits := reg.Limits.withDefaults()
 	c.touch(mctx)
+	latest := common.CloneProto(c.State.GetLatest())
 	if field, ok := c.WorkflowListeners[reg.WorkflowID]; ok {
 		if field.Get(readOnly(mctx)).GetRunId() == reg.RunID {
-			return nil
+			return nil, nil
 		}
 		listener := field.Get(mctx)
 		listener.RunId = reg.RunID
 		listener.FirstExecutionRunId = reg.FirstExecutionRunID
 		listener.RegisteredTime = timestamppb.New(mctx.Now(c))
-		return nil
+		return latest, nil
 	}
 	if err := c.checkListenerRoom(limits.MaxListeners); err != nil {
-		return err
+		return nil, err
 	}
 	if c.WorkflowListeners == nil {
 		c.WorkflowListeners = make(chasm.Map[string, *channelpb.WorkflowListener])
@@ -327,7 +333,7 @@ func (c *Channel) RegisterWorkflowListener(
 		FirstExecutionRunId: reg.FirstExecutionRunID,
 		RegisteredTime:      timestamppb.New(mctx.Now(c)),
 	})
-	return nil
+	return latest, nil
 }
 
 func (c *Channel) checkListenerRoom(maxListeners int) error {
@@ -379,8 +385,8 @@ type CallbackRegistration struct {
 // registration whose request id the channel has seen returns the listener
 // that request made, so a retry adds nothing.
 //
-// A new listener is told about notifications that arrive after it, not about
-// the latest one already accepted.
+// A new listener is posted the latest notification the channel holds, once,
+// for the same reason a new workflow listener is handed it.
 func (c *Channel) RegisterCallbackListener(
 	mctx chasm.MutableContext,
 	reg CallbackRegistration,
@@ -407,13 +413,20 @@ func (c *Channel) RegisterCallbackListener(
 		c.CallbackListeners = make(chasm.Map[string, *channelpb.CallbackListener])
 	}
 	id := reg.RequestID
-	c.CallbackListeners[id] = chasm.NewDataField(mctx, &channelpb.CallbackListener{
+	listener := &channelpb.CallbackListener{
 		ListenerId:     id,
 		Callback:       common.CloneProto(reg.Callback),
 		RequestId:      reg.RequestID,
 		RegisteredTime: timestamppb.New(mctx.Now(c)),
-		HandedCounter:  c.State.GetLatest().GetCounter(),
-	})
+	}
+	if latest := c.State.GetLatest(); latest != nil {
+		listener.InFlight = common.CloneProto(latest)
+		listener.HandedCounter = latest.GetCounter()
+		if err := c.scheduleCallback(mctx, listener); err != nil {
+			return "", err
+		}
+	}
+	c.CallbackListeners[id] = chasm.NewDataField(mctx, listener)
 	return id, nil
 }
 
