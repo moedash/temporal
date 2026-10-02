@@ -109,7 +109,6 @@ var (
 		"RespondNexusTaskFailed":                       {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"RequestCancelWorkflowExecution":               {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"SignalWorkflowExecution":                      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
-		"WakeWorkflowExecution":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"NotifyChannel":                                {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"RegisterChannelListener":                      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"UnregisterChannelListener":                    {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
