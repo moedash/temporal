@@ -3,6 +3,7 @@ syntax = "proto3";
 package temporal.server.chasm.lib.channel.proto.v1;
 
 import "chasm/lib/channel/proto/v1/message.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 
@@ -78,8 +79,9 @@ message PollChannelInput {
   string channel = 2;
   // Return retained notifications with a counter above this one.
   int64 after_counter = 3;
-  // Block until one arrives when none is retained above after_counter.
-  bool wait = 4;
+  // How long to wait for one when none is retained above after_counter.
+  // Bounded by the server's long-poll timeout. Zero answers at once.
+  google.protobuf.Duration wait = 4;
   // Zero means the server's page size.
   int32 max_notifications = 5;
 }

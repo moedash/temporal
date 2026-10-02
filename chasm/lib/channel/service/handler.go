@@ -90,8 +90,46 @@ func workflowRef(namespaceID, workflowID, runID string) chasm.ComponentRef {
 	})
 }
 
-func startChannel[I any](mctx chasm.MutableContext, _ I) (*channel.Channel, error) {
+func startChannel(mctx chasm.MutableContext, _ struct{}) (*channel.Channel, error) {
 	return channel.NewChannel(mctx), nil
+}
+
+// errChannelClosed refuses an update to a channel the idle task has closed on
+// its way to deleting it, so the caller starts a new one instead.
+var errChannelClosed = serviceerror.NewNotFound("channel is closed")
+
+// upsert applies an update to the channel, creating the channel first when
+// there is none or the one there is closed.
+//
+// Creation is a transition of its own rather than an update-with-start: the
+// engine applies the update of an update-with-start after it has synced the
+// new execution's structure, so listeners and retained notifications added by
+// that update would not be persisted.
+func upsert[O any](
+	ctx context.Context,
+	namespaceID, name string,
+	update func(*channel.Channel, chasm.MutableContext) (O, error),
+	opts ...chasm.TransitionOption,
+) (O, error) {
+	ref := channelRef(namespaceID, name)
+	apply := func(c *channel.Channel, mctx chasm.MutableContext, _ struct{}) (O, error) {
+		if c.State.GetClosed() {
+			var zero O
+			return zero, errChannelClosed
+		}
+		return update(c, mctx)
+	}
+	out, _, err := chasm.UpdateComponent(ctx, ref, apply, struct{}{}, opts...)
+	if !executionAbsent(err) {
+		return out, err
+	}
+	_, err = chasm.StartExecution(ctx, channelKey(namespaceID, name), startChannel, struct{}{})
+	if _, started := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); err != nil && !started {
+		var zero O
+		return zero, err
+	}
+	out, _, err = chasm.UpdateComponent(ctx, ref, apply, struct{}{}, opts...)
+	return out, err
 }
 
 func executionAbsent(err error) bool {
@@ -117,24 +155,50 @@ func (h *handler) NotifyChannel(
 		return nil, err
 	}
 
-	result, err := chasm.UpdateWithStartExecution(
-		ctx,
-		channelKey(req.GetNamespaceId(), in.GetNotification().GetChannel()),
-		startChannel[*channelpb.Notification],
-		func(c *channel.Channel, mctx chasm.MutableContext, n *channelpb.Notification) (channel.NotifyResult, error) {
-			return c.Notify(mctx, n, limits)
-		},
-		in.GetNotification(),
-	)
+	count, err := h.notify(ctx, req.GetNamespaceId(), in, limits)
+	if errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
+		// A retry of a notify that was accepted. Answered with the listeners
+		// the channel holds now, without accepting it a second time.
+		snapshot, readErr := chasm.ReadComponent(ctx,
+			channelRef(req.GetNamespaceId(), in.GetNotification().GetChannel()),
+			(*channel.Channel).Describe, struct{}{})
+		if readErr != nil {
+			return nil, readErr
+		}
+		return &channelpb.NotifyChannelResponse{
+			FrontendResponse: &channelpb.NotifyChannelOutput{ListenerCount: int64(len(snapshot.Listeners))},
+		}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
 	metrics.ChannelNotificationsAccepted.With(h.metricsHandler).Record(1, metrics.NamespaceTag(ns))
 	return &channelpb.NotifyChannelResponse{
 		FrontendResponse: &channelpb.NotifyChannelOutput{
-			ListenerCount: int64(result.UpdateOutput.ListenerCount),
+			ListenerCount: int64(count),
 		},
 	}, nil
+}
+
+// notify accepts the notification on the channel, creating it if absent. A
+// request id makes a retry of an accepted notify a no-op: the engine records
+// it with the update and refuses its reuse.
+func (h *handler) notify(
+	ctx context.Context,
+	namespaceID string,
+	in *channelpb.NotifyChannelInput,
+	limits channel.Limits,
+) (int, error) {
+	n := in.GetNotification()
+	var opts []chasm.TransitionOption
+	if in.GetRequestId() != "" {
+		opts = append(opts, chasm.WithRequestID(in.GetRequestId()))
+	}
+	result, err := upsert(ctx, namespaceID, n.GetChannel(),
+		func(c *channel.Channel, mctx chasm.MutableContext) (channel.NotifyResult, error) {
+			return c.Notify(mctx, n, limits)
+		}, opts...)
+	return result.ListenerCount, err
 }
 
 // RegisterChannelListener adds a callback listener, creating the channel if it
@@ -154,18 +218,15 @@ func (h *handler) RegisterChannelListener(
 		Callback:  in.GetCallback(),
 		Limits:    h.limitsFor(ns),
 	}
-	result, err := chasm.UpdateWithStartExecution(
-		ctx,
-		channelKey(req.GetNamespaceId(), in.GetChannel()),
-		startChannel[channel.CallbackRegistration],
-		(*channel.Channel).RegisterCallbackListener,
-		reg,
-	)
+	listenerID, err := upsert(ctx, req.GetNamespaceId(), in.GetChannel(),
+		func(c *channel.Channel, mctx chasm.MutableContext) (string, error) {
+			return c.RegisterCallbackListener(mctx, reg)
+		})
 	if err != nil {
 		return nil, err
 	}
 	return &channelpb.RegisterChannelListenerResponse{
-		FrontendResponse: &channelpb.RegisterChannelListenerOutput{ListenerId: result.UpdateOutput},
+		FrontendResponse: &channelpb.RegisterChannelListenerOutput{ListenerId: listenerID},
 	}, nil
 }
 
@@ -191,10 +252,11 @@ func (h *handler) UnregisterChannelListener(
 	}, nil
 }
 
-// pollBudget is how long one blocking poll may hold its caller. It ends before
-// the caller's own deadline, so expiry is answered with an empty response.
-func pollBudget(ctx context.Context) (context.Context, context.CancelFunc) {
-	return contextutil.WithDeadlineBuffer(ctx, channel.LongPollTimeout, channel.LongPollBuffer)
+// pollBudget is how long one blocking poll may hold its caller: what it asked
+// for, capped at the server's long-poll timeout. It ends before the caller's
+// own deadline, so expiry is answered with an empty response.
+func pollBudget(ctx context.Context, wait time.Duration) (context.Context, context.CancelFunc) {
+	return contextutil.WithDeadlineBuffer(ctx, min(wait, channel.LongPollTimeout), channel.LongPollBuffer)
 }
 
 // pollRecheckInterval is how often a blocking poll on a channel nobody has
@@ -215,12 +277,13 @@ func (h *handler) PollChannel(
 	ref := channelRef(req.GetNamespaceId(), in.GetChannel())
 	limits := h.limitsFor(ns)
 
+	wait := in.GetWait().AsDuration()
 	latest, lastActivity, err := h.readLatest(ctx, ref)
 	if executionAbsent(err) {
-		if !in.GetWait() {
+		if wait <= 0 {
 			return &channelpb.PollChannelResponse{FrontendResponse: &channelpb.PollChannelOutput{}}, nil
 		}
-		pollCtx, cancel := pollBudget(ctx)
+		pollCtx, cancel := pollBudget(ctx, wait)
 		defer cancel()
 		latest, lastActivity, err = h.waitForChannel(pollCtx, ctx, ref)
 		if err != nil || pollCtx.Err() != nil {
@@ -233,8 +296,8 @@ func (h *handler) PollChannel(
 		return nil, err
 	}
 
-	if in.GetWait() && latest <= in.GetAfterCounter() {
-		pollCtx, cancel := pollBudget(ctx)
+	if wait > 0 && latest <= in.GetAfterCounter() {
+		pollCtx, cancel := pollBudget(ctx, wait)
 		defer cancel()
 		_, _, err := chasm.PollComponent(pollCtx, ref,
 			func(c *channel.Channel, _ chasm.Context, after int64) (struct{}, bool, error) {
@@ -369,15 +432,10 @@ func (h *handler) RegisterWorkflowListener(
 		FirstExecutionRunID: in.GetFirstExecutionRunId(),
 		Limits:              h.limitsFor(ns),
 	}
-	_, err := chasm.UpdateWithStartExecution(
-		ctx,
-		channelKey(req.GetNamespaceId(), in.GetChannel()),
-		startChannel[channel.WorkflowRegistration],
-		func(c *channel.Channel, mctx chasm.MutableContext, r channel.WorkflowRegistration) (struct{}, error) {
-			return struct{}{}, c.RegisterWorkflowListener(mctx, r)
-		},
-		reg,
-	)
+	_, err := upsert(ctx, req.GetNamespaceId(), in.GetChannel(),
+		func(c *channel.Channel, mctx chasm.MutableContext) (struct{}, error) {
+			return struct{}{}, c.RegisterWorkflowListener(mctx, reg)
+		})
 	if err != nil {
 		return nil, err
 	}

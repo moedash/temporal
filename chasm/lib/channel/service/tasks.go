@@ -170,6 +170,8 @@ func (h *fanOutTaskHandler) deliverOne(
 				c.RekeyWorkflowListener(mctx, l.GetWorkflowId(), l.GetRunId(), out.GetSuccessorRunId())
 				return struct{}{}, nil
 			}, listener)
+	default:
+		// Delivered, or a duplicate. The listener stays as it is.
 	}
 	return err
 }

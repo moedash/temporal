@@ -14,6 +14,7 @@ import (
 	v1 "go.temporal.io/api/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -655,8 +656,9 @@ type PollChannelInput struct {
 	Channel   string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
 	// Return retained notifications with a counter above this one.
 	AfterCounter int64 `protobuf:"varint,3,opt,name=after_counter,json=afterCounter,proto3" json:"after_counter,omitempty"`
-	// Block until one arrives when none is retained above after_counter.
-	Wait bool `protobuf:"varint,4,opt,name=wait,proto3" json:"wait,omitempty"`
+	// How long to wait for one when none is retained above after_counter.
+	// Bounded by the server's long-poll timeout. Zero answers at once.
+	Wait *durationpb.Duration `protobuf:"bytes,4,opt,name=wait,proto3" json:"wait,omitempty"`
 	// Zero means the server's page size.
 	MaxNotifications int32 `protobuf:"varint,5,opt,name=max_notifications,json=maxNotifications,proto3" json:"max_notifications,omitempty"`
 	unknownFields    protoimpl.UnknownFields
@@ -714,11 +716,11 @@ func (x *PollChannelInput) GetAfterCounter() int64 {
 	return 0
 }
 
-func (x *PollChannelInput) GetWait() bool {
+func (x *PollChannelInput) GetWait() *durationpb.Duration {
 	if x != nil {
 		return x.Wait
 	}
-	return false
+	return nil
 }
 
 func (x *PollChannelInput) GetMaxNotifications() int32 {
@@ -1679,7 +1681,7 @@ var File_temporal_server_chasm_lib_channel_proto_v1_request_response_proto proto
 
 const file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Atemporal/server/chasm/lib/channel/proto/v1/request_response.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a8temporal/server/chasm/lib/channel/proto/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xcb\x01\n" +
+	"Atemporal/server/chasm/lib/channel/proto/v1/request_response.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a8temporal/server/chasm/lib/channel/proto/v1/message.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xcb\x01\n" +
 	"\x12NotifyChannelInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\\\n" +
 	"\fnotification\x18\x02 \x01(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\fnotification\x12\x1a\n" +
@@ -1719,12 +1721,12 @@ const file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_raw
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12u\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2J.temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerInputR\x0ffrontendRequest\"\x9d\x01\n" +
 	"!UnregisterChannelListenerResponse\x12x\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2K.temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutputR\x10frontendResponse\"\xb0\x01\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2K.temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutputR\x10frontendResponse\"\xcb\x01\n" +
 	"\x10PollChannelInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12#\n" +
-	"\rafter_counter\x18\x03 \x01(\x03R\fafterCounter\x12\x12\n" +
-	"\x04wait\x18\x04 \x01(\bR\x04wait\x12+\n" +
+	"\rafter_counter\x18\x03 \x01(\x03R\fafterCounter\x12-\n" +
+	"\x04wait\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x04wait\x12+\n" +
 	"\x11max_notifications\x18\x05 \x01(\x05R\x10maxNotifications\"s\n" +
 	"\x11PollChannelOutput\x12^\n" +
 	"\rnotifications\x18\x01 \x03(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\rnotifications\"\xa0\x01\n" +
@@ -1832,7 +1834,8 @@ var file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_goTyp
 	(*ChannelListenerInfo_Workflow)(nil),       // 29: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.Workflow
 	(*Notification)(nil),                       // 30: temporal.server.chasm.lib.channel.proto.v1.Notification
 	(*v1.Callback)(nil),                        // 31: temporal.api.common.v1.Callback
-	(*timestamppb.Timestamp)(nil),              // 32: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),                // 32: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),              // 33: google.protobuf.Timestamp
 }
 var file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_depIdxs = []int32{
 	30, // 0: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInput.notification:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
@@ -1843,26 +1846,27 @@ var file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_depId
 	5,  // 5: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerOutput
 	8,  // 6: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerInput
 	9,  // 7: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutput
-	30, // 8: temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput.notifications:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
-	12, // 9: temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.PollChannelInput
-	13, // 10: temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput
-	29, // 11: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.workflow:type_name -> temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.Workflow
-	31, // 12: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.callback:type_name -> temporal.api.common.v1.Callback
-	32, // 13: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.registered_time:type_name -> google.protobuf.Timestamp
-	17, // 14: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.listeners:type_name -> temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo
-	30, // 15: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
-	16, // 16: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInput
-	18, // 17: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput
-	21, // 18: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerInput
-	22, // 19: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput
-	30, // 20: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput.notification:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
-	25, // 21: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput
-	26, // 22: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationOutput
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	32, // 8: temporal.server.chasm.lib.channel.proto.v1.PollChannelInput.wait:type_name -> google.protobuf.Duration
+	30, // 9: temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput.notifications:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	12, // 10: temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.PollChannelInput
+	13, // 11: temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput
+	29, // 12: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.workflow:type_name -> temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.Workflow
+	31, // 13: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.callback:type_name -> temporal.api.common.v1.Callback
+	33, // 14: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.registered_time:type_name -> google.protobuf.Timestamp
+	17, // 15: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.listeners:type_name -> temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo
+	30, // 16: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	16, // 17: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInput
+	18, // 18: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput
+	21, // 19: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerInput
+	22, // 20: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput
+	30, // 21: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput.notification:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	25, // 22: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput
+	26, // 23: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationOutput
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_init() }
