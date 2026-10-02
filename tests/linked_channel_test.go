@@ -382,6 +382,41 @@ func TestLinkedChannelClosedChainIsNotFound(t *testing.T) {
 	requireNotFound(t, err)
 }
 
+// With the linked kind switched off, the channel calls ignore the workflow
+// they name and reach the independent channel of that name, as before the
+// kind existed: a notify with an owner wakes the workflow that subscribed
+// with the command, describe answers the independent kind, and an untouched
+// name with an owner is NotFound rather than an empty linked channel.
+func TestLinkedChannelKindSwitchedOff(t *testing.T) {
+	c := newChannelTestEnv(t, testcore.WithDynamicConfig(channel.LinkedKindEnabledSetting, false))
+	id := "linked-off-" + uuid.NewString()
+	name := "orders-" + uuid.NewString()
+	runID := c.subscribe(id, name)
+
+	_, err := c.describeLinked(linkedOwner(id, ""), "untouched-"+uuid.NewString())
+	requireNotFound(t, err)
+
+	resp, err := c.notifyLinked(linkedOwner(id, ""), name, 1)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), resp.GetListenerCount(), "the subscribed run, on the independent channel")
+	task := c.poll(id)
+	scheduled := c.scheduledNotifications(id, task)
+	requireNotifications(t, scheduled, map[string]int64{name: 1})
+	require.Nil(t, scheduled[0].GetLinkedTo(), "delivered by the independent channel")
+	c.complete(task, false)
+
+	desc := c.mustDescribeLinked(id, name)
+	require.Equal(t, notificationpb.CHANNEL_KIND_INDEPENDENT, desc.GetKind())
+	require.Nil(t, desc.GetLinkedTo())
+	require.Len(t, desc.GetListeners(), 1)
+	require.Equal(t, runID, desc.GetListeners()[0].GetWorkflow().GetRunId())
+	require.Equal(t, int32(1), desc.GetRetainedCount())
+
+	polled, err := c.pollLinked(linkedOwner(id, ""), name, 0, 0, 0)
+	require.NoError(t, err)
+	requireNotifications(t, polled.GetNotifications(), map[string]int64{name: 1})
+}
+
 // One run holds a bounded number of linked channels, and each keeps a
 // bounded ring of its own.
 func TestLinkedChannelLimits(t *testing.T) {

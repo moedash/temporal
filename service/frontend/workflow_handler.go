@@ -2413,6 +2413,21 @@ func (wh *WorkflowHandler) validateLinkedOwner(owner *commonpb.WorkflowExecution
 	return nil
 }
 
+// linkedChannelOwner is the owner a channel call names, or nil when the
+// linked kind is off for the namespace: the call then reaches the independent
+// channel of that name, as it did before the linked kind existed. The owner
+// is dropped from the routed request too, so the independent handlers see
+// the call a client without the field would make.
+func (wh *WorkflowHandler) linkedChannelOwner(
+	namespaceName string,
+	owner *commonpb.WorkflowExecution,
+) *commonpb.WorkflowExecution {
+	if owner == nil || !wh.config.LinkedChannelKindEnabled(namespaceName) {
+		return nil
+	}
+	return owner
+}
+
 // NotifyChannel tells every listener of a channel that a source they consume
 // moved. The writer never learns who listens; the channel's shard wakes each
 // one. A channel with no listeners retains the notification for pollers.
@@ -2448,6 +2463,7 @@ func (wh *WorkflowHandler) NotifyChannel(
 		return nil, err
 	}
 
+	owner := wh.linkedChannelOwner(request.GetNamespace(), request.GetWorkflowExecution())
 	routed := &channelpb.NotifyChannelRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.NotifyChannelInput{
@@ -2455,11 +2471,11 @@ func (wh *WorkflowHandler) NotifyChannel(
 			Notification:      channel.FromAPINotification(n),
 			Identity:          request.GetIdentity(),
 			RequestId:         request.GetRequestId(),
-			WorkflowExecution: request.GetWorkflowExecution(),
+			WorkflowExecution: owner,
 		},
 	}
 	var resp *channelpb.NotifyChannelResponse
-	if owner := request.GetWorkflowExecution(); owner != nil {
+	if owner != nil {
 		if err := wh.validateLinkedOwner(owner); err != nil {
 			return nil, err
 		}
@@ -2512,6 +2528,7 @@ func (wh *WorkflowHandler) RegisterChannelListener(
 		requestID = uuid.NewString()
 	}
 
+	owner := wh.linkedChannelOwner(request.GetNamespace(), request.GetWorkflowExecution())
 	routed := &channelpb.RegisterChannelListenerRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.RegisterChannelListenerInput{
@@ -2520,11 +2537,11 @@ func (wh *WorkflowHandler) RegisterChannelListener(
 			Callback:          request.GetCallback(),
 			RequestId:         requestID,
 			Identity:          request.GetIdentity(),
-			WorkflowExecution: request.GetWorkflowExecution(),
+			WorkflowExecution: owner,
 		},
 	}
 	var resp *channelpb.RegisterChannelListenerResponse
-	if owner := request.GetWorkflowExecution(); owner != nil {
+	if owner != nil {
 		if err := wh.validateLinkedOwner(owner); err != nil {
 			return nil, err
 		}
@@ -2568,6 +2585,7 @@ func (wh *WorkflowHandler) UnregisterChannelListener(
 		return nil, err
 	}
 
+	owner := wh.linkedChannelOwner(request.GetNamespace(), request.GetWorkflowExecution())
 	routed := &channelpb.UnregisterChannelListenerRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.UnregisterChannelListenerInput{
@@ -2575,10 +2593,10 @@ func (wh *WorkflowHandler) UnregisterChannelListener(
 			Channel:           request.GetChannel(),
 			ListenerId:        request.GetListenerId(),
 			Identity:          request.GetIdentity(),
-			WorkflowExecution: request.GetWorkflowExecution(),
+			WorkflowExecution: owner,
 		},
 	}
-	if owner := request.GetWorkflowExecution(); owner != nil {
+	if owner != nil {
 		if err := wh.validateLinkedOwner(owner); err != nil {
 			return nil, err
 		}
@@ -2617,6 +2635,7 @@ func (wh *WorkflowHandler) PollChannel(
 		return nil, err
 	}
 
+	owner := wh.linkedChannelOwner(request.GetNamespace(), request.GetWorkflowExecution())
 	routed := &channelpb.PollChannelRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.PollChannelInput{
@@ -2625,11 +2644,11 @@ func (wh *WorkflowHandler) PollChannel(
 			AfterCounter:      request.GetAfterCounter(),
 			Wait:              request.GetWait(),
 			MaxNotifications:  request.GetMaxNotifications(),
-			WorkflowExecution: request.GetWorkflowExecution(),
+			WorkflowExecution: owner,
 		},
 	}
 	var resp *channelpb.PollChannelResponse
-	if owner := request.GetWorkflowExecution(); owner != nil {
+	if owner != nil {
 		if err := wh.validateLinkedOwner(owner); err != nil {
 			return nil, err
 		}
@@ -2664,16 +2683,17 @@ func (wh *WorkflowHandler) DescribeChannel(
 		return nil, err
 	}
 
+	owner := wh.linkedChannelOwner(request.GetNamespace(), request.GetWorkflowExecution())
 	routed := &channelpb.DescribeChannelRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.DescribeChannelInput{
 			Namespace:         request.GetNamespace(),
 			Channel:           request.GetChannel(),
-			WorkflowExecution: request.GetWorkflowExecution(),
+			WorkflowExecution: owner,
 		},
 	}
 	var resp *channelpb.DescribeChannelResponse
-	if owner := request.GetWorkflowExecution(); owner != nil {
+	if owner != nil {
 		if err := wh.validateLinkedOwner(owner); err != nil {
 			return nil, err
 		}
