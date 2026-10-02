@@ -797,6 +797,25 @@ var (
 		"workflow_wake_delivered",
 		WithDescription("The number of wakes handed to a started Workflow Task."),
 	)
+	// Notification channel meters, per namespace.
+	ChannelNotificationsAccepted = NewCounterDef(
+		"channel_notifications_accepted",
+		WithDescription("The number of notifications a notification channel accepted."),
+	)
+	ChannelNotificationsDelivered = NewCounterDef(
+		"channel_notifications_delivered",
+		WithDescription("The number of notifications handed to a channel listener, tagged by the "+
+			"listener kind."),
+	)
+	ChannelNotificationsFolded = NewCounterDef(
+		"channel_notifications_folded",
+		WithDescription("The number of notifications that replaced one a listener had not "+
+			"been handed yet."),
+	)
+	ChannelPollers = NewCounterDef(
+		"channel_pollers",
+		WithDescription("The number of PollChannel calls admitted."),
+	)
 	NexusRequests = NewCounterDef(
 		"nexus_requests",
 		WithDescription("The number of Nexus requests received by the service."),

@@ -14,6 +14,8 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/channel"
+	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
@@ -110,6 +112,7 @@ type (
 	engineOptions struct {
 		workflowResendScheduler workflowresend.Scheduler
 		streamClient            streampb.StreamServiceClient
+		channelClient           channelpb.ChannelServiceClient
 	}
 
 	// EngineOption adds optional history engine dependencies without adding required parameters.
@@ -152,6 +155,7 @@ type (
 		workflowResendScheduler    workflowresend.Scheduler
 		chasmEngine                chasm.Engine
 		streamClient               streampb.StreamServiceClient
+		channelClient              channelpb.ChannelServiceClient
 		versionChecker             headers.VersionChecker
 		versionCache               worker_versioning.VersionMembershipAndReactivationStatusCache
 		workerDeploymentClient     workerdeployment.Client
@@ -179,6 +183,14 @@ func WithWorkflowResendScheduler(scheduler workflowresend.Scheduler) EngineOptio
 func WithStreamClient(streamClient streampb.StreamServiceClient) EngineOption {
 	return func(options *engineOptions) {
 		options.streamClient = streamClient
+	}
+}
+
+// WithChannelClient routes notification channel calls to the shard owning the
+// channel.
+func WithChannelClient(channelClient channelpb.ChannelServiceClient) EngineOption {
+	return func(options *engineOptions) {
+		options.channelClient = channelClient
 	}
 }
 
@@ -277,6 +289,7 @@ func NewEngineWithShardContext(
 		testHooks:                  testHooks,
 		chasmEngine:                chasmEngine,
 		streamClient:               engineOptions.streamClient,
+		channelClient:              engineOptions.channelClient,
 		versionCache:               versionCache,
 		workerDeploymentClient:     workerDeploymentClient,
 		routingInfoCache:           routingInfoCache,
@@ -679,6 +692,7 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 		e.matchingClient,
 		e.versionCache,
 	)
+	ctx = channel.WithClient(ctx, e.channelClient)
 	return h.Invoke(recordworkflowtaskstarted.WithStreamClient(ctx, e.streamClient), req)
 }
 

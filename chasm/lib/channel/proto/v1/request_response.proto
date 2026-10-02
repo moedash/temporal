@@ -1,0 +1,182 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.channel.proto.v1;
+
+import "chasm/lib/channel/proto/v1/message.proto";
+import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpb";
+
+// The frontend serves the public channel calls on WorkflowService and forwards
+// them here, to the shard that owns the channel. Each request keeps the
+// caller's fields in frontend_request, next to the namespace id the frontend
+// resolved, as the other CHASM libraries do.
+
+message NotifyChannelInput {
+  string namespace = 1;
+  Notification notification = 2;
+  string identity = 3;
+  string request_id = 4;
+}
+
+message NotifyChannelOutput {
+  // Listeners registered when the notification was accepted.
+  int64 listener_count = 1;
+}
+
+message NotifyChannelRequest {
+  string namespace_id = 1;
+  NotifyChannelInput frontend_request = 2;
+}
+
+message NotifyChannelResponse {
+  NotifyChannelOutput frontend_response = 1;
+}
+
+message RegisterChannelListenerInput {
+  string namespace = 1;
+  string channel = 2;
+  temporal.api.common.v1.Callback callback = 3;
+  string request_id = 4;
+  string identity = 5;
+}
+
+message RegisterChannelListenerOutput {
+  string listener_id = 1;
+}
+
+message RegisterChannelListenerRequest {
+  string namespace_id = 1;
+  RegisterChannelListenerInput frontend_request = 2;
+}
+
+message RegisterChannelListenerResponse {
+  RegisterChannelListenerOutput frontend_response = 1;
+}
+
+message UnregisterChannelListenerInput {
+  string namespace = 1;
+  string channel = 2;
+  string listener_id = 3;
+  string identity = 4;
+}
+
+message UnregisterChannelListenerOutput {}
+
+message UnregisterChannelListenerRequest {
+  string namespace_id = 1;
+  UnregisterChannelListenerInput frontend_request = 2;
+}
+
+message UnregisterChannelListenerResponse {
+  UnregisterChannelListenerOutput frontend_response = 1;
+}
+
+message PollChannelInput {
+  string namespace = 1;
+  string channel = 2;
+  // Return retained notifications with a counter above this one.
+  int64 after_counter = 3;
+  // Block until one arrives when none is retained above after_counter.
+  bool wait = 4;
+  // Zero means the server's page size.
+  int32 max_notifications = 5;
+}
+
+message PollChannelOutput {
+  repeated Notification notifications = 1;
+}
+
+message PollChannelRequest {
+  string namespace_id = 1;
+  PollChannelInput frontend_request = 2;
+}
+
+message PollChannelResponse {
+  PollChannelOutput frontend_response = 1;
+}
+
+message DescribeChannelInput {
+  string namespace = 1;
+  string channel = 2;
+}
+
+// ChannelListenerInfo has the fields of temporal.api.notification.v1.ChannelListener.
+message ChannelListenerInfo {
+  message Workflow {
+    string workflow_id = 1;
+    string run_id = 2;
+  }
+  string listener_id = 1;
+  oneof variant {
+    Workflow workflow = 2;
+    temporal.api.common.v1.Callback callback = 3;
+  }
+  google.protobuf.Timestamp registered_time = 4;
+}
+
+message DescribeChannelOutput {
+  repeated ChannelListenerInfo listeners = 1;
+  Notification latest = 2;
+  int64 retained_count = 3;
+}
+
+message DescribeChannelRequest {
+  string namespace_id = 1;
+  DescribeChannelInput frontend_request = 2;
+}
+
+message DescribeChannelResponse {
+  DescribeChannelOutput frontend_response = 1;
+}
+
+message RegisterWorkflowListenerInput {
+  string namespace = 1;
+  string channel = 2;
+  string workflow_id = 3;
+  string run_id = 4;
+  string first_execution_run_id = 5;
+}
+
+message RegisterWorkflowListenerOutput {}
+
+message RegisterWorkflowListenerRequest {
+  string namespace_id = 1;
+  RegisterWorkflowListenerInput frontend_request = 2;
+}
+
+message RegisterWorkflowListenerResponse {
+  RegisterWorkflowListenerOutput frontend_response = 1;
+}
+
+message DeliverChannelNotificationInput {
+  string namespace = 1;
+  string workflow_id = 2;
+  // The run the channel has on record. If it is closed, the current run is
+  // asked instead.
+  string run_id = 3;
+  Notification notification = 4;
+}
+
+message DeliverChannelNotificationOutput {
+  // No run of the workflow listens to the channel any more, so the channel
+  // drops the listener.
+  bool listener_closed = 1;
+  // The run on record is closed and the current run listens, so the channel
+  // re-keys the listener to it.
+  string successor_run_id = 2;
+  // The notification joined one the run had not seen yet.
+  bool folded = 3;
+  // The run had already seen this counter, so nothing changed.
+  bool duplicate = 4;
+}
+
+message DeliverChannelNotificationRequest {
+  string namespace_id = 1;
+  DeliverChannelNotificationInput frontend_request = 2;
+}
+
+message DeliverChannelNotificationResponse {
+  DeliverChannelNotificationOutput frontend_response = 1;
+}
