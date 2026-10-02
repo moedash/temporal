@@ -46,9 +46,20 @@ type ChannelState struct {
 	// Set by the idle task just before it deletes the channel, so a notify or a
 	// registration that arrives in between starts a new channel rather than
 	// landing on the one being deleted.
-	Closed        bool `protobuf:"varint,8,opt,name=closed,proto3" json:"closed,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Closed bool `protobuf:"varint,8,opt,name=closed,proto3" json:"closed,omitempty"`
+	// The channel lives in a workflow's mutable state and that workflow is its
+	// listener. No fan-out and no idle check: a notification is handed to the
+	// owner in the same write, and the channel dies with the run.
+	Linked bool `protobuf:"varint,9,opt,name=linked,proto3" json:"linked,omitempty"`
+	// The latest notification the owner has not been handed on a scheduled
+	// event yet. Cleared when one carries it.
+	OwnerPending *Notification `protobuf:"bytes,10,opt,name=owner_pending,json=ownerPending,proto3" json:"owner_pending,omitempty"`
+	// Counter the owner's scheduled, not yet started task carries. A repeat at
+	// or below it folds into that task. Zero once the task starts, fails or
+	// times out.
+	OwnerScheduledCounter int64 `protobuf:"varint,11,opt,name=owner_scheduled_counter,json=ownerScheduledCounter,proto3" json:"owner_scheduled_counter,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *ChannelState) Reset() {
@@ -137,11 +148,32 @@ func (x *ChannelState) GetClosed() bool {
 	return false
 }
 
+func (x *ChannelState) GetLinked() bool {
+	if x != nil {
+		return x.Linked
+	}
+	return false
+}
+
+func (x *ChannelState) GetOwnerPending() *Notification {
+	if x != nil {
+		return x.OwnerPending
+	}
+	return nil
+}
+
+func (x *ChannelState) GetOwnerScheduledCounter() int64 {
+	if x != nil {
+		return x.OwnerScheduledCounter
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_channel_proto_v1_channel_state_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_channel_proto_v1_channel_state_proto_rawDesc = "" +
 	"\n" +
-	">temporal/server/chasm/lib/channel/proto/v1/channel_state.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a8temporal/server/chasm/lib/channel/proto/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8b\x03\n" +
+	">temporal/server/chasm/lib/channel/proto/v1/channel_state.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a8temporal/server/chasm/lib/channel/proto/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xba\x04\n" +
 	"\fChannelState\x12P\n" +
 	"\x06latest\x18\x01 \x01(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\x06latest\x12%\n" +
 	"\x0eretained_first\x18\x02 \x01(\x03R\rretainedFirst\x12#\n" +
@@ -150,7 +182,11 @@ const file_temporal_server_chasm_lib_channel_proto_v1_channel_state_proto_rawDes
 	"\x12last_activity_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x10lastActivityTime\x12,\n" +
 	"\x12idle_check_pending\x18\x06 \x01(\bR\x10idleCheckPending\x12%\n" +
 	"\x0eaccepted_count\x18\a \x01(\x03R\racceptedCount\x12\x16\n" +
-	"\x06closed\x18\b \x01(\bR\x06closedBAZ?go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpbb\x06proto3"
+	"\x06closed\x18\b \x01(\bR\x06closed\x12\x16\n" +
+	"\x06linked\x18\t \x01(\bR\x06linked\x12]\n" +
+	"\rowner_pending\x18\n" +
+	" \x01(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\fownerPending\x126\n" +
+	"\x17owner_scheduled_counter\x18\v \x01(\x03R\x15ownerScheduledCounterBAZ?go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_channel_proto_v1_channel_state_proto_rawDescOnce sync.Once
@@ -173,11 +209,12 @@ var file_temporal_server_chasm_lib_channel_proto_v1_channel_state_proto_goTypes 
 var file_temporal_server_chasm_lib_channel_proto_v1_channel_state_proto_depIdxs = []int32{
 	1, // 0: temporal.server.chasm.lib.channel.proto.v1.ChannelState.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
 	2, // 1: temporal.server.chasm.lib.channel.proto.v1.ChannelState.last_activity_time:type_name -> google.protobuf.Timestamp
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	1, // 2: temporal.server.chasm.lib.channel.proto.v1.ChannelState.owner_pending:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_channel_proto_v1_channel_state_proto_init() }

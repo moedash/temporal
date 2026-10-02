@@ -26,13 +26,16 @@ const (
 )
 
 type NotifyChannelInput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Notification  *Notification          `protobuf:"bytes,2,opt,name=notification,proto3" json:"notification,omitempty"`
-	Identity      string                 `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
-	RequestId     string                 `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Namespace    string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Notification *Notification          `protobuf:"bytes,2,opt,name=notification,proto3" json:"notification,omitempty"`
+	Identity     string                 `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
+	RequestId    string                 `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// Set for a channel linked to a workflow: the owner, whose run id may be
+	// empty for the current run. Unset for an independent channel.
+	WorkflowExecution *v1.WorkflowExecution `protobuf:"bytes,5,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *NotifyChannelInput) Reset() {
@@ -91,6 +94,13 @@ func (x *NotifyChannelInput) GetRequestId() string {
 		return x.RequestId
 	}
 	return ""
+}
+
+func (x *NotifyChannelInput) GetWorkflowExecution() *v1.WorkflowExecution {
+	if x != nil {
+		return x.WorkflowExecution
+	}
+	return nil
 }
 
 type NotifyChannelOutput struct {
@@ -235,14 +245,17 @@ func (x *NotifyChannelResponse) GetFrontendResponse() *NotifyChannelOutput {
 }
 
 type RegisterChannelListenerInput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Channel       string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
-	Callback      *v1.Callback           `protobuf:"bytes,3,opt,name=callback,proto3" json:"callback,omitempty"`
-	RequestId     string                 `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Identity      string                 `protobuf:"bytes,5,opt,name=identity,proto3" json:"identity,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Channel   string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
+	Callback  *v1.Callback           `protobuf:"bytes,3,opt,name=callback,proto3" json:"callback,omitempty"`
+	RequestId string                 `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Identity  string                 `protobuf:"bytes,5,opt,name=identity,proto3" json:"identity,omitempty"`
+	// Set for a channel linked to a workflow: the owner, whose run id may be
+	// empty for the current run. Unset for an independent channel.
+	WorkflowExecution *v1.WorkflowExecution `protobuf:"bytes,6,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *RegisterChannelListenerInput) Reset() {
@@ -308,6 +321,13 @@ func (x *RegisterChannelListenerInput) GetIdentity() string {
 		return x.Identity
 	}
 	return ""
+}
+
+func (x *RegisterChannelListenerInput) GetWorkflowExecution() *v1.WorkflowExecution {
+	if x != nil {
+		return x.WorkflowExecution
+	}
+	return nil
 }
 
 type RegisterChannelListenerOutput struct {
@@ -451,13 +471,16 @@ func (x *RegisterChannelListenerResponse) GetFrontendResponse() *RegisterChannel
 }
 
 type UnregisterChannelListenerInput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Channel       string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
-	ListenerId    string                 `protobuf:"bytes,3,opt,name=listener_id,json=listenerId,proto3" json:"listener_id,omitempty"`
-	Identity      string                 `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Channel    string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
+	ListenerId string                 `protobuf:"bytes,3,opt,name=listener_id,json=listenerId,proto3" json:"listener_id,omitempty"`
+	Identity   string                 `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
+	// Set for a channel linked to a workflow: the owner, whose run id may be
+	// empty for the current run. Unset for an independent channel.
+	WorkflowExecution *v1.WorkflowExecution `protobuf:"bytes,5,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *UnregisterChannelListenerInput) Reset() {
@@ -516,6 +539,13 @@ func (x *UnregisterChannelListenerInput) GetIdentity() string {
 		return x.Identity
 	}
 	return ""
+}
+
+func (x *UnregisterChannelListenerInput) GetWorkflowExecution() *v1.WorkflowExecution {
+	if x != nil {
+		return x.WorkflowExecution
+	}
+	return nil
 }
 
 type UnregisterChannelListenerOutput struct {
@@ -661,8 +691,11 @@ type PollChannelInput struct {
 	Wait *durationpb.Duration `protobuf:"bytes,4,opt,name=wait,proto3" json:"wait,omitempty"`
 	// Zero means the server's page size.
 	MaxNotifications int32 `protobuf:"varint,5,opt,name=max_notifications,json=maxNotifications,proto3" json:"max_notifications,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Set for a channel linked to a workflow: the owner, whose run id may be
+	// empty for the current run. Unset for an independent channel.
+	WorkflowExecution *v1.WorkflowExecution `protobuf:"bytes,6,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *PollChannelInput) Reset() {
@@ -728,6 +761,13 @@ func (x *PollChannelInput) GetMaxNotifications() int32 {
 		return x.MaxNotifications
 	}
 	return 0
+}
+
+func (x *PollChannelInput) GetWorkflowExecution() *v1.WorkflowExecution {
+	if x != nil {
+		return x.WorkflowExecution
+	}
+	return nil
 }
 
 type PollChannelOutput struct {
@@ -871,11 +911,14 @@ func (x *PollChannelResponse) GetFrontendResponse() *PollChannelOutput {
 }
 
 type DescribeChannelInput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Channel       string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Channel   string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
+	// Set for a channel linked to a workflow: the owner, whose run id may be
+	// empty for the current run. Unset for an independent channel.
+	WorkflowExecution *v1.WorkflowExecution `protobuf:"bytes,3,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *DescribeChannelInput) Reset() {
@@ -920,6 +963,13 @@ func (x *DescribeChannelInput) GetChannel() string {
 		return x.Channel
 	}
 	return ""
+}
+
+func (x *DescribeChannelInput) GetWorkflowExecution() *v1.WorkflowExecution {
+	if x != nil {
+		return x.WorkflowExecution
+	}
+	return nil
 }
 
 // ChannelListenerInfo has the fields of temporal.api.notification.v1.ChannelListener.
@@ -1026,6 +1076,9 @@ type DescribeChannelOutput struct {
 	Listeners     []*ChannelListenerInfo `protobuf:"bytes,1,rep,name=listeners,proto3" json:"listeners,omitempty"`
 	Latest        *Notification          `protobuf:"bytes,2,opt,name=latest,proto3" json:"latest,omitempty"`
 	RetainedCount int64                  `protobuf:"varint,3,opt,name=retained_count,json=retainedCount,proto3" json:"retained_count,omitempty"`
+	// The channel is linked to a workflow, and which one.
+	Linked        bool                  `protobuf:"varint,4,opt,name=linked,proto3" json:"linked,omitempty"`
+	LinkedTo      *v1.WorkflowExecution `protobuf:"bytes,5,opt,name=linked_to,json=linkedTo,proto3" json:"linked_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1079,6 +1132,20 @@ func (x *DescribeChannelOutput) GetRetainedCount() int64 {
 		return x.RetainedCount
 	}
 	return 0
+}
+
+func (x *DescribeChannelOutput) GetLinked() bool {
+	if x != nil {
+		return x.Linked
+	}
+	return false
+}
+
+func (x *DescribeChannelOutput) GetLinkedTo() *v1.WorkflowExecution {
+	if x != nil {
+		return x.LinkedTo
+	}
+	return nil
 }
 
 type DescribeChannelRequest struct {
@@ -1693,27 +1760,29 @@ var File_temporal_server_chasm_lib_channel_proto_v1_request_response_proto proto
 
 const file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Atemporal/server/chasm/lib/channel/proto/v1/request_response.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a8temporal/server/chasm/lib/channel/proto/v1/message.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xcb\x01\n" +
+	"Atemporal/server/chasm/lib/channel/proto/v1/request_response.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a8temporal/server/chasm/lib/channel/proto/v1/message.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xa5\x02\n" +
 	"\x12NotifyChannelInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\\\n" +
 	"\fnotification\x18\x02 \x01(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\fnotification\x12\x1a\n" +
 	"\bidentity\x18\x03 \x01(\tR\bidentity\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x04 \x01(\tR\trequestId\"<\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\x12X\n" +
+	"\x12workflow_execution\x18\x05 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x11workflowExecution\"<\n" +
 	"\x13NotifyChannelOutput\x12%\n" +
 	"\x0elistener_count\x18\x01 \x01(\x03R\rlistenerCount\"\xa4\x01\n" +
 	"\x14NotifyChannelRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12i\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2>.temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInputR\x0ffrontendRequest\"\x85\x01\n" +
 	"\x15NotifyChannelResponse\x12l\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2?.temporal.server.chasm.lib.channel.proto.v1.NotifyChannelOutputR\x10frontendResponse\"\xcf\x01\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2?.temporal.server.chasm.lib.channel.proto.v1.NotifyChannelOutputR\x10frontendResponse\"\xa9\x02\n" +
 	"\x1cRegisterChannelListenerInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12<\n" +
 	"\bcallback\x18\x03 \x01(\v2 .temporal.api.common.v1.CallbackR\bcallback\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x04 \x01(\tR\trequestId\x12\x1a\n" +
-	"\bidentity\x18\x05 \x01(\tR\bidentity\"@\n" +
+	"\bidentity\x18\x05 \x01(\tR\bidentity\x12X\n" +
+	"\x12workflow_execution\x18\x06 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x11workflowExecution\"@\n" +
 	"\x1dRegisterChannelListenerOutput\x12\x1f\n" +
 	"\vlistener_id\x18\x01 \x01(\tR\n" +
 	"listenerId\"\xb8\x01\n" +
@@ -1721,35 +1790,38 @@ const file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_raw
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12s\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2H.temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInputR\x0ffrontendRequest\"\x99\x01\n" +
 	"\x1fRegisterChannelListenerResponse\x12v\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2I.temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerOutputR\x10frontendResponse\"\x95\x01\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2I.temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerOutputR\x10frontendResponse\"\xef\x01\n" +
 	"\x1eUnregisterChannelListenerInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12\x1f\n" +
 	"\vlistener_id\x18\x03 \x01(\tR\n" +
 	"listenerId\x12\x1a\n" +
-	"\bidentity\x18\x04 \x01(\tR\bidentity\"!\n" +
+	"\bidentity\x18\x04 \x01(\tR\bidentity\x12X\n" +
+	"\x12workflow_execution\x18\x05 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x11workflowExecution\"!\n" +
 	"\x1fUnregisterChannelListenerOutput\"\xbc\x01\n" +
 	" UnregisterChannelListenerRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12u\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2J.temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerInputR\x0ffrontendRequest\"\x9d\x01\n" +
 	"!UnregisterChannelListenerResponse\x12x\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2K.temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutputR\x10frontendResponse\"\xcb\x01\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2K.temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutputR\x10frontendResponse\"\xa5\x02\n" +
 	"\x10PollChannelInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12#\n" +
 	"\rafter_counter\x18\x03 \x01(\x03R\fafterCounter\x12-\n" +
 	"\x04wait\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x04wait\x12+\n" +
-	"\x11max_notifications\x18\x05 \x01(\x05R\x10maxNotifications\"s\n" +
+	"\x11max_notifications\x18\x05 \x01(\x05R\x10maxNotifications\x12X\n" +
+	"\x12workflow_execution\x18\x06 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x11workflowExecution\"s\n" +
 	"\x11PollChannelOutput\x12^\n" +
 	"\rnotifications\x18\x01 \x03(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\rnotifications\"\xa0\x01\n" +
 	"\x12PollChannelRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12g\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2<.temporal.server.chasm.lib.channel.proto.v1.PollChannelInputR\x0ffrontendRequest\"\x81\x01\n" +
 	"\x13PollChannelResponse\x12j\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2=.temporal.server.chasm.lib.channel.proto.v1.PollChannelOutputR\x10frontendResponse\"N\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2=.temporal.server.chasm.lib.channel.proto.v1.PollChannelOutputR\x10frontendResponse\"\xa8\x01\n" +
 	"\x14DescribeChannelInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x18\n" +
-	"\achannel\x18\x02 \x01(\tR\achannel\"\xf2\x02\n" +
+	"\achannel\x18\x02 \x01(\tR\achannel\x12X\n" +
+	"\x12workflow_execution\x18\x03 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x11workflowExecution\"\xf2\x02\n" +
 	"\x13ChannelListenerInfo\x12\x1f\n" +
 	"\vlistener_id\x18\x01 \x01(\tR\n" +
 	"listenerId\x12f\n" +
@@ -1760,11 +1832,13 @@ const file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_raw
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runIdB\t\n" +
-	"\avariant\"\xef\x01\n" +
+	"\avariant\"\xcf\x02\n" +
 	"\x15DescribeChannelOutput\x12]\n" +
 	"\tlisteners\x18\x01 \x03(\v2?.temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfoR\tlisteners\x12P\n" +
 	"\x06latest\x18\x02 \x01(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\x06latest\x12%\n" +
-	"\x0eretained_count\x18\x03 \x01(\x03R\rretainedCount\"\xa8\x01\n" +
+	"\x0eretained_count\x18\x03 \x01(\x03R\rretainedCount\x12\x16\n" +
+	"\x06linked\x18\x04 \x01(\bR\x06linked\x12F\n" +
+	"\tlinked_to\x18\x05 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\blinkedTo\"\xa8\x01\n" +
 	"\x16DescribeChannelRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12k\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2@.temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInputR\x0ffrontendRequest\"\x89\x01\n" +
@@ -1846,41 +1920,48 @@ var file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_goTyp
 	(*DeliverChannelNotificationResponse)(nil), // 28: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse
 	(*ChannelListenerInfo_Workflow)(nil),       // 29: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.Workflow
 	(*Notification)(nil),                       // 30: temporal.server.chasm.lib.channel.proto.v1.Notification
-	(*v1.Callback)(nil),                        // 31: temporal.api.common.v1.Callback
-	(*durationpb.Duration)(nil),                // 32: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),              // 33: google.protobuf.Timestamp
+	(*v1.WorkflowExecution)(nil),               // 31: temporal.api.common.v1.WorkflowExecution
+	(*v1.Callback)(nil),                        // 32: temporal.api.common.v1.Callback
+	(*durationpb.Duration)(nil),                // 33: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),              // 34: google.protobuf.Timestamp
 }
 var file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_depIdxs = []int32{
 	30, // 0: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInput.notification:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
-	0,  // 1: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInput
-	1,  // 2: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.NotifyChannelOutput
-	31, // 3: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInput.callback:type_name -> temporal.api.common.v1.Callback
-	4,  // 4: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInput
-	5,  // 5: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerOutput
-	8,  // 6: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerInput
-	9,  // 7: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutput
-	32, // 8: temporal.server.chasm.lib.channel.proto.v1.PollChannelInput.wait:type_name -> google.protobuf.Duration
-	30, // 9: temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput.notifications:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
-	12, // 10: temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.PollChannelInput
-	13, // 11: temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput
-	29, // 12: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.workflow:type_name -> temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.Workflow
-	31, // 13: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.callback:type_name -> temporal.api.common.v1.Callback
-	33, // 14: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.registered_time:type_name -> google.protobuf.Timestamp
-	17, // 15: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.listeners:type_name -> temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo
-	30, // 16: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
-	16, // 17: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInput
-	18, // 18: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput
-	30, // 19: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
-	21, // 20: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerInput
-	22, // 21: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput
-	30, // 22: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput.notification:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
-	25, // 23: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput
-	26, // 24: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationOutput
-	25, // [25:25] is the sub-list for method output_type
-	25, // [25:25] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	31, // 1: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInput.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	0,  // 2: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInput
+	1,  // 3: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.NotifyChannelOutput
+	32, // 4: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInput.callback:type_name -> temporal.api.common.v1.Callback
+	31, // 5: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInput.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	4,  // 6: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInput
+	5,  // 7: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerOutput
+	31, // 8: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerInput.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	8,  // 9: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerInput
+	9,  // 10: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutput
+	33, // 11: temporal.server.chasm.lib.channel.proto.v1.PollChannelInput.wait:type_name -> google.protobuf.Duration
+	31, // 12: temporal.server.chasm.lib.channel.proto.v1.PollChannelInput.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	30, // 13: temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput.notifications:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	12, // 14: temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.PollChannelInput
+	13, // 15: temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput
+	31, // 16: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInput.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	29, // 17: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.workflow:type_name -> temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.Workflow
+	32, // 18: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.callback:type_name -> temporal.api.common.v1.Callback
+	34, // 19: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.registered_time:type_name -> google.protobuf.Timestamp
+	17, // 20: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.listeners:type_name -> temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo
+	30, // 21: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	31, // 22: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.linked_to:type_name -> temporal.api.common.v1.WorkflowExecution
+	16, // 23: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInput
+	18, // 24: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput
+	30, // 25: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	21, // 26: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerInput
+	22, // 27: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput
+	30, // 28: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput.notification:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	25, // 29: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput
+	26, // 30: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationOutput
+	31, // [31:31] is the sub-list for method output_type
+	31, // [31:31] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_init() }

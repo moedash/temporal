@@ -760,7 +760,7 @@ func (ms *MutableStateImpl) HasPendingStreamData() bool {
 	if wf.StreamCursorsBehind(chasmCtx) {
 		return true
 	}
-	if !wf.HasPendingChannelNotifications() {
+	if !wf.HasPendingChannelNotifications(chasmCtx) {
 		return false
 	}
 	return !ms.IsWorkflowPendingOnWorkflowTaskBackoff()
@@ -821,7 +821,7 @@ func (ms *MutableStateImpl) takeChannelNotifications() []*channelpb.Notification
 	if err != nil {
 		return nil
 	}
-	if wf, ok := rootComponent.(*chasmworkflow.Workflow); !ok || !wf.HasPendingChannelNotifications() {
+	if wf, ok := rootComponent.(*chasmworkflow.Workflow); !ok || !wf.HasPendingChannelNotifications(view) {
 		return nil
 	}
 	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())

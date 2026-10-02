@@ -99,7 +99,7 @@ func (h *fanOutTaskHandler) Execute(
 	}
 	if fanOut.CallbackFolded > 0 {
 		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
-			int64(fanOut.CallbackFolded), metrics.NamespaceTag(ns), callbackKindTag)
+			int64(fanOut.CallbackFolded), metrics.NamespaceTag(ns), independentKindTag, callbackKindTag)
 	}
 	if fanOut.Latest == nil {
 		return nil
@@ -212,8 +212,12 @@ func (h *callbackTaskHandler) Execute(
 			RetryPolicy: h.callbackConfig.RetryPolicy(),
 		})
 	if saveErr == nil && delivered {
+		kind := independentKindTag
+		if delivery.Linked {
+			kind = linkedKindTag
+		}
 		metrics.ChannelNotificationsDelivered.With(h.metricsHandler).Record(
-			1, metrics.NamespaceTag(ns), callbackKindTag)
+			1, metrics.NamespaceTag(ns), kind, callbackKindTag)
 	}
 	if postErr != nil && retryable {
 		// Reported to the queue as the destination being down, which feeds its

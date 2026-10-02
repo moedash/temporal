@@ -20,13 +20,18 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	ChannelService_NotifyChannel_FullMethodName              = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/NotifyChannel"
-	ChannelService_RegisterChannelListener_FullMethodName    = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/RegisterChannelListener"
-	ChannelService_UnregisterChannelListener_FullMethodName  = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/UnregisterChannelListener"
-	ChannelService_PollChannel_FullMethodName                = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/PollChannel"
-	ChannelService_DescribeChannel_FullMethodName            = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/DescribeChannel"
-	ChannelService_RegisterWorkflowListener_FullMethodName   = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/RegisterWorkflowListener"
-	ChannelService_DeliverChannelNotification_FullMethodName = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/DeliverChannelNotification"
+	ChannelService_NotifyChannel_FullMethodName                   = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/NotifyChannel"
+	ChannelService_RegisterChannelListener_FullMethodName         = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/RegisterChannelListener"
+	ChannelService_UnregisterChannelListener_FullMethodName       = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/UnregisterChannelListener"
+	ChannelService_PollChannel_FullMethodName                     = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/PollChannel"
+	ChannelService_DescribeChannel_FullMethodName                 = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/DescribeChannel"
+	ChannelService_NotifyLinkedChannel_FullMethodName             = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/NotifyLinkedChannel"
+	ChannelService_RegisterLinkedChannelListener_FullMethodName   = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/RegisterLinkedChannelListener"
+	ChannelService_UnregisterLinkedChannelListener_FullMethodName = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/UnregisterLinkedChannelListener"
+	ChannelService_PollLinkedChannel_FullMethodName               = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/PollLinkedChannel"
+	ChannelService_DescribeLinkedChannel_FullMethodName           = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/DescribeLinkedChannel"
+	ChannelService_RegisterWorkflowListener_FullMethodName        = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/RegisterWorkflowListener"
+	ChannelService_DeliverChannelNotification_FullMethodName      = "/temporal.server.chasm.lib.channel.proto.v1.ChannelService/DeliverChannelNotification"
 )
 
 // ChannelServiceClient is the client API for ChannelService service.
@@ -38,6 +43,13 @@ type ChannelServiceClient interface {
 	UnregisterChannelListener(ctx context.Context, in *UnregisterChannelListenerRequest, opts ...grpc.CallOption) (*UnregisterChannelListenerResponse, error)
 	PollChannel(ctx context.Context, in *PollChannelRequest, opts ...grpc.CallOption) (*PollChannelResponse, error)
 	DescribeChannel(ctx context.Context, in *DescribeChannelRequest, opts ...grpc.CallOption) (*DescribeChannelResponse, error)
+	// The linked kind. Same requests, with workflow_execution set, routed to the
+	// shard of the workflow that holds the channel.
+	NotifyLinkedChannel(ctx context.Context, in *NotifyChannelRequest, opts ...grpc.CallOption) (*NotifyChannelResponse, error)
+	RegisterLinkedChannelListener(ctx context.Context, in *RegisterChannelListenerRequest, opts ...grpc.CallOption) (*RegisterChannelListenerResponse, error)
+	UnregisterLinkedChannelListener(ctx context.Context, in *UnregisterChannelListenerRequest, opts ...grpc.CallOption) (*UnregisterChannelListenerResponse, error)
+	PollLinkedChannel(ctx context.Context, in *PollChannelRequest, opts ...grpc.CallOption) (*PollChannelResponse, error)
+	DescribeLinkedChannel(ctx context.Context, in *DescribeChannelRequest, opts ...grpc.CallOption) (*DescribeChannelResponse, error)
 	// Internal. The completion of a Workflow Task that subscribed calls this on
 	// the channel's shard, creating the channel if it is absent.
 	RegisterWorkflowListener(ctx context.Context, in *RegisterWorkflowListenerRequest, opts ...grpc.CallOption) (*RegisterWorkflowListenerResponse, error)
@@ -98,6 +110,51 @@ func (c *channelServiceClient) DescribeChannel(ctx context.Context, in *Describe
 	return out, nil
 }
 
+func (c *channelServiceClient) NotifyLinkedChannel(ctx context.Context, in *NotifyChannelRequest, opts ...grpc.CallOption) (*NotifyChannelResponse, error) {
+	out := new(NotifyChannelResponse)
+	err := c.cc.Invoke(ctx, ChannelService_NotifyLinkedChannel_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *channelServiceClient) RegisterLinkedChannelListener(ctx context.Context, in *RegisterChannelListenerRequest, opts ...grpc.CallOption) (*RegisterChannelListenerResponse, error) {
+	out := new(RegisterChannelListenerResponse)
+	err := c.cc.Invoke(ctx, ChannelService_RegisterLinkedChannelListener_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *channelServiceClient) UnregisterLinkedChannelListener(ctx context.Context, in *UnregisterChannelListenerRequest, opts ...grpc.CallOption) (*UnregisterChannelListenerResponse, error) {
+	out := new(UnregisterChannelListenerResponse)
+	err := c.cc.Invoke(ctx, ChannelService_UnregisterLinkedChannelListener_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *channelServiceClient) PollLinkedChannel(ctx context.Context, in *PollChannelRequest, opts ...grpc.CallOption) (*PollChannelResponse, error) {
+	out := new(PollChannelResponse)
+	err := c.cc.Invoke(ctx, ChannelService_PollLinkedChannel_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *channelServiceClient) DescribeLinkedChannel(ctx context.Context, in *DescribeChannelRequest, opts ...grpc.CallOption) (*DescribeChannelResponse, error) {
+	out := new(DescribeChannelResponse)
+	err := c.cc.Invoke(ctx, ChannelService_DescribeLinkedChannel_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *channelServiceClient) RegisterWorkflowListener(ctx context.Context, in *RegisterWorkflowListenerRequest, opts ...grpc.CallOption) (*RegisterWorkflowListenerResponse, error) {
 	out := new(RegisterWorkflowListenerResponse)
 	err := c.cc.Invoke(ctx, ChannelService_RegisterWorkflowListener_FullMethodName, in, out, opts...)
@@ -125,6 +182,13 @@ type ChannelServiceServer interface {
 	UnregisterChannelListener(context.Context, *UnregisterChannelListenerRequest) (*UnregisterChannelListenerResponse, error)
 	PollChannel(context.Context, *PollChannelRequest) (*PollChannelResponse, error)
 	DescribeChannel(context.Context, *DescribeChannelRequest) (*DescribeChannelResponse, error)
+	// The linked kind. Same requests, with workflow_execution set, routed to the
+	// shard of the workflow that holds the channel.
+	NotifyLinkedChannel(context.Context, *NotifyChannelRequest) (*NotifyChannelResponse, error)
+	RegisterLinkedChannelListener(context.Context, *RegisterChannelListenerRequest) (*RegisterChannelListenerResponse, error)
+	UnregisterLinkedChannelListener(context.Context, *UnregisterChannelListenerRequest) (*UnregisterChannelListenerResponse, error)
+	PollLinkedChannel(context.Context, *PollChannelRequest) (*PollChannelResponse, error)
+	DescribeLinkedChannel(context.Context, *DescribeChannelRequest) (*DescribeChannelResponse, error)
 	// Internal. The completion of a Workflow Task that subscribed calls this on
 	// the channel's shard, creating the channel if it is absent.
 	RegisterWorkflowListener(context.Context, *RegisterWorkflowListenerRequest) (*RegisterWorkflowListenerResponse, error)
@@ -151,6 +215,21 @@ func (UnimplementedChannelServiceServer) PollChannel(context.Context, *PollChann
 }
 func (UnimplementedChannelServiceServer) DescribeChannel(context.Context, *DescribeChannelRequest) (*DescribeChannelResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeChannel not implemented")
+}
+func (UnimplementedChannelServiceServer) NotifyLinkedChannel(context.Context, *NotifyChannelRequest) (*NotifyChannelResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method NotifyLinkedChannel not implemented")
+}
+func (UnimplementedChannelServiceServer) RegisterLinkedChannelListener(context.Context, *RegisterChannelListenerRequest) (*RegisterChannelListenerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterLinkedChannelListener not implemented")
+}
+func (UnimplementedChannelServiceServer) UnregisterLinkedChannelListener(context.Context, *UnregisterChannelListenerRequest) (*UnregisterChannelListenerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnregisterLinkedChannelListener not implemented")
+}
+func (UnimplementedChannelServiceServer) PollLinkedChannel(context.Context, *PollChannelRequest) (*PollChannelResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PollLinkedChannel not implemented")
+}
+func (UnimplementedChannelServiceServer) DescribeLinkedChannel(context.Context, *DescribeChannelRequest) (*DescribeChannelResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DescribeLinkedChannel not implemented")
 }
 func (UnimplementedChannelServiceServer) RegisterWorkflowListener(context.Context, *RegisterWorkflowListenerRequest) (*RegisterWorkflowListenerResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterWorkflowListener not implemented")
@@ -261,6 +340,96 @@ func _ChannelService_DescribeChannel_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChannelService_NotifyLinkedChannel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NotifyChannelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelServiceServer).NotifyLinkedChannel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelService_NotifyLinkedChannel_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelServiceServer).NotifyLinkedChannel(ctx, req.(*NotifyChannelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChannelService_RegisterLinkedChannelListener_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterChannelListenerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelServiceServer).RegisterLinkedChannelListener(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelService_RegisterLinkedChannelListener_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelServiceServer).RegisterLinkedChannelListener(ctx, req.(*RegisterChannelListenerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChannelService_UnregisterLinkedChannelListener_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnregisterChannelListenerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelServiceServer).UnregisterLinkedChannelListener(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelService_UnregisterLinkedChannelListener_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelServiceServer).UnregisterLinkedChannelListener(ctx, req.(*UnregisterChannelListenerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChannelService_PollLinkedChannel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PollChannelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelServiceServer).PollLinkedChannel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelService_PollLinkedChannel_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelServiceServer).PollLinkedChannel(ctx, req.(*PollChannelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChannelService_DescribeLinkedChannel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeChannelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChannelServiceServer).DescribeLinkedChannel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChannelService_DescribeLinkedChannel_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChannelServiceServer).DescribeLinkedChannel(ctx, req.(*DescribeChannelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChannelService_RegisterWorkflowListener_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RegisterWorkflowListenerRequest)
 	if err := dec(in); err != nil {
@@ -323,6 +492,26 @@ var ChannelService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeChannel",
 			Handler:    _ChannelService_DescribeChannel_Handler,
+		},
+		{
+			MethodName: "NotifyLinkedChannel",
+			Handler:    _ChannelService_NotifyLinkedChannel_Handler,
+		},
+		{
+			MethodName: "RegisterLinkedChannelListener",
+			Handler:    _ChannelService_RegisterLinkedChannelListener_Handler,
+		},
+		{
+			MethodName: "UnregisterLinkedChannelListener",
+			Handler:    _ChannelService_UnregisterLinkedChannelListener_Handler,
+		},
+		{
+			MethodName: "PollLinkedChannel",
+			Handler:    _ChannelService_PollLinkedChannel_Handler,
+		},
+		{
+			MethodName: "DescribeLinkedChannel",
+			Handler:    _ChannelService_DescribeLinkedChannel_Handler,
 		},
 		{
 			MethodName: "RegisterWorkflowListener",

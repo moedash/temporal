@@ -18,6 +18,9 @@ message Notification {
   // Set by the writer and expected to grow. Folding keeps the highest.
   int64 counter = 3;
   map<string, temporal.api.common.v1.Payload> metadata = 4;
+  // The workflow a linked channel belongs to and the run that received the
+  // notification. Empty for an independent channel.
+  temporal.api.common.v1.WorkflowExecution linked_to = 5;
 }
 
 // WorkflowListener is a workflow run that subscribed to the channel.

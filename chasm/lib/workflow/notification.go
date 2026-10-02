@@ -145,9 +145,20 @@ func (w *Workflow) AcceptChannelNotification(
 }
 
 // HasPendingChannelNotifications reports whether a notification is waiting
-// for a scheduled event. Only the keys are read, so nothing is loaded.
-func (w *Workflow) HasPendingChannelNotifications() bool {
-	return len(w.ChannelNotifications) > 0
+// for a scheduled event, from a channel the run subscribed to or one linked
+// to it. The subscribed kind is answered from the keys alone; the linked
+// kind keeps its pending entry on the channel, so those are read.
+func (w *Workflow) HasPendingChannelNotifications(ctx chasm.Context) bool {
+	if len(w.ChannelNotifications) > 0 {
+		return true
+	}
+	view := readOnly(ctx)
+	for _, field := range w.LinkedChannels {
+		if field.Get(view).HasOwnerPending() {
+			return true
+		}
+	}
+	return false
 }
 
 // TakeChannelNotifications returns the pending notifications, one per
@@ -158,7 +169,7 @@ func (w *Workflow) HasPendingChannelNotifications() bool {
 // the task starts, so a repeat in that window folds into the task.
 func (w *Workflow) TakeChannelNotifications(mctx chasm.MutableContext) []*channelpb.Notification {
 	if len(w.ChannelNotifications) == 0 {
-		return nil
+		return w.takeLinkedNotifications(mctx)
 	}
 	view := readOnly(mctx)
 	channels := slices.Sorted(maps.Keys(w.ChannelNotifications))
@@ -176,6 +187,22 @@ func (w *Workflow) TakeChannelNotifications(mctx chasm.MutableContext) []*channe
 			sub.Get(mctx).ScheduledCounter = entry.GetCounter()
 		}
 	}
+	return append(out, w.takeLinkedNotifications(mctx)...)
+}
+
+// takeLinkedNotifications takes the pending notification of every linked
+// channel that holds one, sorted by channel. Each names its owner, so a
+// worker can tell it from one of a channel the run subscribed to.
+func (w *Workflow) takeLinkedNotifications(mctx chasm.MutableContext) []*channelpb.Notification {
+	view := readOnly(mctx)
+	var out []*channelpb.Notification
+	for _, name := range slices.Sorted(maps.Keys(w.LinkedChannels)) {
+		field := w.LinkedChannels[name]
+		if !field.Get(view).HasOwnerPending() {
+			continue
+		}
+		out = append(out, field.Get(mctx).TakeOwnerPending())
+	}
 	return out
 }
 
@@ -185,6 +212,11 @@ func (w *Workflow) HasScheduledChannelCounters(ctx chasm.Context) bool {
 	view := readOnly(ctx)
 	for _, field := range w.ChannelSubscriptions {
 		if field.Get(view).GetScheduledCounter() > 0 {
+			return true
+		}
+	}
+	for _, field := range w.LinkedChannels {
+		if field.Get(view).HasOwnerScheduledCounter() {
 			return true
 		}
 	}
@@ -199,6 +231,11 @@ func (w *Workflow) ClearScheduledChannelCounters(mctx chasm.MutableContext) {
 	for _, field := range w.ChannelSubscriptions {
 		if field.Get(view).GetScheduledCounter() > 0 {
 			field.Get(mctx).ScheduledCounter = 0
+		}
+	}
+	for _, field := range w.LinkedChannels {
+		if field.Get(view).HasOwnerScheduledCounter() {
+			field.Get(mctx).ClearOwnerScheduledCounter()
 		}
 	}
 }

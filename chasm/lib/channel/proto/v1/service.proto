@@ -37,6 +37,33 @@ service ChannelService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  // The linked kind. Same requests, with workflow_execution set, routed to the
+  // shard of the workflow that holds the channel.
+  rpc NotifyLinkedChannel(NotifyChannelRequest) returns (NotifyChannelResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_execution.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc RegisterLinkedChannelListener(RegisterChannelListenerRequest) returns (RegisterChannelListenerResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_execution.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc UnregisterLinkedChannelListener(UnregisterChannelListenerRequest) returns (UnregisterChannelListenerResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_execution.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc PollLinkedChannel(PollChannelRequest) returns (PollChannelResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_execution.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
+
+  rpc DescribeLinkedChannel(DescribeChannelRequest) returns (DescribeChannelResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_execution.workflow_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   // Internal. The completion of a Workflow Task that subscribed calls this on
   // the channel's shard, creating the channel if it is absent.
   rpc RegisterWorkflowListener(RegisterWorkflowListenerRequest) returns (RegisterWorkflowListenerResponse) {

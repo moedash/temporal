@@ -34,4 +34,16 @@ message ChannelState {
   // registration that arrives in between starts a new channel rather than
   // landing on the one being deleted.
   bool closed = 8;
+
+  // The channel lives in a workflow's mutable state and that workflow is its
+  // listener. No fan-out and no idle check: a notification is handed to the
+  // owner in the same write, and the channel dies with the run.
+  bool linked = 9;
+  // The latest notification the owner has not been handed on a scheduled
+  // event yet. Cleared when one carries it.
+  Notification owner_pending = 10;
+  // Counter the owner's scheduled, not yet started task carries. A repeat at
+  // or below it folds into that task. Zero once the task starts, fails or
+  // times out.
+  int64 owner_scheduled_counter = 11;
 }

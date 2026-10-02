@@ -194,7 +194,7 @@ func (c *Channel) RetainedCount() int64 {
 }
 
 func (c *Channel) scheduleFanOut(mctx chasm.MutableContext) {
-	if c.State.FanOutPending || c.ListenerCount() == 0 {
+	if c.State.GetLinked() || c.State.FanOutPending || c.ListenerCount() == 0 {
 		return
 	}
 	c.State.FanOutPending = true
@@ -516,6 +516,8 @@ type CallbackDelivery struct {
 	Callback     *commonpb.Callback
 	Notification *channelpb.Notification
 	Attempt      int32
+	// The channel is linked to a workflow, for the metrics.
+	Linked bool
 }
 
 // CallbackDeliveryFor reads what the delivery task should post. It reports
@@ -538,6 +540,7 @@ func (c *Channel) CallbackDeliveryFor(
 		Callback:     common.CloneProto(listener.GetCallback()),
 		Notification: common.CloneProto(listener.GetInFlight()),
 		Attempt:      listener.GetAttempt(),
+		Linked:       c.State.GetLinked(),
 	}, true
 }
 
@@ -740,7 +743,7 @@ func (c *Channel) PollNeedsTouch(now time.Time, limits Limits) bool {
 // scheduleIdleCheck arms the deletion check for a channel with no listeners.
 // One is outstanding at a time; it re-arms itself while the channel is in use.
 func (c *Channel) scheduleIdleCheck(mctx chasm.MutableContext, limits Limits) {
-	if c.State.IdleCheckPending || c.ListenerCount() > 0 {
+	if c.State.GetLinked() || c.State.IdleCheckPending || c.ListenerCount() > 0 {
 		return
 	}
 	c.State.IdleCheckPending = true

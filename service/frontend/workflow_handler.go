@@ -2401,9 +2401,23 @@ func (wh *WorkflowHandler) validateCallerFields(identity, requestID string) erro
 	return nil
 }
 
+// validateLinkedOwner checks the workflow a linked channel call names. The
+// run id is optional and means the chain's current run when empty.
+func (wh *WorkflowHandler) validateLinkedOwner(owner *commonpb.WorkflowExecution) error {
+	if err := validateExecution(owner); err != nil {
+		return err
+	}
+	if len(owner.GetWorkflowId()) > wh.config.MaxIDLengthLimit() {
+		return errWorkflowIDTooLong
+	}
+	return nil
+}
+
 // NotifyChannel tells every listener of a channel that a source they consume
 // moved. The writer never learns who listens; the channel's shard wakes each
 // one. A channel with no listeners retains the notification for pollers.
+// With workflow_execution set the channel is the one linked to that
+// workflow, whose run is the listener.
 func (wh *WorkflowHandler) NotifyChannel(
 	ctx context.Context,
 	request *workflowservice.NotifyChannelRequest,
@@ -2434,15 +2448,25 @@ func (wh *WorkflowHandler) NotifyChannel(
 		return nil, err
 	}
 
-	resp, err := wh.channelClient.NotifyChannel(ctx, &channelpb.NotifyChannelRequest{
+	routed := &channelpb.NotifyChannelRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.NotifyChannelInput{
-			Namespace:    request.GetNamespace(),
-			Notification: channel.FromAPINotification(n),
-			Identity:     request.GetIdentity(),
-			RequestId:    request.GetRequestId(),
+			Namespace:         request.GetNamespace(),
+			Notification:      channel.FromAPINotification(n),
+			Identity:          request.GetIdentity(),
+			RequestId:         request.GetRequestId(),
+			WorkflowExecution: request.GetWorkflowExecution(),
 		},
-	})
+	}
+	var resp *channelpb.NotifyChannelResponse
+	if owner := request.GetWorkflowExecution(); owner != nil {
+		if err := wh.validateLinkedOwner(owner); err != nil {
+			return nil, err
+		}
+		resp, err = wh.channelClient.NotifyLinkedChannel(ctx, routed)
+	} else {
+		resp, err = wh.channelClient.NotifyChannel(ctx, routed)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2488,16 +2512,26 @@ func (wh *WorkflowHandler) RegisterChannelListener(
 		requestID = uuid.NewString()
 	}
 
-	resp, err := wh.channelClient.RegisterChannelListener(ctx, &channelpb.RegisterChannelListenerRequest{
+	routed := &channelpb.RegisterChannelListenerRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.RegisterChannelListenerInput{
-			Namespace: request.GetNamespace(),
-			Channel:   request.GetChannel(),
-			Callback:  request.GetCallback(),
-			RequestId: requestID,
-			Identity:  request.GetIdentity(),
+			Namespace:         request.GetNamespace(),
+			Channel:           request.GetChannel(),
+			Callback:          request.GetCallback(),
+			RequestId:         requestID,
+			Identity:          request.GetIdentity(),
+			WorkflowExecution: request.GetWorkflowExecution(),
 		},
-	})
+	}
+	var resp *channelpb.RegisterChannelListenerResponse
+	if owner := request.GetWorkflowExecution(); owner != nil {
+		if err := wh.validateLinkedOwner(owner); err != nil {
+			return nil, err
+		}
+		resp, err = wh.channelClient.RegisterLinkedChannelListener(ctx, routed)
+	} else {
+		resp, err = wh.channelClient.RegisterChannelListener(ctx, routed)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2534,15 +2568,24 @@ func (wh *WorkflowHandler) UnregisterChannelListener(
 		return nil, err
 	}
 
-	_, err = wh.channelClient.UnregisterChannelListener(ctx, &channelpb.UnregisterChannelListenerRequest{
+	routed := &channelpb.UnregisterChannelListenerRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.UnregisterChannelListenerInput{
-			Namespace:  request.GetNamespace(),
-			Channel:    request.GetChannel(),
-			ListenerId: request.GetListenerId(),
-			Identity:   request.GetIdentity(),
+			Namespace:         request.GetNamespace(),
+			Channel:           request.GetChannel(),
+			ListenerId:        request.GetListenerId(),
+			Identity:          request.GetIdentity(),
+			WorkflowExecution: request.GetWorkflowExecution(),
 		},
-	})
+	}
+	if owner := request.GetWorkflowExecution(); owner != nil {
+		if err := wh.validateLinkedOwner(owner); err != nil {
+			return nil, err
+		}
+		_, err = wh.channelClient.UnregisterLinkedChannelListener(ctx, routed)
+	} else {
+		_, err = wh.channelClient.UnregisterChannelListener(ctx, routed)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2574,16 +2617,26 @@ func (wh *WorkflowHandler) PollChannel(
 		return nil, err
 	}
 
-	resp, err := wh.channelClient.PollChannel(ctx, &channelpb.PollChannelRequest{
+	routed := &channelpb.PollChannelRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.PollChannelInput{
-			Namespace:        request.GetNamespace(),
-			Channel:          request.GetChannel(),
-			AfterCounter:     request.GetAfterCounter(),
-			Wait:             request.GetWait(),
-			MaxNotifications: request.GetMaxNotifications(),
+			Namespace:         request.GetNamespace(),
+			Channel:           request.GetChannel(),
+			AfterCounter:      request.GetAfterCounter(),
+			Wait:              request.GetWait(),
+			MaxNotifications:  request.GetMaxNotifications(),
+			WorkflowExecution: request.GetWorkflowExecution(),
 		},
-	})
+	}
+	var resp *channelpb.PollChannelResponse
+	if owner := request.GetWorkflowExecution(); owner != nil {
+		if err := wh.validateLinkedOwner(owner); err != nil {
+			return nil, err
+		}
+		resp, err = wh.channelClient.PollLinkedChannel(ctx, routed)
+	} else {
+		resp, err = wh.channelClient.PollChannel(ctx, routed)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2611,13 +2664,23 @@ func (wh *WorkflowHandler) DescribeChannel(
 		return nil, err
 	}
 
-	resp, err := wh.channelClient.DescribeChannel(ctx, &channelpb.DescribeChannelRequest{
+	routed := &channelpb.DescribeChannelRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.DescribeChannelInput{
-			Namespace: request.GetNamespace(),
-			Channel:   request.GetChannel(),
+			Namespace:         request.GetNamespace(),
+			Channel:           request.GetChannel(),
+			WorkflowExecution: request.GetWorkflowExecution(),
 		},
-	})
+	}
+	var resp *channelpb.DescribeChannelResponse
+	if owner := request.GetWorkflowExecution(); owner != nil {
+		if err := wh.validateLinkedOwner(owner); err != nil {
+			return nil, err
+		}
+		resp, err = wh.channelClient.DescribeLinkedChannel(ctx, routed)
+	} else {
+		resp, err = wh.channelClient.DescribeChannel(ctx, routed)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2626,10 +2689,16 @@ func (wh *WorkflowHandler) DescribeChannel(
 	for _, l := range out.GetListeners() {
 		listeners = append(listeners, channel.ToAPIListener(l))
 	}
+	kind := notificationpb.CHANNEL_KIND_INDEPENDENT
+	if out.GetLinked() {
+		kind = notificationpb.CHANNEL_KIND_LINKED
+	}
 	return &workflowservice.DescribeChannelResponse{
 		Listeners:     listeners,
 		Latest:        channel.ToAPINotification(out.GetLatest()),
 		RetainedCount: int32(out.GetRetainedCount()),
+		Kind:          kind,
+		LinkedTo:      out.GetLinkedTo(),
 	}, nil
 }
 

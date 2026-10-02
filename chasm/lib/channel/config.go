@@ -24,12 +24,14 @@ const RoutedCallTimeout = 5 * time.Second
 // The defaults below are also what component code falls back on when it is
 // driven without a config, as the unit tests do.
 const (
-	DefaultMaxListeners                = 1000
-	DefaultRetainedNotifications       = 1000
-	DefaultMaxMetadataBytes            = 2048
-	DefaultRetention                   = time.Hour
-	DefaultNotifyPerSecond             = 10000
-	DefaultMaxSubscriptionsPerWorkflow = 32
+	DefaultMaxListeners                 = 1000
+	DefaultRetainedNotifications        = 1000
+	DefaultMaxMetadataBytes             = 2048
+	DefaultRetention                    = time.Hour
+	DefaultNotifyPerSecond              = 10000
+	DefaultMaxSubscriptionsPerWorkflow  = 32
+	DefaultLinkedRetainedNotifications  = 100
+	DefaultMaxLinkedChannelsPerWorkflow = 32
 )
 
 var (
@@ -68,6 +70,18 @@ means no limit.`,
 		`Most notification channels one workflow run subscribes to. A subscribe command past
 it fails the workflow task.`,
 	)
+	LinkedRetainedNotificationsSetting = dynamicconfig.NewNamespaceIntSetting(
+		"channel.linkedRetainedNotifications",
+		DefaultLinkedRetainedNotifications,
+		`Most notifications a channel linked to a workflow keeps for pollers. Held in the
+workflow's own state, so smaller than an independent channel's ring.`,
+	)
+	MaxLinkedChannelsPerWorkflowSetting = dynamicconfig.NewNamespaceIntSetting(
+		"channel.maxLinkedChannelsPerWorkflow",
+		DefaultMaxLinkedChannelsPerWorkflow,
+		`Most channels linked to one workflow run. A notify or a registration that would
+create one past it is refused with ResourceExhausted.`,
+	)
 )
 
 // Limits are the per-namespace bounds a channel transition applies, resolved
@@ -77,15 +91,20 @@ type Limits struct {
 	RetainedNotifications int
 	MaxMetadataBytes      int
 	Retention             time.Duration
+	// The linked kind's ring and how many linked channels one run may hold.
+	LinkedRetainedNotifications  int
+	MaxLinkedChannelsPerWorkflow int
 }
 
 // DefaultLimits is what applies when nothing is configured.
 func DefaultLimits() Limits {
 	return Limits{
-		MaxListeners:          DefaultMaxListeners,
-		RetainedNotifications: DefaultRetainedNotifications,
-		MaxMetadataBytes:      DefaultMaxMetadataBytes,
-		Retention:             DefaultRetention,
+		MaxListeners:                 DefaultMaxListeners,
+		RetainedNotifications:        DefaultRetainedNotifications,
+		MaxMetadataBytes:             DefaultMaxMetadataBytes,
+		Retention:                    DefaultRetention,
+		LinkedRetainedNotifications:  DefaultLinkedRetainedNotifications,
+		MaxLinkedChannelsPerWorkflow: DefaultMaxLinkedChannelsPerWorkflow,
 	}
 }
 
@@ -104,35 +123,47 @@ func (l Limits) withDefaults() Limits {
 	if l.Retention <= 0 {
 		l.Retention = d.Retention
 	}
+	if l.LinkedRetainedNotifications <= 0 {
+		l.LinkedRetainedNotifications = d.LinkedRetainedNotifications
+	}
+	if l.MaxLinkedChannelsPerWorkflow <= 0 {
+		l.MaxLinkedChannelsPerWorkflow = d.MaxLinkedChannelsPerWorkflow
+	}
 	return l
 }
 
 type Config struct {
-	MaxListeners                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RetainedNotifications       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxMetadataBytes            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	Retention                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	NotifyPerSecond             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxSubscriptionsPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxListeners                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RetainedNotifications        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxMetadataBytes             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	Retention                    dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	NotifyPerSecond              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxSubscriptionsPerWorkflow  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	LinkedRetainedNotifications  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxLinkedChannelsPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		MaxListeners:                MaxListenersSetting.Get(dc),
-		RetainedNotifications:       RetainedNotificationsSetting.Get(dc),
-		MaxMetadataBytes:            MaxMetadataBytesSetting.Get(dc),
-		Retention:                   RetentionSetting.Get(dc),
-		NotifyPerSecond:             NotifyPerSecondSetting.Get(dc),
-		MaxSubscriptionsPerWorkflow: MaxSubscriptionsPerWorkflowSetting.Get(dc),
+		MaxListeners:                 MaxListenersSetting.Get(dc),
+		RetainedNotifications:        RetainedNotificationsSetting.Get(dc),
+		MaxMetadataBytes:             MaxMetadataBytesSetting.Get(dc),
+		Retention:                    RetentionSetting.Get(dc),
+		NotifyPerSecond:              NotifyPerSecondSetting.Get(dc),
+		MaxSubscriptionsPerWorkflow:  MaxSubscriptionsPerWorkflowSetting.Get(dc),
+		LinkedRetainedNotifications:  LinkedRetainedNotificationsSetting.Get(dc),
+		MaxLinkedChannelsPerWorkflow: MaxLinkedChannelsPerWorkflowSetting.Get(dc),
 	}
 }
 
 // LimitsFor resolves the namespace's limits.
 func (c *Config) LimitsFor(namespaceName string) Limits {
 	return Limits{
-		MaxListeners:          c.MaxListeners(namespaceName),
-		RetainedNotifications: c.RetainedNotifications(namespaceName),
-		MaxMetadataBytes:      c.MaxMetadataBytes(namespaceName),
-		Retention:             c.Retention(namespaceName),
+		MaxListeners:                 c.MaxListeners(namespaceName),
+		RetainedNotifications:        c.RetainedNotifications(namespaceName),
+		MaxMetadataBytes:             c.MaxMetadataBytes(namespaceName),
+		Retention:                    c.Retention(namespaceName),
+		LinkedRetainedNotifications:  c.LinkedRetainedNotifications(namespaceName),
+		MaxLinkedChannelsPerWorkflow: c.MaxLinkedChannelsPerWorkflow(namespaceName),
 	}
 }

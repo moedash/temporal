@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/chasm/lib/channel"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/stream"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
@@ -70,6 +71,12 @@ type Workflow struct {
 	// Channels a subscribe command in the open Workflow Task has to register
 	// this run on. In memory only, drained before commit.
 	pendingChannelRegistrations []string
+
+	// Channels linked to this run, keyed by channel name. The run is their
+	// listener by construction, so there is no subscription and no event: a
+	// notification waits on the channel for the run's next scheduled event.
+	// Nothing of them reaches a successor run.
+	LinkedChannels chasm.Map[string, *channel.Channel]
 
 	// Subscribe commands whose stream is in another execution, so the addressing
 	// has to be looked up before a cursor can be made. In memory only, drained

@@ -45,7 +45,7 @@ func TestChannelNotificationsFoldAndSnapshot(t *testing.T) {
 	require.True(t, folded, "a lower counter folds into the pending one and changes nothing")
 	_, err = w.AcceptChannelNotification(ctx, channelNote("billing", 7))
 	require.NoError(t, err)
-	require.True(t, w.HasPendingChannelNotifications())
+	require.True(t, w.HasPendingChannelNotifications(ctx))
 
 	taken := w.TakeChannelNotifications(ctx)
 	require.Len(t, taken, 2)
@@ -54,7 +54,7 @@ func TestChannelNotificationsFoldAndSnapshot(t *testing.T) {
 	require.Equal(t, int64(3), taken[1].GetCounter())
 	require.Equal(t, []byte{3}, taken[1].GetPosition())
 	require.Equal(t, []byte{3}, taken[1].GetMetadata()["k"].GetData())
-	require.False(t, w.HasPendingChannelNotifications())
+	require.False(t, w.HasPendingChannelNotifications(ctx))
 	require.Empty(t, w.TakeChannelNotifications(ctx))
 }
 
@@ -79,7 +79,7 @@ func TestChannelNotificationFoldsOnlyWhilePending(t *testing.T) {
 	folded, err := w.AcceptChannelNotification(ctx, channelNote("orders", 4))
 	require.NoError(t, err)
 	require.False(t, folded)
-	require.True(t, w.HasPendingChannelNotifications())
+	require.True(t, w.HasPendingChannelNotifications(ctx))
 	require.Equal(t, int64(4), w.ChannelSubscriptions["orders"].Get(ctx).GetLastCounter())
 }
 
@@ -125,7 +125,7 @@ func TestChannelNotificationFoldsIntoUnstartedTask(t *testing.T) {
 	folded, err := w.AcceptChannelNotification(ctx, channelNote("orders", 4))
 	require.NoError(t, err)
 	require.True(t, folded, "the unstarted task carries it")
-	require.False(t, w.HasPendingChannelNotifications())
+	require.False(t, w.HasPendingChannelNotifications(ctx))
 	require.False(t, w.ChannelNotificationIsDuplicate(ctx, "orders", 5))
 
 	w.ClearScheduledChannelCounters(ctx)
@@ -133,5 +133,5 @@ func TestChannelNotificationFoldsIntoUnstartedTask(t *testing.T) {
 	folded, err = w.AcceptChannelNotification(ctx, channelNote("orders", 4))
 	require.NoError(t, err)
 	require.False(t, folded, "the task started, so the repeat goes to the next one")
-	require.True(t, w.HasPendingChannelNotifications())
+	require.True(t, w.HasPendingChannelNotifications(ctx))
 }

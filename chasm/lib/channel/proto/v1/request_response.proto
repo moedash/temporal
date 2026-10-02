@@ -19,6 +19,9 @@ message NotifyChannelInput {
   Notification notification = 2;
   string identity = 3;
   string request_id = 4;
+  // Set for a channel linked to a workflow: the owner, whose run id may be
+  // empty for the current run. Unset for an independent channel.
+  temporal.api.common.v1.WorkflowExecution workflow_execution = 5;
 }
 
 message NotifyChannelOutput {
@@ -41,6 +44,9 @@ message RegisterChannelListenerInput {
   temporal.api.common.v1.Callback callback = 3;
   string request_id = 4;
   string identity = 5;
+  // Set for a channel linked to a workflow: the owner, whose run id may be
+  // empty for the current run. Unset for an independent channel.
+  temporal.api.common.v1.WorkflowExecution workflow_execution = 6;
 }
 
 message RegisterChannelListenerOutput {
@@ -61,6 +67,9 @@ message UnregisterChannelListenerInput {
   string channel = 2;
   string listener_id = 3;
   string identity = 4;
+  // Set for a channel linked to a workflow: the owner, whose run id may be
+  // empty for the current run. Unset for an independent channel.
+  temporal.api.common.v1.WorkflowExecution workflow_execution = 5;
 }
 
 message UnregisterChannelListenerOutput {}
@@ -84,6 +93,9 @@ message PollChannelInput {
   google.protobuf.Duration wait = 4;
   // Zero means the server's page size.
   int32 max_notifications = 5;
+  // Set for a channel linked to a workflow: the owner, whose run id may be
+  // empty for the current run. Unset for an independent channel.
+  temporal.api.common.v1.WorkflowExecution workflow_execution = 6;
 }
 
 message PollChannelOutput {
@@ -102,6 +114,9 @@ message PollChannelResponse {
 message DescribeChannelInput {
   string namespace = 1;
   string channel = 2;
+  // Set for a channel linked to a workflow: the owner, whose run id may be
+  // empty for the current run. Unset for an independent channel.
+  temporal.api.common.v1.WorkflowExecution workflow_execution = 3;
 }
 
 // ChannelListenerInfo has the fields of temporal.api.notification.v1.ChannelListener.
@@ -122,6 +137,9 @@ message DescribeChannelOutput {
   repeated ChannelListenerInfo listeners = 1;
   Notification latest = 2;
   int64 retained_count = 3;
+  // The channel is linked to a workflow, and which one.
+  bool linked = 4;
+  temporal.api.common.v1.WorkflowExecution linked_to = 5;
 }
 
 message DescribeChannelRequest {
