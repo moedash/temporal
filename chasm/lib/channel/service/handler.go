@@ -155,6 +155,16 @@ func (h *handler) NotifyChannel(
 		return nil, err
 	}
 
+	// Read first: a notify that would not raise the channel's latest counter
+	// changes nothing, and answering it from a read keeps it from writing.
+	if stale, count, err := h.staleNotify(ctx, req.GetNamespaceId(), in.GetNotification()); err != nil {
+		return nil, err
+	} else if stale {
+		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(1, metrics.NamespaceTag(ns))
+		return &channelpb.NotifyChannelResponse{
+			FrontendResponse: &channelpb.NotifyChannelOutput{ListenerCount: int64(count)},
+		}, nil
+	}
 	count, err := h.notify(ctx, req.GetNamespaceId(), in, limits)
 	if errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
 		// A retry of a notify that was accepted. Answered with the listeners
@@ -178,6 +188,31 @@ func (h *handler) NotifyChannel(
 			ListenerCount: int64(count),
 		},
 	}, nil
+}
+
+// staleNotify reports whether the channel already holds a notification at
+// this counter or above, and how many listeners it has. A channel that does
+// not exist is not stale: the notify creates it.
+func (h *handler) staleNotify(
+	ctx context.Context,
+	namespaceID string,
+	n *channelpb.Notification,
+) (bool, int, error) {
+	type answer struct {
+		stale     bool
+		listeners int
+	}
+	got, err := chasm.ReadComponent(ctx, channelRef(namespaceID, n.GetChannel()),
+		func(c *channel.Channel, _ chasm.Context, counter int64) (answer, error) {
+			if c.State.GetClosed() {
+				return answer{}, nil
+			}
+			return answer{stale: !c.Advances(counter), listeners: c.ListenerCount()}, nil
+		}, n.GetCounter())
+	if executionAbsent(err) {
+		return false, 0, nil
+	}
+	return got.stale, got.listeners, err
 }
 
 // notify accepts the notification on the channel, creating it if absent. A
@@ -530,9 +565,11 @@ func (h *handler) DeliverChannelNotification(
 	}
 
 	// A duplicate leaves the run exactly as it was: reaching the component
-	// mutably is already a write.
+	// mutably is already a write. It is a fold that changed nothing.
 	if target.duplicate {
 		out.Duplicate = true
+		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
+			1, metrics.NamespaceTag(ns), workflowKindTag)
 		return &channelpb.DeliverChannelNotificationResponse{FrontendResponse: out}, nil
 	}
 	folded, err := h.accept(ctx, namespaceID, workflowID, target.runID, n)

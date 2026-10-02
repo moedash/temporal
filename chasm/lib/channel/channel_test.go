@@ -116,6 +116,9 @@ func TestBurstCoalescesIntoOneFanOut(t *testing.T) {
 	}
 	require.Len(t, tasksOf[*channelpb.ChannelFanOutTask](mctx), 1)
 	require.Equal(t, int64(3), c.LatestCounter(), "a lower counter does not replace the latest")
+	require.Equal(t, int64(2), c.RetainedCount(), "nor is it retained: it changes nothing")
+	require.False(t, c.Advances(3))
+	require.True(t, c.Advances(4))
 
 	fanOut, err := c.TakeFanOut(mctx, struct{}{})
 	require.NoError(t, err)

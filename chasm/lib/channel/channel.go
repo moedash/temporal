@@ -131,13 +131,15 @@ func MetadataSize(metadata map[string]*commonpb.Payload) int {
 // NotifyResult is what a notify reports back to the writer.
 type NotifyResult struct {
 	ListenerCount int
-	// The notification raised the channel's latest counter, so listeners are
-	// being told about it.
+	// The notification raised the channel's latest counter and was accepted.
+	// One that did not changed nothing.
 	Advanced bool
 }
 
-// Notify accepts a notification: it joins the retained ring for pollers and,
-// when it is the newest the channel has seen, is fanned out to the listeners.
+// Notify accepts a notification: it joins the retained ring for pollers and
+// is fanned out to the listeners. One whose counter is not above the latest
+// changes nothing, since every listener and poller already has a newer one;
+// the caller checks that first so such a notify writes nothing at all.
 //
 // The fan-out is one task at a time. A notify that lands while one is
 // outstanding schedules nothing: the task reads the latest when it runs, so a
@@ -152,19 +154,18 @@ func (c *Channel) Notify(
 	if err := CheckNotification(n, limits.MaxMetadataBytes); err != nil {
 		return NotifyResult{}, err
 	}
+	if !c.Advances(n.GetCounter()) {
+		return NotifyResult{ListenerCount: c.ListenerCount()}, nil
+	}
 	n = common.CloneProto(n)
 
 	c.retain(mctx, n, limits.RetainedNotifications)
 	c.State.AcceptedCount++
 	c.touch(mctx)
-
-	advanced := n.GetCounter() > c.State.GetLatest().GetCounter()
-	if advanced {
-		c.State.Latest = n
-		c.scheduleFanOut(mctx)
-	}
+	c.State.Latest = n
+	c.scheduleFanOut(mctx)
 	c.scheduleIdleCheck(mctx, limits)
-	return NotifyResult{ListenerCount: c.ListenerCount(), Advanced: advanced}, nil
+	return NotifyResult{ListenerCount: c.ListenerCount(), Advanced: true}, nil
 }
 
 // retain appends to the ring and drops the oldest past the bound.
@@ -179,6 +180,12 @@ func (c *Channel) retain(mctx chasm.MutableContext, n *channelpb.Notification, b
 		delete(c.Retained, c.State.RetainedFirst)
 		c.State.RetainedFirst++
 	}
+}
+
+// Advances reports whether a notification at this counter would be news to
+// the channel.
+func (c *Channel) Advances(counter int64) bool {
+	return counter > c.State.GetLatest().GetCounter()
 }
 
 // RetainedCount is how many notifications the ring holds.

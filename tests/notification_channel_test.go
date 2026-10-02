@@ -739,8 +739,9 @@ func TestNotificationChannelSubscribeGetsLatest(t *testing.T) {
 	require.False(t, c.hasPendingTask(id))
 }
 
-// Subscribing to a channel that holds nothing schedules nothing, and a second
-// subscribe to the same channel is a no-op that writes no event.
+// Subscribing to a channel that holds nothing schedules nothing. A second
+// subscribe to the same channel records its own event, since every command
+// needs one, and changes nothing else: no new listener and no delivery.
 func TestNotificationChannelSubscribeOnEmptyChannel(t *testing.T) {
 	c := newChannelTestEnv(t)
 	id := "channel-empty-" + uuid.NewString()
@@ -752,7 +753,16 @@ func TestNotificationChannelSubscribeOnEmptyChannel(t *testing.T) {
 	task := c.poll(id)
 	c.complete(task, false, subscribeChannelCommand(name))
 	execution := &commonpb.WorkflowExecution{WorkflowId: id, RunId: runID}
-	require.Len(t, c.eventsOfType(execution,
-		enumspb.EVENT_TYPE_WORKFLOW_NOTIFICATION_CHANNEL_SUBSCRIBED), 1)
+	subscribed := c.eventsOfType(execution, enumspb.EVENT_TYPE_WORKFLOW_NOTIFICATION_CHANNEL_SUBSCRIBED)
+	require.Len(t, subscribed, 2)
+	require.Equal(t, name,
+		subscribed[1].GetWorkflowNotificationChannelSubscribedEventAttributes().GetChannel())
+	require.Len(t, c.describe(name).GetListeners(), 1)
+	require.False(t, c.hasPendingTask(id), "the latest is not handed out again")
+
+	// A notify that does not raise the latest counter changes nothing and
+	// wakes nobody.
+	require.Equal(t, int32(1), c.mustNotify(name, 1))
+	require.Equal(t, int32(1), c.describe(name).GetRetainedCount())
 	require.False(t, c.hasPendingTask(id))
 }
