@@ -37,6 +37,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -731,12 +732,13 @@ func (ms *MutableStateImpl) carryStreamSubscriptionsTo(newMutableState *MutableS
 }
 
 // HasPendingStreamData reports whether a subscription of this workflow has
-// offsets left to deliver, or a wake has arrived that no started workflow task
-// carried. These are the conditions under which stream traffic and wakes
-// schedule a workflow task; neither writes an event that would.
+// offsets left to deliver, a wake has arrived that no started workflow task
+// carried, or a channel notification is waiting for a scheduled event. These
+// are the conditions under which stream traffic, wakes and notifications
+// schedule a workflow task; none of them writes an event that would.
 //
-// A wake does not cut short a first workflow task backoff: the task that ends
-// the backoff carries it.
+// A wake or a notification does not cut short a first workflow task backoff:
+// the task that ends the backoff carries it.
 //
 // Called on every transaction close for every workflow, almost none of which
 // have a subscription or a wake, so it resolves the root component once rather
@@ -758,7 +760,38 @@ func (ms *MutableStateImpl) HasPendingStreamData() bool {
 	if wf.StreamCursorsBehind(chasmCtx) {
 		return true
 	}
-	return wf.HasUndeliveredWakes(chasmCtx) && !ms.IsWorkflowPendingOnWorkflowTaskBackoff()
+	if !wf.HasUndeliveredWakes(chasmCtx) && !wf.HasPendingChannelNotifications() {
+		return false
+	}
+	return !ms.IsWorkflowPendingOnWorkflowTaskBackoff()
+}
+
+// takeChannelNotifications hands the pending channel notifications to a
+// WorkflowTaskScheduled event that is being written, and clears them. The
+// event is the acknowledgment: once History carries a notification nothing
+// redelivers it.
+//
+// Called for every scheduled event, almost none of which have anything to
+// carry, so the keys are checked through a read-only view first and the
+// component is only taken for writing when there is something to take.
+func (ms *MutableStateImpl) takeChannelNotifications() []*channelpb.Notification {
+	node, ok := ms.chasmTree.(*chasm.Node)
+	if !ok {
+		return nil
+	}
+	view := chasm.NewContext(context.Background(), node)
+	rootComponent, err := node.ComponentByPath(view, nil)
+	if err != nil {
+		return nil
+	}
+	if wf, ok := rootComponent.(*chasmworkflow.Workflow); !ok || !wf.HasPendingChannelNotifications() {
+		return nil
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return nil
+	}
+	return wf.TakeChannelNotifications(chasmCtx)
 }
 
 // ConsumesStreams reports whether this workflow holds a cursor into any

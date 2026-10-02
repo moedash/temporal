@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v1 "go.temporal.io/api/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -246,11 +247,130 @@ func (x *WakeEntry) GetDeliveredGeneration() int64 {
 	return 0
 }
 
+// ChannelSubscription is a notification channel this run subscribed to with a
+// command. It lives for the run.
+type ChannelSubscription struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The WorkflowNotificationChannelSubscribed event that recorded it.
+	EventId int64 `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	// Highest counter this run accepted from the channel. A redelivery at or
+	// below it changes nothing, since the run may already have it in History.
+	LastCounter   int64 `protobuf:"varint,2,opt,name=last_counter,json=lastCounter,proto3" json:"last_counter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChannelSubscription) Reset() {
+	*x = ChannelSubscription{}
+	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChannelSubscription) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChannelSubscription) ProtoMessage() {}
+
+func (x *ChannelSubscription) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChannelSubscription.ProtoReflect.Descriptor instead.
+func (*ChannelSubscription) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ChannelSubscription) GetEventId() int64 {
+	if x != nil {
+		return x.EventId
+	}
+	return 0
+}
+
+func (x *ChannelSubscription) GetLastCounter() int64 {
+	if x != nil {
+		return x.LastCounter
+	}
+	return 0
+}
+
+// ChannelNotificationEntry is the latest notification from one channel that
+// no WorkflowTaskScheduled event has carried yet. Deleted when one does.
+type ChannelNotificationEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Position      []byte                 `protobuf:"bytes,1,opt,name=position,proto3" json:"position,omitempty"`
+	Counter       int64                  `protobuf:"varint,2,opt,name=counter,proto3" json:"counter,omitempty"`
+	Metadata      map[string]*v1.Payload `protobuf:"bytes,3,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChannelNotificationEntry) Reset() {
+	*x = ChannelNotificationEntry{}
+	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChannelNotificationEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChannelNotificationEntry) ProtoMessage() {}
+
+func (x *ChannelNotificationEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChannelNotificationEntry.ProtoReflect.Descriptor instead.
+func (*ChannelNotificationEntry) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ChannelNotificationEntry) GetPosition() []byte {
+	if x != nil {
+		return x.Position
+	}
+	return nil
+}
+
+func (x *ChannelNotificationEntry) GetCounter() int64 {
+	if x != nil {
+		return x.Counter
+	}
+	return 0
+}
+
+func (x *ChannelNotificationEntry) GetMetadata() map[string]*v1.Payload {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 var File_temporal_server_chasm_lib_workflow_proto_v1_state_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/workflow/proto/v1/state.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\"|\n" +
+	"7temporal/server/chasm/lib/workflow/proto/v1/state.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\x1a$temporal/api/common/v1/message.proto\"|\n" +
 	"\x18NexusOperationParentData\x12,\n" +
 	"\x12scheduled_event_id\x18\x01 \x01(\x03R\x10scheduledEventId\x122\n" +
 	"\x15scheduled_event_token\x18\x02 \x01(\fR\x13scheduledEventToken\"K\n" +
@@ -264,7 +384,17 @@ const file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc = "" 
 	"\n" +
 	"generation\x18\x03 \x01(\x03R\n" +
 	"generation\x121\n" +
-	"\x14delivered_generation\x18\x04 \x01(\x03R\x13deliveredGenerationBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
+	"\x14delivered_generation\x18\x04 \x01(\x03R\x13deliveredGeneration\"S\n" +
+	"\x13ChannelSubscription\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12!\n" +
+	"\flast_counter\x18\x02 \x01(\x03R\vlastCounter\"\x9f\x02\n" +
+	"\x18ChannelNotificationEntry\x12\x1a\n" +
+	"\bposition\x18\x01 \x01(\fR\bposition\x12\x18\n" +
+	"\acounter\x18\x02 \x01(\x03R\acounter\x12o\n" +
+	"\bmetadata\x18\x03 \x03(\v2S.temporal.server.chasm.lib.workflow.proto.v1.ChannelNotificationEntry.MetadataEntryR\bmetadata\x1a\\\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01BDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescOnce sync.Once
@@ -278,19 +408,25 @@ func file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescGZIP() 
 	return file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_goTypes = []any{
 	(*NexusOperationParentData)(nil),    // 0: temporal.server.chasm.lib.workflow.proto.v1.NexusOperationParentData
 	(*NexusCancellationParentData)(nil), // 1: temporal.server.chasm.lib.workflow.proto.v1.NexusCancellationParentData
 	(*IncomingSignalData)(nil),          // 2: temporal.server.chasm.lib.workflow.proto.v1.IncomingSignalData
 	(*WakeEntry)(nil),                   // 3: temporal.server.chasm.lib.workflow.proto.v1.WakeEntry
+	(*ChannelSubscription)(nil),         // 4: temporal.server.chasm.lib.workflow.proto.v1.ChannelSubscription
+	(*ChannelNotificationEntry)(nil),    // 5: temporal.server.chasm.lib.workflow.proto.v1.ChannelNotificationEntry
+	nil,                                 // 6: temporal.server.chasm.lib.workflow.proto.v1.ChannelNotificationEntry.MetadataEntry
+	(*v1.Payload)(nil),                  // 7: temporal.api.common.v1.Payload
 }
 var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	6, // 0: temporal.server.chasm.lib.workflow.proto.v1.ChannelNotificationEntry.metadata:type_name -> temporal.server.chasm.lib.workflow.proto.v1.ChannelNotificationEntry.MetadataEntry
+	7, // 1: temporal.server.chasm.lib.workflow.proto.v1.ChannelNotificationEntry.MetadataEntry.value:type_name -> temporal.api.common.v1.Payload
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_init() }
@@ -304,7 +440,7 @@ func file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc), len(file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

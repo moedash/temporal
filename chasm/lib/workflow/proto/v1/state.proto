@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.workflow.proto.v1;
 
+import "temporal/api/common/v1/message.proto";
+
 option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpb";
 
 // NexusOperationParentData contains workflow-specific data stored in a nexus operation's
@@ -38,4 +40,22 @@ message WakeEntry {
   int64 generation = 3;
   // Generation handed to the last Workflow Task that started with this entry.
   int64 delivered_generation = 4;
+}
+
+// ChannelSubscription is a notification channel this run subscribed to with a
+// command. It lives for the run.
+message ChannelSubscription {
+  // The WorkflowNotificationChannelSubscribed event that recorded it.
+  int64 event_id = 1;
+  // Highest counter this run accepted from the channel. A redelivery at or
+  // below it changes nothing, since the run may already have it in History.
+  int64 last_counter = 2;
+}
+
+// ChannelNotificationEntry is the latest notification from one channel that
+// no WorkflowTaskScheduled event has carried yet. Deleted when one does.
+message ChannelNotificationEntry {
+  bytes position = 1;
+  int64 counter = 2;
+  map<string, temporal.api.common.v1.Payload> metadata = 3;
 }
