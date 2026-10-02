@@ -82,6 +82,19 @@ workflow's own state, so smaller than an independent channel's ring.`,
 		`Most channels linked to one workflow run. A notify or a registration that would
 create one past it is refused with ResourceExhausted.`,
 	)
+	// LinkedKindEnabledSetting exists so the independent kind can be exercised
+	// live on a server that has the linked kind: a client that sends
+	// workflow_execution is routed to the independent channel of that name, as
+	// before the linked kind existed, and a probe lands on INDEPENDENT.
+	LinkedKindEnabledSetting = dynamicconfig.NewNamespaceBoolSetting(
+		"channel.linkedKindEnabled",
+		true,
+		`Whether the public channel calls honour workflow_execution and reach the channel
+linked to that workflow. Off, they ignore it and reach the independent channel of
+the name, so DescribeChannel on an untouched linked name answers NotFound. The
+channels a native stream drives in its owner's state are not affected: they are
+written by the server, not addressed through these calls.`,
+	)
 )
 
 // Limits are the per-namespace bounds a channel transition applies, resolved
@@ -141,10 +154,12 @@ type Config struct {
 	MaxSubscriptionsPerWorkflow  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	LinkedRetainedNotifications  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxLinkedChannelsPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
+	LinkedKindEnabled            dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
+		LinkedKindEnabled:            LinkedKindEnabledSetting.Get(dc),
 		MaxListeners:                 MaxListenersSetting.Get(dc),
 		RetainedNotifications:        RetainedNotificationsSetting.Get(dc),
 		MaxMetadataBytes:             MaxMetadataBytesSetting.Get(dc),
