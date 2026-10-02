@@ -360,6 +360,7 @@ func Invoke(
 			return nil, serviceerror.NewInternal("failed to construct describe response")
 		}
 		result.PendingNexusOperations = append(result.PendingNexusOperations, chasmNexusOpInfos...)
+		result.ChannelSubscriptions = wf.ChannelSubscriptionInfos(chasmCtx)
 	}
 
 	// Check for HSM nexus operations

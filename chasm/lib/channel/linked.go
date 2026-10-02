@@ -162,6 +162,35 @@ func (c *Channel) ClearOwnerScheduledCounter() {
 	c.State.OwnerScheduledCounter = 0
 }
 
+// OwnerStanding is a linked channel as the owner's describe reports it: the
+// counters as the owner stands on them and the counts the channel keeps.
+type OwnerStanding struct {
+	// Highest counter the channel accepted.
+	LastCounter int64
+	// The notification the owner has not been handed on a scheduled event.
+	Pending *channelpb.Notification
+	// Counter the owner's scheduled, not yet started task carries.
+	ScheduledCounter int64
+	// Callback listeners. The owner is not counted among its own listeners.
+	ListenerCount int
+	RetainedCount int64
+	AcceptedCount int64
+}
+
+// OwnerStanding reads the channel for the owner's describe. The pending
+// notification is a copy, since the response is marshalled after the owner's
+// lock is released.
+func (c *Channel) OwnerStanding() OwnerStanding {
+	return OwnerStanding{
+		LastCounter:      c.LatestCounter(),
+		Pending:          common.CloneProto(c.State.GetOwnerPending()),
+		ScheduledCounter: c.State.GetOwnerScheduledCounter(),
+		ListenerCount:    len(c.CallbackListeners),
+		RetainedCount:    c.RetainedCount(),
+		AcceptedCount:    c.State.GetAcceptedCount(),
+	}
+}
+
 // OwnerListenerInfo describes the owner as the linked channel's workflow
 // listener, for describe.
 func (c *Channel) OwnerListenerInfo(ctx chasm.Context) *channelpb.ChannelListenerInfo {
