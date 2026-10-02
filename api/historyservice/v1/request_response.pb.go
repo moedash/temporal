@@ -667,8 +667,7 @@ type GetMutableStateResponse struct {
 	TaskQueue              *v112.TaskQueue        `protobuf:"bytes,6,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	StickyTaskQueue        *v112.TaskQueue        `protobuf:"bytes,7,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3" json:"sticky_task_queue,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	StickyTaskQueueScheduleToStartTimeout *durationpb.Duration        `protobuf:"bytes,11,opt,name=sticky_task_queue_schedule_to_start_timeout,json=stickyTaskQueueScheduleToStartTimeout,proto3" json:"sticky_task_queue_schedule_to_start_timeout,omitempty"`
 	CurrentBranchToken                    []byte                      `protobuf:"bytes,13,opt,name=current_branch_token,json=currentBranchToken,proto3" json:"current_branch_token,omitempty"`
 	WorkflowState                         v113.WorkflowExecutionState `protobuf:"varint,15,opt,name=workflow_state,json=workflowState,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState" json:"workflow_state,omitempty"`
@@ -968,8 +967,7 @@ type PollMutableStateResponse struct {
 	TaskQueue              *v112.TaskQueue        `protobuf:"bytes,6,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	StickyTaskQueue        *v112.TaskQueue        `protobuf:"bytes,7,opt,name=sticky_task_queue,json=stickyTaskQueue,proto3" json:"sticky_task_queue,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	StickyTaskQueueScheduleToStartTimeout *durationpb.Duration        `protobuf:"bytes,11,opt,name=sticky_task_queue_schedule_to_start_timeout,json=stickyTaskQueueScheduleToStartTimeout,proto3" json:"sticky_task_queue_schedule_to_start_timeout,omitempty"`
 	CurrentBranchToken                    []byte                      `protobuf:"bytes,12,opt,name=current_branch_token,json=currentBranchToken,proto3" json:"current_branch_token,omitempty"`
 	VersionHistories                      *v110.VersionHistories      `protobuf:"bytes,14,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
@@ -1472,10 +1470,10 @@ type RecordWorkflowTaskStartedResponse struct {
 	// - history.sendRawHistoryBytesToMatchingService: selects field 20 (OFF) vs field 21 (ON)
 	//
 	// Version timeline (current version: v1.29):
-	//   - v1.31: This change is released. Both flags default to false for backward compatibility.
-	//   - v1.32: Both flags will be enabled by default in code.
-	//   - v1.33: raw_history (field 20) and history (field 18) will be deprecated and removed,
-	//     as raw_history_bytes (field 21) will be the only field used.
+	// - v1.31: This change is released. Both flags default to false for backward compatibility.
+	// - v1.32: Both flags will be enabled by default in code.
+	// - v1.33: raw_history (field 20) and history (field 18) will be deprecated and removed,
+	//          as raw_history_bytes (field 21) will be the only field used.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
 	RawHistory      *v17.History `protobuf:"bytes,20,opt,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
@@ -1483,9 +1481,7 @@ type RecordWorkflowTaskStartedResponse struct {
 	// Slices of the streams this Workflow is consuming, each covering the offset
 	// range the task may deliver. Payloads ride here and never enter History;
 	// only the consumed range is recorded, on WorkflowTaskCompleted.
-	StreamSlices []*v19.StreamSlice `protobuf:"bytes,22,rep,name=stream_slices,json=streamSlices,proto3" json:"stream_slices,omitempty"`
-	// Wakes pending when the task started. Nothing about them is in History.
-	Wakes         []*v15.Wake `protobuf:"bytes,23,rep,name=wakes,proto3" json:"wakes,omitempty"`
+	StreamSlices  []*v19.StreamSlice `protobuf:"bytes,22,rep,name=stream_slices,json=streamSlices,proto3" json:"stream_slices,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1668,13 +1664,6 @@ func (x *RecordWorkflowTaskStartedResponse) GetStreamSlices() []*v19.StreamSlice
 	return nil
 }
 
-func (x *RecordWorkflowTaskStartedResponse) GetWakes() []*v15.Wake {
-	if x != nil {
-		return x.Wakes
-	}
-	return nil
-}
-
 // RecordWorkflowTaskStartedResponseWithRawHistory is wire-compatible with RecordWorkflowTaskStartedResponse.
 //
 // WIRE COMPATIBILITY PATTERN:
@@ -1722,9 +1711,7 @@ type RecordWorkflowTaskStartedResponseWithRawHistory struct {
 	// Slices of the streams this Workflow is consuming, each covering the offset
 	// range the task may deliver. Payloads ride here and never enter History;
 	// only the consumed range is recorded, on WorkflowTaskCompleted.
-	StreamSlices []*v19.StreamSlice `protobuf:"bytes,22,rep,name=stream_slices,json=streamSlices,proto3" json:"stream_slices,omitempty"`
-	// Wakes pending when the task started. Nothing about them is in History.
-	Wakes         []*v15.Wake `protobuf:"bytes,23,rep,name=wakes,proto3" json:"wakes,omitempty"`
+	StreamSlices  []*v19.StreamSlice `protobuf:"bytes,22,rep,name=stream_slices,json=streamSlices,proto3" json:"stream_slices,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1903,13 +1890,6 @@ func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetRawHistoryBytes() [
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetStreamSlices() []*v19.StreamSlice {
 	if x != nil {
 		return x.StreamSlices
-	}
-	return nil
-}
-
-func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetWakes() []*v15.Wake {
-	if x != nil {
-		return x.Wakes
 	}
 	return nil
 }
@@ -3148,119 +3128,11 @@ func (x *SignalWorkflowExecutionResponse) GetLink() *v14.Link {
 	return nil
 }
 
-type WakeWorkflowExecutionRequest struct {
-	state         protoimpl.MessageState           `protogen:"open.v1"`
-	NamespaceId   string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WakeRequest   *v1.WakeWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=wake_request,json=wakeRequest,proto3" json:"wake_request,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WakeWorkflowExecutionRequest) Reset() {
-	*x = WakeWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[36]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WakeWorkflowExecutionRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WakeWorkflowExecutionRequest) ProtoMessage() {}
-
-func (x *WakeWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[36]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WakeWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
-func (*WakeWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{36}
-}
-
-func (x *WakeWorkflowExecutionRequest) GetNamespaceId() string {
-	if x != nil {
-		return x.NamespaceId
-	}
-	return ""
-}
-
-func (x *WakeWorkflowExecutionRequest) GetWakeRequest() *v1.WakeWorkflowExecutionRequest {
-	if x != nil {
-		return x.WakeRequest
-	}
-	return nil
-}
-
-type WakeWorkflowExecutionResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The run the wake was addressed to.
-	RunId string `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// The wake joined one for the same source that no started Workflow Task
-	// has carried yet, so it scheduled no task of its own.
-	Folded        bool `protobuf:"varint,2,opt,name=folded,proto3" json:"folded,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WakeWorkflowExecutionResponse) Reset() {
-	*x = WakeWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[37]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WakeWorkflowExecutionResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WakeWorkflowExecutionResponse) ProtoMessage() {}
-
-func (x *WakeWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[37]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WakeWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
-func (*WakeWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{37}
-}
-
-func (x *WakeWorkflowExecutionResponse) GetRunId() string {
-	if x != nil {
-		return x.RunId
-	}
-	return ""
-}
-
-func (x *WakeWorkflowExecutionResponse) GetFolded() bool {
-	if x != nil {
-		return x.Folded
-	}
-	return false
-}
-
 type SignalWithStartWorkflowExecutionRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "with" is needed here. --)
+	//     aip.dev/not-precedent: "with" is needed here. --)
 	SignalWithStartRequest *v1.SignalWithStartWorkflowExecutionRequest `protobuf:"bytes,2,opt,name=signal_with_start_request,json=signalWithStartRequest,proto3" json:"signal_with_start_request,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
@@ -3268,7 +3140,7 @@ type SignalWithStartWorkflowExecutionRequest struct {
 
 func (x *SignalWithStartWorkflowExecutionRequest) Reset() {
 	*x = SignalWithStartWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[38]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3280,7 +3152,7 @@ func (x *SignalWithStartWorkflowExecutionRequest) String() string {
 func (*SignalWithStartWorkflowExecutionRequest) ProtoMessage() {}
 
 func (x *SignalWithStartWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[38]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3293,7 +3165,7 @@ func (x *SignalWithStartWorkflowExecutionRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use SignalWithStartWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
 func (*SignalWithStartWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{38}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SignalWithStartWorkflowExecutionRequest) GetNamespaceId() string {
@@ -3325,7 +3197,7 @@ type SignalWithStartWorkflowExecutionResponse struct {
 
 func (x *SignalWithStartWorkflowExecutionResponse) Reset() {
 	*x = SignalWithStartWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[39]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3337,7 +3209,7 @@ func (x *SignalWithStartWorkflowExecutionResponse) String() string {
 func (*SignalWithStartWorkflowExecutionResponse) ProtoMessage() {}
 
 func (x *SignalWithStartWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[39]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3350,7 +3222,7 @@ func (x *SignalWithStartWorkflowExecutionResponse) ProtoReflect() protoreflect.M
 
 // Deprecated: Use SignalWithStartWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
 func (*SignalWithStartWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{39}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *SignalWithStartWorkflowExecutionResponse) GetRunId() string {
@@ -3392,7 +3264,7 @@ type RemoveSignalMutableStateRequest struct {
 
 func (x *RemoveSignalMutableStateRequest) Reset() {
 	*x = RemoveSignalMutableStateRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[40]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3404,7 +3276,7 @@ func (x *RemoveSignalMutableStateRequest) String() string {
 func (*RemoveSignalMutableStateRequest) ProtoMessage() {}
 
 func (x *RemoveSignalMutableStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[40]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3417,7 +3289,7 @@ func (x *RemoveSignalMutableStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveSignalMutableStateRequest.ProtoReflect.Descriptor instead.
 func (*RemoveSignalMutableStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{40}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *RemoveSignalMutableStateRequest) GetNamespaceId() string {
@@ -3449,7 +3321,7 @@ type RemoveSignalMutableStateResponse struct {
 
 func (x *RemoveSignalMutableStateResponse) Reset() {
 	*x = RemoveSignalMutableStateResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[41]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3461,7 +3333,7 @@ func (x *RemoveSignalMutableStateResponse) String() string {
 func (*RemoveSignalMutableStateResponse) ProtoMessage() {}
 
 func (x *RemoveSignalMutableStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[41]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3474,7 +3346,7 @@ func (x *RemoveSignalMutableStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveSignalMutableStateResponse.ProtoReflect.Descriptor instead.
 func (*RemoveSignalMutableStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{41}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{39}
 }
 
 type TerminateWorkflowExecutionRequest struct {
@@ -3489,7 +3361,7 @@ type TerminateWorkflowExecutionRequest struct {
 
 func (x *TerminateWorkflowExecutionRequest) Reset() {
 	*x = TerminateWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[42]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3501,7 +3373,7 @@ func (x *TerminateWorkflowExecutionRequest) String() string {
 func (*TerminateWorkflowExecutionRequest) ProtoMessage() {}
 
 func (x *TerminateWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[42]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3514,7 +3386,7 @@ func (x *TerminateWorkflowExecutionRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use TerminateWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
 func (*TerminateWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{42}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *TerminateWorkflowExecutionRequest) GetNamespaceId() string {
@@ -3553,7 +3425,7 @@ type TerminateWorkflowExecutionResponse struct {
 
 func (x *TerminateWorkflowExecutionResponse) Reset() {
 	*x = TerminateWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[43]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3565,7 +3437,7 @@ func (x *TerminateWorkflowExecutionResponse) String() string {
 func (*TerminateWorkflowExecutionResponse) ProtoMessage() {}
 
 func (x *TerminateWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[43]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3578,7 +3450,7 @@ func (x *TerminateWorkflowExecutionResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use TerminateWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
 func (*TerminateWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{43}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{41}
 }
 
 type DeleteWorkflowExecutionRequest struct {
@@ -3592,7 +3464,7 @@ type DeleteWorkflowExecutionRequest struct {
 
 func (x *DeleteWorkflowExecutionRequest) Reset() {
 	*x = DeleteWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[44]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3604,7 +3476,7 @@ func (x *DeleteWorkflowExecutionRequest) String() string {
 func (*DeleteWorkflowExecutionRequest) ProtoMessage() {}
 
 func (x *DeleteWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[44]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3617,7 +3489,7 @@ func (x *DeleteWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{44}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *DeleteWorkflowExecutionRequest) GetNamespaceId() string {
@@ -3649,7 +3521,7 @@ type DeleteWorkflowExecutionResponse struct {
 
 func (x *DeleteWorkflowExecutionResponse) Reset() {
 	*x = DeleteWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[45]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3661,7 +3533,7 @@ func (x *DeleteWorkflowExecutionResponse) String() string {
 func (*DeleteWorkflowExecutionResponse) ProtoMessage() {}
 
 func (x *DeleteWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[45]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3674,7 +3546,7 @@ func (x *DeleteWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
 func (*DeleteWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{45}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{43}
 }
 
 type ResetWorkflowExecutionRequest struct {
@@ -3687,7 +3559,7 @@ type ResetWorkflowExecutionRequest struct {
 
 func (x *ResetWorkflowExecutionRequest) Reset() {
 	*x = ResetWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[46]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3699,7 +3571,7 @@ func (x *ResetWorkflowExecutionRequest) String() string {
 func (*ResetWorkflowExecutionRequest) ProtoMessage() {}
 
 func (x *ResetWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[46]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3712,7 +3584,7 @@ func (x *ResetWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
 func (*ResetWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{46}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ResetWorkflowExecutionRequest) GetNamespaceId() string {
@@ -3738,7 +3610,7 @@ type ResetWorkflowExecutionResponse struct {
 
 func (x *ResetWorkflowExecutionResponse) Reset() {
 	*x = ResetWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[47]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3750,7 +3622,7 @@ func (x *ResetWorkflowExecutionResponse) String() string {
 func (*ResetWorkflowExecutionResponse) ProtoMessage() {}
 
 func (x *ResetWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[47]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3763,7 +3635,7 @@ func (x *ResetWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
 func (*ResetWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{47}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ResetWorkflowExecutionResponse) GetRunId() string {
@@ -3786,7 +3658,7 @@ type RequestCancelWorkflowExecutionRequest struct {
 
 func (x *RequestCancelWorkflowExecutionRequest) Reset() {
 	*x = RequestCancelWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[48]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3798,7 +3670,7 @@ func (x *RequestCancelWorkflowExecutionRequest) String() string {
 func (*RequestCancelWorkflowExecutionRequest) ProtoMessage() {}
 
 func (x *RequestCancelWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[48]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3811,7 +3683,7 @@ func (x *RequestCancelWorkflowExecutionRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use RequestCancelWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
 func (*RequestCancelWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{48}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *RequestCancelWorkflowExecutionRequest) GetNamespaceId() string {
@@ -3857,7 +3729,7 @@ type RequestCancelWorkflowExecutionResponse struct {
 
 func (x *RequestCancelWorkflowExecutionResponse) Reset() {
 	*x = RequestCancelWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[49]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3869,7 +3741,7 @@ func (x *RequestCancelWorkflowExecutionResponse) String() string {
 func (*RequestCancelWorkflowExecutionResponse) ProtoMessage() {}
 
 func (x *RequestCancelWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[49]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3882,7 +3754,7 @@ func (x *RequestCancelWorkflowExecutionResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use RequestCancelWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
 func (*RequestCancelWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{49}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{47}
 }
 
 type ScheduleWorkflowTaskRequest struct {
@@ -3898,7 +3770,7 @@ type ScheduleWorkflowTaskRequest struct {
 
 func (x *ScheduleWorkflowTaskRequest) Reset() {
 	*x = ScheduleWorkflowTaskRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[50]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3910,7 +3782,7 @@ func (x *ScheduleWorkflowTaskRequest) String() string {
 func (*ScheduleWorkflowTaskRequest) ProtoMessage() {}
 
 func (x *ScheduleWorkflowTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[50]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3923,7 +3795,7 @@ func (x *ScheduleWorkflowTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScheduleWorkflowTaskRequest.ProtoReflect.Descriptor instead.
 func (*ScheduleWorkflowTaskRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{50}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ScheduleWorkflowTaskRequest) GetNamespaceId() string {
@@ -3969,7 +3841,7 @@ type ScheduleWorkflowTaskResponse struct {
 
 func (x *ScheduleWorkflowTaskResponse) Reset() {
 	*x = ScheduleWorkflowTaskResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[51]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3981,7 +3853,7 @@ func (x *ScheduleWorkflowTaskResponse) String() string {
 func (*ScheduleWorkflowTaskResponse) ProtoMessage() {}
 
 func (x *ScheduleWorkflowTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[51]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3994,7 +3866,7 @@ func (x *ScheduleWorkflowTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScheduleWorkflowTaskResponse.ProtoReflect.Descriptor instead.
 func (*ScheduleWorkflowTaskResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{51}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{49}
 }
 
 type VerifyFirstWorkflowTaskScheduledRequest struct {
@@ -4009,7 +3881,7 @@ type VerifyFirstWorkflowTaskScheduledRequest struct {
 
 func (x *VerifyFirstWorkflowTaskScheduledRequest) Reset() {
 	*x = VerifyFirstWorkflowTaskScheduledRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[52]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4021,7 +3893,7 @@ func (x *VerifyFirstWorkflowTaskScheduledRequest) String() string {
 func (*VerifyFirstWorkflowTaskScheduledRequest) ProtoMessage() {}
 
 func (x *VerifyFirstWorkflowTaskScheduledRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[52]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4034,7 +3906,7 @@ func (x *VerifyFirstWorkflowTaskScheduledRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use VerifyFirstWorkflowTaskScheduledRequest.ProtoReflect.Descriptor instead.
 func (*VerifyFirstWorkflowTaskScheduledRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{52}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *VerifyFirstWorkflowTaskScheduledRequest) GetNamespaceId() string {
@@ -4073,7 +3945,7 @@ type VerifyFirstWorkflowTaskScheduledResponse struct {
 
 func (x *VerifyFirstWorkflowTaskScheduledResponse) Reset() {
 	*x = VerifyFirstWorkflowTaskScheduledResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[53]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4085,7 +3957,7 @@ func (x *VerifyFirstWorkflowTaskScheduledResponse) String() string {
 func (*VerifyFirstWorkflowTaskScheduledResponse) ProtoMessage() {}
 
 func (x *VerifyFirstWorkflowTaskScheduledResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[53]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4098,7 +3970,7 @@ func (x *VerifyFirstWorkflowTaskScheduledResponse) ProtoReflect() protoreflect.M
 
 // Deprecated: Use VerifyFirstWorkflowTaskScheduledResponse.ProtoReflect.Descriptor instead.
 func (*VerifyFirstWorkflowTaskScheduledResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{53}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{51}
 }
 
 // *
@@ -4123,7 +3995,7 @@ type RecordChildExecutionCompletedRequest struct {
 
 func (x *RecordChildExecutionCompletedRequest) Reset() {
 	*x = RecordChildExecutionCompletedRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[54]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4135,7 +4007,7 @@ func (x *RecordChildExecutionCompletedRequest) String() string {
 func (*RecordChildExecutionCompletedRequest) ProtoMessage() {}
 
 func (x *RecordChildExecutionCompletedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[54]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4148,7 +4020,7 @@ func (x *RecordChildExecutionCompletedRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use RecordChildExecutionCompletedRequest.ProtoReflect.Descriptor instead.
 func (*RecordChildExecutionCompletedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{54}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *RecordChildExecutionCompletedRequest) GetNamespaceId() string {
@@ -4215,7 +4087,7 @@ type RecordChildExecutionCompletedResponse struct {
 
 func (x *RecordChildExecutionCompletedResponse) Reset() {
 	*x = RecordChildExecutionCompletedResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[55]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4227,7 +4099,7 @@ func (x *RecordChildExecutionCompletedResponse) String() string {
 func (*RecordChildExecutionCompletedResponse) ProtoMessage() {}
 
 func (x *RecordChildExecutionCompletedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[55]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4240,7 +4112,7 @@ func (x *RecordChildExecutionCompletedResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use RecordChildExecutionCompletedResponse.ProtoReflect.Descriptor instead.
 func (*RecordChildExecutionCompletedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{55}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{53}
 }
 
 type VerifyChildExecutionCompletionRecordedRequest struct {
@@ -4258,7 +4130,7 @@ type VerifyChildExecutionCompletionRecordedRequest struct {
 
 func (x *VerifyChildExecutionCompletionRecordedRequest) Reset() {
 	*x = VerifyChildExecutionCompletionRecordedRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[56]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4270,7 +4142,7 @@ func (x *VerifyChildExecutionCompletionRecordedRequest) String() string {
 func (*VerifyChildExecutionCompletionRecordedRequest) ProtoMessage() {}
 
 func (x *VerifyChildExecutionCompletionRecordedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[56]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4283,7 +4155,7 @@ func (x *VerifyChildExecutionCompletionRecordedRequest) ProtoReflect() protorefl
 
 // Deprecated: Use VerifyChildExecutionCompletionRecordedRequest.ProtoReflect.Descriptor instead.
 func (*VerifyChildExecutionCompletionRecordedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{56}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *VerifyChildExecutionCompletionRecordedRequest) GetNamespaceId() string {
@@ -4343,7 +4215,7 @@ type VerifyChildExecutionCompletionRecordedResponse struct {
 
 func (x *VerifyChildExecutionCompletionRecordedResponse) Reset() {
 	*x = VerifyChildExecutionCompletionRecordedResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[57]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4355,7 +4227,7 @@ func (x *VerifyChildExecutionCompletionRecordedResponse) String() string {
 func (*VerifyChildExecutionCompletionRecordedResponse) ProtoMessage() {}
 
 func (x *VerifyChildExecutionCompletionRecordedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[57]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4368,7 +4240,7 @@ func (x *VerifyChildExecutionCompletionRecordedResponse) ProtoReflect() protoref
 
 // Deprecated: Use VerifyChildExecutionCompletionRecordedResponse.ProtoReflect.Descriptor instead.
 func (*VerifyChildExecutionCompletionRecordedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{57}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{55}
 }
 
 type DescribeWorkflowExecutionRequest struct {
@@ -4381,7 +4253,7 @@ type DescribeWorkflowExecutionRequest struct {
 
 func (x *DescribeWorkflowExecutionRequest) Reset() {
 	*x = DescribeWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[58]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4393,7 +4265,7 @@ func (x *DescribeWorkflowExecutionRequest) String() string {
 func (*DescribeWorkflowExecutionRequest) ProtoMessage() {}
 
 func (x *DescribeWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[58]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4406,7 +4278,7 @@ func (x *DescribeWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
 func (*DescribeWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{58}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *DescribeWorkflowExecutionRequest) GetNamespaceId() string {
@@ -4439,7 +4311,7 @@ type DescribeWorkflowExecutionResponse struct {
 
 func (x *DescribeWorkflowExecutionResponse) Reset() {
 	*x = DescribeWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[59]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4451,7 +4323,7 @@ func (x *DescribeWorkflowExecutionResponse) String() string {
 func (*DescribeWorkflowExecutionResponse) ProtoMessage() {}
 
 func (x *DescribeWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[59]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4464,7 +4336,7 @@ func (x *DescribeWorkflowExecutionResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use DescribeWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
 func (*DescribeWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{59}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *DescribeWorkflowExecutionResponse) GetExecutionConfig() *v15.WorkflowExecutionConfig {
@@ -4539,7 +4411,7 @@ type ReplicateEventsV2Request struct {
 
 func (x *ReplicateEventsV2Request) Reset() {
 	*x = ReplicateEventsV2Request{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[60]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4551,7 +4423,7 @@ func (x *ReplicateEventsV2Request) String() string {
 func (*ReplicateEventsV2Request) ProtoMessage() {}
 
 func (x *ReplicateEventsV2Request) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[60]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4564,7 +4436,7 @@ func (x *ReplicateEventsV2Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplicateEventsV2Request.ProtoReflect.Descriptor instead.
 func (*ReplicateEventsV2Request) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{60}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ReplicateEventsV2Request) GetNamespaceId() string {
@@ -4624,7 +4496,7 @@ type ReplicateEventsV2Response struct {
 
 func (x *ReplicateEventsV2Response) Reset() {
 	*x = ReplicateEventsV2Response{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[61]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4636,7 +4508,7 @@ func (x *ReplicateEventsV2Response) String() string {
 func (*ReplicateEventsV2Response) ProtoMessage() {}
 
 func (x *ReplicateEventsV2Response) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[61]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4649,7 +4521,7 @@ func (x *ReplicateEventsV2Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplicateEventsV2Response.ProtoReflect.Descriptor instead.
 func (*ReplicateEventsV2Response) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{61}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{59}
 }
 
 type ReplicateWorkflowStateRequest struct {
@@ -4665,7 +4537,7 @@ type ReplicateWorkflowStateRequest struct {
 
 func (x *ReplicateWorkflowStateRequest) Reset() {
 	*x = ReplicateWorkflowStateRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[62]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4677,7 +4549,7 @@ func (x *ReplicateWorkflowStateRequest) String() string {
 func (*ReplicateWorkflowStateRequest) ProtoMessage() {}
 
 func (x *ReplicateWorkflowStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[62]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4690,7 +4562,7 @@ func (x *ReplicateWorkflowStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplicateWorkflowStateRequest.ProtoReflect.Descriptor instead.
 func (*ReplicateWorkflowStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{62}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ReplicateWorkflowStateRequest) GetWorkflowState() *v111.WorkflowMutableState {
@@ -4736,7 +4608,7 @@ type ReplicateWorkflowStateResponse struct {
 
 func (x *ReplicateWorkflowStateResponse) Reset() {
 	*x = ReplicateWorkflowStateResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[63]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4748,7 +4620,7 @@ func (x *ReplicateWorkflowStateResponse) String() string {
 func (*ReplicateWorkflowStateResponse) ProtoMessage() {}
 
 func (x *ReplicateWorkflowStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[63]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4761,7 +4633,7 @@ func (x *ReplicateWorkflowStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplicateWorkflowStateResponse.ProtoReflect.Descriptor instead.
 func (*ReplicateWorkflowStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{63}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{61}
 }
 
 type SyncShardStatusRequest struct {
@@ -4775,7 +4647,7 @@ type SyncShardStatusRequest struct {
 
 func (x *SyncShardStatusRequest) Reset() {
 	*x = SyncShardStatusRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[64]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4787,7 +4659,7 @@ func (x *SyncShardStatusRequest) String() string {
 func (*SyncShardStatusRequest) ProtoMessage() {}
 
 func (x *SyncShardStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[64]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4800,7 +4672,7 @@ func (x *SyncShardStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncShardStatusRequest.ProtoReflect.Descriptor instead.
 func (*SyncShardStatusRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{64}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *SyncShardStatusRequest) GetSourceCluster() string {
@@ -4832,7 +4704,7 @@ type SyncShardStatusResponse struct {
 
 func (x *SyncShardStatusResponse) Reset() {
 	*x = SyncShardStatusResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[65]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4844,7 +4716,7 @@ func (x *SyncShardStatusResponse) String() string {
 func (*SyncShardStatusResponse) ProtoMessage() {}
 
 func (x *SyncShardStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[65]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4857,7 +4729,7 @@ func (x *SyncShardStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncShardStatusResponse.ProtoReflect.Descriptor instead.
 func (*SyncShardStatusResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{65}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{63}
 }
 
 type SyncActivityRequest struct {
@@ -4901,7 +4773,7 @@ type SyncActivityRequest struct {
 
 func (x *SyncActivityRequest) Reset() {
 	*x = SyncActivityRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[66]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4913,7 +4785,7 @@ func (x *SyncActivityRequest) String() string {
 func (*SyncActivityRequest) ProtoMessage() {}
 
 func (x *SyncActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[66]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4926,7 +4798,7 @@ func (x *SyncActivityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncActivityRequest.ProtoReflect.Descriptor instead.
 func (*SyncActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{66}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *SyncActivityRequest) GetNamespaceId() string {
@@ -5123,7 +4995,7 @@ type SyncActivitiesRequest struct {
 
 func (x *SyncActivitiesRequest) Reset() {
 	*x = SyncActivitiesRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[67]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5135,7 +5007,7 @@ func (x *SyncActivitiesRequest) String() string {
 func (*SyncActivitiesRequest) ProtoMessage() {}
 
 func (x *SyncActivitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[67]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5148,7 +5020,7 @@ func (x *SyncActivitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncActivitiesRequest.ProtoReflect.Descriptor instead.
 func (*SyncActivitiesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{67}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *SyncActivitiesRequest) GetNamespaceId() string {
@@ -5216,7 +5088,7 @@ type ActivitySyncInfo struct {
 
 func (x *ActivitySyncInfo) Reset() {
 	*x = ActivitySyncInfo{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[68]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5228,7 +5100,7 @@ func (x *ActivitySyncInfo) String() string {
 func (*ActivitySyncInfo) ProtoMessage() {}
 
 func (x *ActivitySyncInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[68]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5241,7 +5113,7 @@ func (x *ActivitySyncInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivitySyncInfo.ProtoReflect.Descriptor instead.
 func (*ActivitySyncInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{68}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *ActivitySyncInfo) GetVersion() int64 {
@@ -5406,7 +5278,7 @@ type SyncActivityResponse struct {
 
 func (x *SyncActivityResponse) Reset() {
 	*x = SyncActivityResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[69]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5418,7 +5290,7 @@ func (x *SyncActivityResponse) String() string {
 func (*SyncActivityResponse) ProtoMessage() {}
 
 func (x *SyncActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[69]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5431,7 +5303,7 @@ func (x *SyncActivityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncActivityResponse.ProtoReflect.Descriptor instead.
 func (*SyncActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{69}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{67}
 }
 
 type DescribeMutableStateRequest struct {
@@ -5447,7 +5319,7 @@ type DescribeMutableStateRequest struct {
 
 func (x *DescribeMutableStateRequest) Reset() {
 	*x = DescribeMutableStateRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[70]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5459,7 +5331,7 @@ func (x *DescribeMutableStateRequest) String() string {
 func (*DescribeMutableStateRequest) ProtoMessage() {}
 
 func (x *DescribeMutableStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[70]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5472,7 +5344,7 @@ func (x *DescribeMutableStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeMutableStateRequest.ProtoReflect.Descriptor instead.
 func (*DescribeMutableStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{70}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *DescribeMutableStateRequest) GetNamespaceId() string {
@@ -5516,7 +5388,7 @@ type DescribeMutableStateResponse struct {
 
 func (x *DescribeMutableStateResponse) Reset() {
 	*x = DescribeMutableStateResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[71]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5528,7 +5400,7 @@ func (x *DescribeMutableStateResponse) String() string {
 func (*DescribeMutableStateResponse) ProtoMessage() {}
 
 func (x *DescribeMutableStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[71]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5541,7 +5413,7 @@ func (x *DescribeMutableStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeMutableStateResponse.ProtoReflect.Descriptor instead.
 func (*DescribeMutableStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{71}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *DescribeMutableStateResponse) GetCacheMutableState() *v111.WorkflowMutableState {
@@ -5572,7 +5444,7 @@ type DescribeHistoryHostRequest struct {
 
 func (x *DescribeHistoryHostRequest) Reset() {
 	*x = DescribeHistoryHostRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[72]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5584,7 +5456,7 @@ func (x *DescribeHistoryHostRequest) String() string {
 func (*DescribeHistoryHostRequest) ProtoMessage() {}
 
 func (x *DescribeHistoryHostRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[72]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5597,7 +5469,7 @@ func (x *DescribeHistoryHostRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeHistoryHostRequest.ProtoReflect.Descriptor instead.
 func (*DescribeHistoryHostRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{72}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *DescribeHistoryHostRequest) GetHostAddress() string {
@@ -5640,7 +5512,7 @@ type DescribeHistoryHostResponse struct {
 
 func (x *DescribeHistoryHostResponse) Reset() {
 	*x = DescribeHistoryHostResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[73]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5652,7 +5524,7 @@ func (x *DescribeHistoryHostResponse) String() string {
 func (*DescribeHistoryHostResponse) ProtoMessage() {}
 
 func (x *DescribeHistoryHostResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[73]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5665,7 +5537,7 @@ func (x *DescribeHistoryHostResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeHistoryHostResponse.ProtoReflect.Descriptor instead.
 func (*DescribeHistoryHostResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{73}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *DescribeHistoryHostResponse) GetShardsNumber() int32 {
@@ -5705,7 +5577,7 @@ type CloseShardRequest struct {
 
 func (x *CloseShardRequest) Reset() {
 	*x = CloseShardRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[74]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5717,7 +5589,7 @@ func (x *CloseShardRequest) String() string {
 func (*CloseShardRequest) ProtoMessage() {}
 
 func (x *CloseShardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[74]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5730,7 +5602,7 @@ func (x *CloseShardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseShardRequest.ProtoReflect.Descriptor instead.
 func (*CloseShardRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{74}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *CloseShardRequest) GetShardId() int32 {
@@ -5748,7 +5620,7 @@ type CloseShardResponse struct {
 
 func (x *CloseShardResponse) Reset() {
 	*x = CloseShardResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[75]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5760,7 +5632,7 @@ func (x *CloseShardResponse) String() string {
 func (*CloseShardResponse) ProtoMessage() {}
 
 func (x *CloseShardResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[75]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5773,7 +5645,7 @@ func (x *CloseShardResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseShardResponse.ProtoReflect.Descriptor instead.
 func (*CloseShardResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{75}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{73}
 }
 
 type GetShardRequest struct {
@@ -5785,7 +5657,7 @@ type GetShardRequest struct {
 
 func (x *GetShardRequest) Reset() {
 	*x = GetShardRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[76]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5797,7 +5669,7 @@ func (x *GetShardRequest) String() string {
 func (*GetShardRequest) ProtoMessage() {}
 
 func (x *GetShardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[76]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5810,7 +5682,7 @@ func (x *GetShardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetShardRequest.ProtoReflect.Descriptor instead.
 func (*GetShardRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{76}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *GetShardRequest) GetShardId() int32 {
@@ -5829,7 +5701,7 @@ type GetShardResponse struct {
 
 func (x *GetShardResponse) Reset() {
 	*x = GetShardResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[77]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5841,7 +5713,7 @@ func (x *GetShardResponse) String() string {
 func (*GetShardResponse) ProtoMessage() {}
 
 func (x *GetShardResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[77]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5854,7 +5726,7 @@ func (x *GetShardResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetShardResponse.ProtoReflect.Descriptor instead.
 func (*GetShardResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{77}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *GetShardResponse) GetShardInfo() *v111.ShardInfo {
@@ -5877,7 +5749,7 @@ type RemoveTaskRequest struct {
 
 func (x *RemoveTaskRequest) Reset() {
 	*x = RemoveTaskRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[78]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5889,7 +5761,7 @@ func (x *RemoveTaskRequest) String() string {
 func (*RemoveTaskRequest) ProtoMessage() {}
 
 func (x *RemoveTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[78]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5902,7 +5774,7 @@ func (x *RemoveTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTaskRequest.ProtoReflect.Descriptor instead.
 func (*RemoveTaskRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{78}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *RemoveTaskRequest) GetShardId() int32 {
@@ -5941,7 +5813,7 @@ type RemoveTaskResponse struct {
 
 func (x *RemoveTaskResponse) Reset() {
 	*x = RemoveTaskResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[79]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5953,7 +5825,7 @@ func (x *RemoveTaskResponse) String() string {
 func (*RemoveTaskResponse) ProtoMessage() {}
 
 func (x *RemoveTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[79]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5966,7 +5838,7 @@ func (x *RemoveTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveTaskResponse.ProtoReflect.Descriptor instead.
 func (*RemoveTaskResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{79}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{77}
 }
 
 type GetReplicationMessagesRequest struct {
@@ -5979,7 +5851,7 @@ type GetReplicationMessagesRequest struct {
 
 func (x *GetReplicationMessagesRequest) Reset() {
 	*x = GetReplicationMessagesRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[80]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5991,7 +5863,7 @@ func (x *GetReplicationMessagesRequest) String() string {
 func (*GetReplicationMessagesRequest) ProtoMessage() {}
 
 func (x *GetReplicationMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[80]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6004,7 +5876,7 @@ func (x *GetReplicationMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReplicationMessagesRequest.ProtoReflect.Descriptor instead.
 func (*GetReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{80}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *GetReplicationMessagesRequest) GetTokens() []*v118.ReplicationToken {
@@ -6030,7 +5902,7 @@ type GetReplicationMessagesResponse struct {
 
 func (x *GetReplicationMessagesResponse) Reset() {
 	*x = GetReplicationMessagesResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[81]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6042,7 +5914,7 @@ func (x *GetReplicationMessagesResponse) String() string {
 func (*GetReplicationMessagesResponse) ProtoMessage() {}
 
 func (x *GetReplicationMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[81]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6055,7 +5927,7 @@ func (x *GetReplicationMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReplicationMessagesResponse.ProtoReflect.Descriptor instead.
 func (*GetReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{81}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *GetReplicationMessagesResponse) GetShardMessages() map[int32]*v118.ReplicationMessages {
@@ -6074,7 +5946,7 @@ type GetDLQReplicationMessagesRequest struct {
 
 func (x *GetDLQReplicationMessagesRequest) Reset() {
 	*x = GetDLQReplicationMessagesRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[82]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6086,7 +5958,7 @@ func (x *GetDLQReplicationMessagesRequest) String() string {
 func (*GetDLQReplicationMessagesRequest) ProtoMessage() {}
 
 func (x *GetDLQReplicationMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[82]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6099,7 +5971,7 @@ func (x *GetDLQReplicationMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDLQReplicationMessagesRequest.ProtoReflect.Descriptor instead.
 func (*GetDLQReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{82}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *GetDLQReplicationMessagesRequest) GetTaskInfos() []*v118.ReplicationTaskInfo {
@@ -6118,7 +5990,7 @@ type GetDLQReplicationMessagesResponse struct {
 
 func (x *GetDLQReplicationMessagesResponse) Reset() {
 	*x = GetDLQReplicationMessagesResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[83]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6130,7 +6002,7 @@ func (x *GetDLQReplicationMessagesResponse) String() string {
 func (*GetDLQReplicationMessagesResponse) ProtoMessage() {}
 
 func (x *GetDLQReplicationMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[83]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6143,7 +6015,7 @@ func (x *GetDLQReplicationMessagesResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetDLQReplicationMessagesResponse.ProtoReflect.Descriptor instead.
 func (*GetDLQReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{83}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *GetDLQReplicationMessagesResponse) GetReplicationTasks() []*v118.ReplicationTask {
@@ -6163,7 +6035,7 @@ type QueryWorkflowRequest struct {
 
 func (x *QueryWorkflowRequest) Reset() {
 	*x = QueryWorkflowRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[84]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6175,7 +6047,7 @@ func (x *QueryWorkflowRequest) String() string {
 func (*QueryWorkflowRequest) ProtoMessage() {}
 
 func (x *QueryWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[84]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6188,7 +6060,7 @@ func (x *QueryWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*QueryWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{84}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *QueryWorkflowRequest) GetNamespaceId() string {
@@ -6214,7 +6086,7 @@ type QueryWorkflowResponse struct {
 
 func (x *QueryWorkflowResponse) Reset() {
 	*x = QueryWorkflowResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[85]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6226,7 +6098,7 @@ func (x *QueryWorkflowResponse) String() string {
 func (*QueryWorkflowResponse) ProtoMessage() {}
 
 func (x *QueryWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[85]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6239,7 +6111,7 @@ func (x *QueryWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*QueryWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{85}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *QueryWorkflowResponse) GetResponse() *v1.QueryWorkflowResponse {
@@ -6259,7 +6131,7 @@ type ReapplyEventsRequest struct {
 
 func (x *ReapplyEventsRequest) Reset() {
 	*x = ReapplyEventsRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[86]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6271,7 +6143,7 @@ func (x *ReapplyEventsRequest) String() string {
 func (*ReapplyEventsRequest) ProtoMessage() {}
 
 func (x *ReapplyEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[86]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6284,7 +6156,7 @@ func (x *ReapplyEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReapplyEventsRequest.ProtoReflect.Descriptor instead.
 func (*ReapplyEventsRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{86}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *ReapplyEventsRequest) GetNamespaceId() string {
@@ -6309,7 +6181,7 @@ type ReapplyEventsResponse struct {
 
 func (x *ReapplyEventsResponse) Reset() {
 	*x = ReapplyEventsResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[87]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6321,7 +6193,7 @@ func (x *ReapplyEventsResponse) String() string {
 func (*ReapplyEventsResponse) ProtoMessage() {}
 
 func (x *ReapplyEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[87]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6334,7 +6206,7 @@ func (x *ReapplyEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReapplyEventsResponse.ProtoReflect.Descriptor instead.
 func (*ReapplyEventsResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{87}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{85}
 }
 
 type GetDLQMessagesRequest struct {
@@ -6351,7 +6223,7 @@ type GetDLQMessagesRequest struct {
 
 func (x *GetDLQMessagesRequest) Reset() {
 	*x = GetDLQMessagesRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[88]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6363,7 +6235,7 @@ func (x *GetDLQMessagesRequest) String() string {
 func (*GetDLQMessagesRequest) ProtoMessage() {}
 
 func (x *GetDLQMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[88]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6376,7 +6248,7 @@ func (x *GetDLQMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDLQMessagesRequest.ProtoReflect.Descriptor instead.
 func (*GetDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{88}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *GetDLQMessagesRequest) GetType() v113.DeadLetterQueueType {
@@ -6433,7 +6305,7 @@ type GetDLQMessagesResponse struct {
 
 func (x *GetDLQMessagesResponse) Reset() {
 	*x = GetDLQMessagesResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[89]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6445,7 +6317,7 @@ func (x *GetDLQMessagesResponse) String() string {
 func (*GetDLQMessagesResponse) ProtoMessage() {}
 
 func (x *GetDLQMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[89]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6458,7 +6330,7 @@ func (x *GetDLQMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDLQMessagesResponse.ProtoReflect.Descriptor instead.
 func (*GetDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{89}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *GetDLQMessagesResponse) GetType() v113.DeadLetterQueueType {
@@ -6501,7 +6373,7 @@ type PurgeDLQMessagesRequest struct {
 
 func (x *PurgeDLQMessagesRequest) Reset() {
 	*x = PurgeDLQMessagesRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[90]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6513,7 +6385,7 @@ func (x *PurgeDLQMessagesRequest) String() string {
 func (*PurgeDLQMessagesRequest) ProtoMessage() {}
 
 func (x *PurgeDLQMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[90]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6526,7 +6398,7 @@ func (x *PurgeDLQMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeDLQMessagesRequest.ProtoReflect.Descriptor instead.
 func (*PurgeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{90}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *PurgeDLQMessagesRequest) GetType() v113.DeadLetterQueueType {
@@ -6565,7 +6437,7 @@ type PurgeDLQMessagesResponse struct {
 
 func (x *PurgeDLQMessagesResponse) Reset() {
 	*x = PurgeDLQMessagesResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[91]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6577,7 +6449,7 @@ func (x *PurgeDLQMessagesResponse) String() string {
 func (*PurgeDLQMessagesResponse) ProtoMessage() {}
 
 func (x *PurgeDLQMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[91]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6590,7 +6462,7 @@ func (x *PurgeDLQMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PurgeDLQMessagesResponse.ProtoReflect.Descriptor instead.
 func (*PurgeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{91}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{89}
 }
 
 type MergeDLQMessagesRequest struct {
@@ -6607,7 +6479,7 @@ type MergeDLQMessagesRequest struct {
 
 func (x *MergeDLQMessagesRequest) Reset() {
 	*x = MergeDLQMessagesRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[92]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6619,7 +6491,7 @@ func (x *MergeDLQMessagesRequest) String() string {
 func (*MergeDLQMessagesRequest) ProtoMessage() {}
 
 func (x *MergeDLQMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[92]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6632,7 +6504,7 @@ func (x *MergeDLQMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MergeDLQMessagesRequest.ProtoReflect.Descriptor instead.
 func (*MergeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{92}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *MergeDLQMessagesRequest) GetType() v113.DeadLetterQueueType {
@@ -6686,7 +6558,7 @@ type MergeDLQMessagesResponse struct {
 
 func (x *MergeDLQMessagesResponse) Reset() {
 	*x = MergeDLQMessagesResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[93]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6698,7 +6570,7 @@ func (x *MergeDLQMessagesResponse) String() string {
 func (*MergeDLQMessagesResponse) ProtoMessage() {}
 
 func (x *MergeDLQMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[93]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6711,7 +6583,7 @@ func (x *MergeDLQMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MergeDLQMessagesResponse.ProtoReflect.Descriptor instead.
 func (*MergeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{93}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *MergeDLQMessagesResponse) GetNextPageToken() []byte {
@@ -6733,7 +6605,7 @@ type RefreshWorkflowTasksRequest struct {
 
 func (x *RefreshWorkflowTasksRequest) Reset() {
 	*x = RefreshWorkflowTasksRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[94]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6745,7 +6617,7 @@ func (x *RefreshWorkflowTasksRequest) String() string {
 func (*RefreshWorkflowTasksRequest) ProtoMessage() {}
 
 func (x *RefreshWorkflowTasksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[94]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6758,7 +6630,7 @@ func (x *RefreshWorkflowTasksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshWorkflowTasksRequest.ProtoReflect.Descriptor instead.
 func (*RefreshWorkflowTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{94}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *RefreshWorkflowTasksRequest) GetNamespaceId() string {
@@ -6790,7 +6662,7 @@ type RefreshWorkflowTasksResponse struct {
 
 func (x *RefreshWorkflowTasksResponse) Reset() {
 	*x = RefreshWorkflowTasksResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[95]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6802,7 +6674,7 @@ func (x *RefreshWorkflowTasksResponse) String() string {
 func (*RefreshWorkflowTasksResponse) ProtoMessage() {}
 
 func (x *RefreshWorkflowTasksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[95]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6815,7 +6687,7 @@ func (x *RefreshWorkflowTasksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshWorkflowTasksResponse.ProtoReflect.Descriptor instead.
 func (*RefreshWorkflowTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{95}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{93}
 }
 
 type GenerateLastHistoryReplicationTasksRequest struct {
@@ -6831,7 +6703,7 @@ type GenerateLastHistoryReplicationTasksRequest struct {
 
 func (x *GenerateLastHistoryReplicationTasksRequest) Reset() {
 	*x = GenerateLastHistoryReplicationTasksRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[96]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6843,7 +6715,7 @@ func (x *GenerateLastHistoryReplicationTasksRequest) String() string {
 func (*GenerateLastHistoryReplicationTasksRequest) ProtoMessage() {}
 
 func (x *GenerateLastHistoryReplicationTasksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[96]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6856,7 +6728,7 @@ func (x *GenerateLastHistoryReplicationTasksRequest) ProtoReflect() protoreflect
 
 // Deprecated: Use GenerateLastHistoryReplicationTasksRequest.ProtoReflect.Descriptor instead.
 func (*GenerateLastHistoryReplicationTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{96}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) GetNamespaceId() string {
@@ -6897,7 +6769,7 @@ type GenerateLastHistoryReplicationTasksResponse struct {
 
 func (x *GenerateLastHistoryReplicationTasksResponse) Reset() {
 	*x = GenerateLastHistoryReplicationTasksResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[97]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6909,7 +6781,7 @@ func (x *GenerateLastHistoryReplicationTasksResponse) String() string {
 func (*GenerateLastHistoryReplicationTasksResponse) ProtoMessage() {}
 
 func (x *GenerateLastHistoryReplicationTasksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[97]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6922,7 +6794,7 @@ func (x *GenerateLastHistoryReplicationTasksResponse) ProtoReflect() protoreflec
 
 // Deprecated: Use GenerateLastHistoryReplicationTasksResponse.ProtoReflect.Descriptor instead.
 func (*GenerateLastHistoryReplicationTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{97}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *GenerateLastHistoryReplicationTasksResponse) GetStateTransitionCount() int64 {
@@ -6949,7 +6821,7 @@ type GetReplicationStatusRequest struct {
 
 func (x *GetReplicationStatusRequest) Reset() {
 	*x = GetReplicationStatusRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[98]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6961,7 +6833,7 @@ func (x *GetReplicationStatusRequest) String() string {
 func (*GetReplicationStatusRequest) ProtoMessage() {}
 
 func (x *GetReplicationStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[98]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6974,7 +6846,7 @@ func (x *GetReplicationStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReplicationStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetReplicationStatusRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{98}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *GetReplicationStatusRequest) GetRemoteClusters() []string {
@@ -6993,7 +6865,7 @@ type GetReplicationStatusResponse struct {
 
 func (x *GetReplicationStatusResponse) Reset() {
 	*x = GetReplicationStatusResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[99]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7005,7 +6877,7 @@ func (x *GetReplicationStatusResponse) String() string {
 func (*GetReplicationStatusResponse) ProtoMessage() {}
 
 func (x *GetReplicationStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[99]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7018,7 +6890,7 @@ func (x *GetReplicationStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReplicationStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetReplicationStatusResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{99}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *GetReplicationStatusResponse) GetShards() []*ShardReplicationStatus {
@@ -7044,7 +6916,7 @@ type ShardReplicationStatus struct {
 
 func (x *ShardReplicationStatus) Reset() {
 	*x = ShardReplicationStatus{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[100]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7056,7 +6928,7 @@ func (x *ShardReplicationStatus) String() string {
 func (*ShardReplicationStatus) ProtoMessage() {}
 
 func (x *ShardReplicationStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[100]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7069,7 +6941,7 @@ func (x *ShardReplicationStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShardReplicationStatus.ProtoReflect.Descriptor instead.
 func (*ShardReplicationStatus) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{100}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *ShardReplicationStatus) GetShardId() int32 {
@@ -7124,7 +6996,7 @@ type HandoverNamespaceInfo struct {
 
 func (x *HandoverNamespaceInfo) Reset() {
 	*x = HandoverNamespaceInfo{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[101]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7136,7 +7008,7 @@ func (x *HandoverNamespaceInfo) String() string {
 func (*HandoverNamespaceInfo) ProtoMessage() {}
 
 func (x *HandoverNamespaceInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[101]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7149,7 +7021,7 @@ func (x *HandoverNamespaceInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandoverNamespaceInfo.ProtoReflect.Descriptor instead.
 func (*HandoverNamespaceInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{101}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *HandoverNamespaceInfo) GetHandoverReplicationTaskId() int64 {
@@ -7171,7 +7043,7 @@ type ShardReplicationStatusPerCluster struct {
 
 func (x *ShardReplicationStatusPerCluster) Reset() {
 	*x = ShardReplicationStatusPerCluster{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[102]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7183,7 +7055,7 @@ func (x *ShardReplicationStatusPerCluster) String() string {
 func (*ShardReplicationStatusPerCluster) ProtoMessage() {}
 
 func (x *ShardReplicationStatusPerCluster) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[102]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7196,7 +7068,7 @@ func (x *ShardReplicationStatusPerCluster) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShardReplicationStatusPerCluster.ProtoReflect.Descriptor instead.
 func (*ShardReplicationStatusPerCluster) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{102}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *ShardReplicationStatusPerCluster) GetAckedTaskId() int64 {
@@ -7223,7 +7095,7 @@ type RebuildMutableStateRequest struct {
 
 func (x *RebuildMutableStateRequest) Reset() {
 	*x = RebuildMutableStateRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[103]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7235,7 +7107,7 @@ func (x *RebuildMutableStateRequest) String() string {
 func (*RebuildMutableStateRequest) ProtoMessage() {}
 
 func (x *RebuildMutableStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[103]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7248,7 +7120,7 @@ func (x *RebuildMutableStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebuildMutableStateRequest.ProtoReflect.Descriptor instead.
 func (*RebuildMutableStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{103}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *RebuildMutableStateRequest) GetNamespaceId() string {
@@ -7273,7 +7145,7 @@ type RebuildMutableStateResponse struct {
 
 func (x *RebuildMutableStateResponse) Reset() {
 	*x = RebuildMutableStateResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[104]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7285,7 +7157,7 @@ func (x *RebuildMutableStateResponse) String() string {
 func (*RebuildMutableStateResponse) ProtoMessage() {}
 
 func (x *RebuildMutableStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[104]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7298,7 +7170,7 @@ func (x *RebuildMutableStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebuildMutableStateResponse.ProtoReflect.Descriptor instead.
 func (*RebuildMutableStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{104}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{102}
 }
 
 type ImportWorkflowExecutionRequest struct {
@@ -7314,7 +7186,7 @@ type ImportWorkflowExecutionRequest struct {
 
 func (x *ImportWorkflowExecutionRequest) Reset() {
 	*x = ImportWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[105]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7326,7 +7198,7 @@ func (x *ImportWorkflowExecutionRequest) String() string {
 func (*ImportWorkflowExecutionRequest) ProtoMessage() {}
 
 func (x *ImportWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[105]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7339,7 +7211,7 @@ func (x *ImportWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
 func (*ImportWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{105}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *ImportWorkflowExecutionRequest) GetNamespaceId() string {
@@ -7387,7 +7259,7 @@ type ImportWorkflowExecutionResponse struct {
 
 func (x *ImportWorkflowExecutionResponse) Reset() {
 	*x = ImportWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[106]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7399,7 +7271,7 @@ func (x *ImportWorkflowExecutionResponse) String() string {
 func (*ImportWorkflowExecutionResponse) ProtoMessage() {}
 
 func (x *ImportWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[106]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7412,7 +7284,7 @@ func (x *ImportWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
 func (*ImportWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{106}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *ImportWorkflowExecutionResponse) GetToken() []byte {
@@ -7441,7 +7313,7 @@ type DeleteWorkflowVisibilityRecordRequest struct {
 
 func (x *DeleteWorkflowVisibilityRecordRequest) Reset() {
 	*x = DeleteWorkflowVisibilityRecordRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[107]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7453,7 +7325,7 @@ func (x *DeleteWorkflowVisibilityRecordRequest) String() string {
 func (*DeleteWorkflowVisibilityRecordRequest) ProtoMessage() {}
 
 func (x *DeleteWorkflowVisibilityRecordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[107]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7466,7 +7338,7 @@ func (x *DeleteWorkflowVisibilityRecordRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use DeleteWorkflowVisibilityRecordRequest.ProtoReflect.Descriptor instead.
 func (*DeleteWorkflowVisibilityRecordRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{107}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *DeleteWorkflowVisibilityRecordRequest) GetNamespaceId() string {
@@ -7505,7 +7377,7 @@ type DeleteWorkflowVisibilityRecordResponse struct {
 
 func (x *DeleteWorkflowVisibilityRecordResponse) Reset() {
 	*x = DeleteWorkflowVisibilityRecordResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[108]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7517,7 +7389,7 @@ func (x *DeleteWorkflowVisibilityRecordResponse) String() string {
 func (*DeleteWorkflowVisibilityRecordResponse) ProtoMessage() {}
 
 func (x *DeleteWorkflowVisibilityRecordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[108]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7530,7 +7402,7 @@ func (x *DeleteWorkflowVisibilityRecordResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use DeleteWorkflowVisibilityRecordResponse.ProtoReflect.Descriptor instead.
 func (*DeleteWorkflowVisibilityRecordResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{108}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{106}
 }
 
 // (-- api-linter: core::0134=disabled
@@ -7546,7 +7418,7 @@ type UpdateWorkflowExecutionRequest struct {
 
 func (x *UpdateWorkflowExecutionRequest) Reset() {
 	*x = UpdateWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[109]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7558,7 +7430,7 @@ func (x *UpdateWorkflowExecutionRequest) String() string {
 func (*UpdateWorkflowExecutionRequest) ProtoMessage() {}
 
 func (x *UpdateWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[109]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7571,7 +7443,7 @@ func (x *UpdateWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
 func (*UpdateWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{109}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *UpdateWorkflowExecutionRequest) GetNamespaceId() string {
@@ -7597,7 +7469,7 @@ type UpdateWorkflowExecutionResponse struct {
 
 func (x *UpdateWorkflowExecutionResponse) Reset() {
 	*x = UpdateWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[110]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7609,7 +7481,7 @@ func (x *UpdateWorkflowExecutionResponse) String() string {
 func (*UpdateWorkflowExecutionResponse) ProtoMessage() {}
 
 func (x *UpdateWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[110]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7622,7 +7494,7 @@ func (x *UpdateWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
 func (*UpdateWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{110}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *UpdateWorkflowExecutionResponse) GetResponse() *v1.UpdateWorkflowExecutionResponse {
@@ -7644,7 +7516,7 @@ type StreamWorkflowReplicationMessagesRequest struct {
 
 func (x *StreamWorkflowReplicationMessagesRequest) Reset() {
 	*x = StreamWorkflowReplicationMessagesRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[111]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7656,7 +7528,7 @@ func (x *StreamWorkflowReplicationMessagesRequest) String() string {
 func (*StreamWorkflowReplicationMessagesRequest) ProtoMessage() {}
 
 func (x *StreamWorkflowReplicationMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[111]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7669,7 +7541,7 @@ func (x *StreamWorkflowReplicationMessagesRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use StreamWorkflowReplicationMessagesRequest.ProtoReflect.Descriptor instead.
 func (*StreamWorkflowReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{111}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *StreamWorkflowReplicationMessagesRequest) GetAttributes() isStreamWorkflowReplicationMessagesRequest_Attributes {
@@ -7711,7 +7583,7 @@ type StreamWorkflowReplicationMessagesResponse struct {
 
 func (x *StreamWorkflowReplicationMessagesResponse) Reset() {
 	*x = StreamWorkflowReplicationMessagesResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[112]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7723,7 +7595,7 @@ func (x *StreamWorkflowReplicationMessagesResponse) String() string {
 func (*StreamWorkflowReplicationMessagesResponse) ProtoMessage() {}
 
 func (x *StreamWorkflowReplicationMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[112]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7736,7 +7608,7 @@ func (x *StreamWorkflowReplicationMessagesResponse) ProtoReflect() protoreflect.
 
 // Deprecated: Use StreamWorkflowReplicationMessagesResponse.ProtoReflect.Descriptor instead.
 func (*StreamWorkflowReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{112}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *StreamWorkflowReplicationMessagesResponse) GetAttributes() isStreamWorkflowReplicationMessagesResponse_Attributes {
@@ -7776,7 +7648,7 @@ type PollWorkflowExecutionUpdateRequest struct {
 
 func (x *PollWorkflowExecutionUpdateRequest) Reset() {
 	*x = PollWorkflowExecutionUpdateRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[113]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7788,7 +7660,7 @@ func (x *PollWorkflowExecutionUpdateRequest) String() string {
 func (*PollWorkflowExecutionUpdateRequest) ProtoMessage() {}
 
 func (x *PollWorkflowExecutionUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[113]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7801,7 +7673,7 @@ func (x *PollWorkflowExecutionUpdateRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use PollWorkflowExecutionUpdateRequest.ProtoReflect.Descriptor instead.
 func (*PollWorkflowExecutionUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{113}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *PollWorkflowExecutionUpdateRequest) GetNamespaceId() string {
@@ -7827,7 +7699,7 @@ type PollWorkflowExecutionUpdateResponse struct {
 
 func (x *PollWorkflowExecutionUpdateResponse) Reset() {
 	*x = PollWorkflowExecutionUpdateResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[114]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7839,7 +7711,7 @@ func (x *PollWorkflowExecutionUpdateResponse) String() string {
 func (*PollWorkflowExecutionUpdateResponse) ProtoMessage() {}
 
 func (x *PollWorkflowExecutionUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[114]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7852,7 +7724,7 @@ func (x *PollWorkflowExecutionUpdateResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use PollWorkflowExecutionUpdateResponse.ProtoReflect.Descriptor instead.
 func (*PollWorkflowExecutionUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{114}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *PollWorkflowExecutionUpdateResponse) GetResponse() *v1.PollWorkflowExecutionUpdateResponse {
@@ -7872,7 +7744,7 @@ type GetWorkflowExecutionHistoryRequest struct {
 
 func (x *GetWorkflowExecutionHistoryRequest) Reset() {
 	*x = GetWorkflowExecutionHistoryRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[115]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7884,7 +7756,7 @@ func (x *GetWorkflowExecutionHistoryRequest) String() string {
 func (*GetWorkflowExecutionHistoryRequest) ProtoMessage() {}
 
 func (x *GetWorkflowExecutionHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[115]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7897,7 +7769,7 @@ func (x *GetWorkflowExecutionHistoryRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetWorkflowExecutionHistoryRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkflowExecutionHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{115}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *GetWorkflowExecutionHistoryRequest) GetNamespaceId() string {
@@ -7924,7 +7796,7 @@ type GetWorkflowExecutionHistoryResponse struct {
 
 func (x *GetWorkflowExecutionHistoryResponse) Reset() {
 	*x = GetWorkflowExecutionHistoryResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[116]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7936,7 +7808,7 @@ func (x *GetWorkflowExecutionHistoryResponse) String() string {
 func (*GetWorkflowExecutionHistoryResponse) ProtoMessage() {}
 
 func (x *GetWorkflowExecutionHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[116]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7949,7 +7821,7 @@ func (x *GetWorkflowExecutionHistoryResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use GetWorkflowExecutionHistoryResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkflowExecutionHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{116}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *GetWorkflowExecutionHistoryResponse) GetResponse() *v1.GetWorkflowExecutionHistoryResponse {
@@ -7977,7 +7849,7 @@ type GetWorkflowExecutionHistoryResponseWithRaw struct {
 
 func (x *GetWorkflowExecutionHistoryResponseWithRaw) Reset() {
 	*x = GetWorkflowExecutionHistoryResponseWithRaw{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[117]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7989,7 +7861,7 @@ func (x *GetWorkflowExecutionHistoryResponseWithRaw) String() string {
 func (*GetWorkflowExecutionHistoryResponseWithRaw) ProtoMessage() {}
 
 func (x *GetWorkflowExecutionHistoryResponseWithRaw) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[117]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8002,7 +7874,7 @@ func (x *GetWorkflowExecutionHistoryResponseWithRaw) ProtoReflect() protoreflect
 
 // Deprecated: Use GetWorkflowExecutionHistoryResponseWithRaw.ProtoReflect.Descriptor instead.
 func (*GetWorkflowExecutionHistoryResponseWithRaw) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{117}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *GetWorkflowExecutionHistoryResponseWithRaw) GetResponse() *v1.GetWorkflowExecutionHistoryResponse {
@@ -8029,7 +7901,7 @@ type GetWorkflowExecutionHistoryReverseRequest struct {
 
 func (x *GetWorkflowExecutionHistoryReverseRequest) Reset() {
 	*x = GetWorkflowExecutionHistoryReverseRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[118]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8041,7 +7913,7 @@ func (x *GetWorkflowExecutionHistoryReverseRequest) String() string {
 func (*GetWorkflowExecutionHistoryReverseRequest) ProtoMessage() {}
 
 func (x *GetWorkflowExecutionHistoryReverseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[118]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8054,7 +7926,7 @@ func (x *GetWorkflowExecutionHistoryReverseRequest) ProtoReflect() protoreflect.
 
 // Deprecated: Use GetWorkflowExecutionHistoryReverseRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkflowExecutionHistoryReverseRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{118}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *GetWorkflowExecutionHistoryReverseRequest) GetNamespaceId() string {
@@ -8080,7 +7952,7 @@ type GetWorkflowExecutionHistoryReverseResponse struct {
 
 func (x *GetWorkflowExecutionHistoryReverseResponse) Reset() {
 	*x = GetWorkflowExecutionHistoryReverseResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[119]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8092,7 +7964,7 @@ func (x *GetWorkflowExecutionHistoryReverseResponse) String() string {
 func (*GetWorkflowExecutionHistoryReverseResponse) ProtoMessage() {}
 
 func (x *GetWorkflowExecutionHistoryReverseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[119]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8105,7 +7977,7 @@ func (x *GetWorkflowExecutionHistoryReverseResponse) ProtoReflect() protoreflect
 
 // Deprecated: Use GetWorkflowExecutionHistoryReverseResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkflowExecutionHistoryReverseResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{119}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *GetWorkflowExecutionHistoryReverseResponse) GetResponse() *v1.GetWorkflowExecutionHistoryReverseResponse {
@@ -8128,7 +8000,7 @@ type GetWorkflowExecutionRawHistoryV2Request struct {
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) Reset() {
 	*x = GetWorkflowExecutionRawHistoryV2Request{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[120]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8140,7 +8012,7 @@ func (x *GetWorkflowExecutionRawHistoryV2Request) String() string {
 func (*GetWorkflowExecutionRawHistoryV2Request) ProtoMessage() {}
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[120]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8153,7 +8025,7 @@ func (x *GetWorkflowExecutionRawHistoryV2Request) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use GetWorkflowExecutionRawHistoryV2Request.ProtoReflect.Descriptor instead.
 func (*GetWorkflowExecutionRawHistoryV2Request) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{120}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Request) GetNamespaceId() string {
@@ -8179,7 +8051,7 @@ type GetWorkflowExecutionRawHistoryV2Response struct {
 
 func (x *GetWorkflowExecutionRawHistoryV2Response) Reset() {
 	*x = GetWorkflowExecutionRawHistoryV2Response{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[121]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8191,7 +8063,7 @@ func (x *GetWorkflowExecutionRawHistoryV2Response) String() string {
 func (*GetWorkflowExecutionRawHistoryV2Response) ProtoMessage() {}
 
 func (x *GetWorkflowExecutionRawHistoryV2Response) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[121]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8204,7 +8076,7 @@ func (x *GetWorkflowExecutionRawHistoryV2Response) ProtoReflect() protoreflect.M
 
 // Deprecated: Use GetWorkflowExecutionRawHistoryV2Response.ProtoReflect.Descriptor instead.
 func (*GetWorkflowExecutionRawHistoryV2Response) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{121}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *GetWorkflowExecutionRawHistoryV2Response) GetResponse() *v119.GetWorkflowExecutionRawHistoryV2Response {
@@ -8224,7 +8096,7 @@ type GetWorkflowExecutionRawHistoryRequest struct {
 
 func (x *GetWorkflowExecutionRawHistoryRequest) Reset() {
 	*x = GetWorkflowExecutionRawHistoryRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[122]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8236,7 +8108,7 @@ func (x *GetWorkflowExecutionRawHistoryRequest) String() string {
 func (*GetWorkflowExecutionRawHistoryRequest) ProtoMessage() {}
 
 func (x *GetWorkflowExecutionRawHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[122]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8249,7 +8121,7 @@ func (x *GetWorkflowExecutionRawHistoryRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use GetWorkflowExecutionRawHistoryRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkflowExecutionRawHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{122}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *GetWorkflowExecutionRawHistoryRequest) GetNamespaceId() string {
@@ -8275,7 +8147,7 @@ type GetWorkflowExecutionRawHistoryResponse struct {
 
 func (x *GetWorkflowExecutionRawHistoryResponse) Reset() {
 	*x = GetWorkflowExecutionRawHistoryResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[123]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8287,7 +8159,7 @@ func (x *GetWorkflowExecutionRawHistoryResponse) String() string {
 func (*GetWorkflowExecutionRawHistoryResponse) ProtoMessage() {}
 
 func (x *GetWorkflowExecutionRawHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[123]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8300,7 +8172,7 @@ func (x *GetWorkflowExecutionRawHistoryResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use GetWorkflowExecutionRawHistoryResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkflowExecutionRawHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{123}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *GetWorkflowExecutionRawHistoryResponse) GetResponse() *v119.GetWorkflowExecutionRawHistoryResponse {
@@ -8322,7 +8194,7 @@ type ForceDeleteWorkflowExecutionRequest struct {
 
 func (x *ForceDeleteWorkflowExecutionRequest) Reset() {
 	*x = ForceDeleteWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[124]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8334,7 +8206,7 @@ func (x *ForceDeleteWorkflowExecutionRequest) String() string {
 func (*ForceDeleteWorkflowExecutionRequest) ProtoMessage() {}
 
 func (x *ForceDeleteWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[124]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8347,7 +8219,7 @@ func (x *ForceDeleteWorkflowExecutionRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ForceDeleteWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
 func (*ForceDeleteWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{124}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{122}
 }
 
 func (x *ForceDeleteWorkflowExecutionRequest) GetNamespaceId() string {
@@ -8380,7 +8252,7 @@ type ForceDeleteWorkflowExecutionResponse struct {
 
 func (x *ForceDeleteWorkflowExecutionResponse) Reset() {
 	*x = ForceDeleteWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[125]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8392,7 +8264,7 @@ func (x *ForceDeleteWorkflowExecutionResponse) String() string {
 func (*ForceDeleteWorkflowExecutionResponse) ProtoMessage() {}
 
 func (x *ForceDeleteWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[125]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8405,7 +8277,7 @@ func (x *ForceDeleteWorkflowExecutionResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use ForceDeleteWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
 func (*ForceDeleteWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{125}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{123}
 }
 
 func (x *ForceDeleteWorkflowExecutionResponse) GetResponse() *v119.DeleteWorkflowExecutionResponse {
@@ -8429,7 +8301,7 @@ type DeleteExecutionRequest struct {
 
 func (x *DeleteExecutionRequest) Reset() {
 	*x = DeleteExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[126]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8441,7 +8313,7 @@ func (x *DeleteExecutionRequest) String() string {
 func (*DeleteExecutionRequest) ProtoMessage() {}
 
 func (x *DeleteExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[126]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8454,7 +8326,7 @@ func (x *DeleteExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteExecutionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{126}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *DeleteExecutionRequest) GetNamespaceId() string {
@@ -8500,7 +8372,7 @@ type DeleteExecutionResponse struct {
 
 func (x *DeleteExecutionResponse) Reset() {
 	*x = DeleteExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[127]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8512,7 +8384,7 @@ func (x *DeleteExecutionResponse) String() string {
 func (*DeleteExecutionResponse) ProtoMessage() {}
 
 func (x *DeleteExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[127]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8525,7 +8397,7 @@ func (x *DeleteExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteExecutionResponse.ProtoReflect.Descriptor instead.
 func (*DeleteExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{127}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{125}
 }
 
 type GetDLQTasksRequest struct {
@@ -8540,7 +8412,7 @@ type GetDLQTasksRequest struct {
 
 func (x *GetDLQTasksRequest) Reset() {
 	*x = GetDLQTasksRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[128]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8552,7 +8424,7 @@ func (x *GetDLQTasksRequest) String() string {
 func (*GetDLQTasksRequest) ProtoMessage() {}
 
 func (x *GetDLQTasksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[128]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8565,7 +8437,7 @@ func (x *GetDLQTasksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDLQTasksRequest.ProtoReflect.Descriptor instead.
 func (*GetDLQTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{128}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{126}
 }
 
 func (x *GetDLQTasksRequest) GetDlqKey() *v120.HistoryDLQKey {
@@ -8602,7 +8474,7 @@ type GetDLQTasksResponse struct {
 
 func (x *GetDLQTasksResponse) Reset() {
 	*x = GetDLQTasksResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[129]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8614,7 +8486,7 @@ func (x *GetDLQTasksResponse) String() string {
 func (*GetDLQTasksResponse) ProtoMessage() {}
 
 func (x *GetDLQTasksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[129]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8627,7 +8499,7 @@ func (x *GetDLQTasksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDLQTasksResponse.ProtoReflect.Descriptor instead.
 func (*GetDLQTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{129}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *GetDLQTasksResponse) GetDlqTasks() []*v120.HistoryDLQTask {
@@ -8654,7 +8526,7 @@ type DeleteDLQTasksRequest struct {
 
 func (x *DeleteDLQTasksRequest) Reset() {
 	*x = DeleteDLQTasksRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[130]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8666,7 +8538,7 @@ func (x *DeleteDLQTasksRequest) String() string {
 func (*DeleteDLQTasksRequest) ProtoMessage() {}
 
 func (x *DeleteDLQTasksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[130]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8679,7 +8551,7 @@ func (x *DeleteDLQTasksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDLQTasksRequest.ProtoReflect.Descriptor instead.
 func (*DeleteDLQTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{130}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{128}
 }
 
 func (x *DeleteDLQTasksRequest) GetDlqKey() *v120.HistoryDLQKey {
@@ -8706,7 +8578,7 @@ type DeleteDLQTasksResponse struct {
 
 func (x *DeleteDLQTasksResponse) Reset() {
 	*x = DeleteDLQTasksResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[131]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8718,7 +8590,7 @@ func (x *DeleteDLQTasksResponse) String() string {
 func (*DeleteDLQTasksResponse) ProtoMessage() {}
 
 func (x *DeleteDLQTasksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[131]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8731,7 +8603,7 @@ func (x *DeleteDLQTasksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDLQTasksResponse.ProtoReflect.Descriptor instead.
 func (*DeleteDLQTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{131}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *DeleteDLQTasksResponse) GetMessagesDeleted() int64 {
@@ -8752,7 +8624,7 @@ type ListQueuesRequest struct {
 
 func (x *ListQueuesRequest) Reset() {
 	*x = ListQueuesRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[132]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8764,7 +8636,7 @@ func (x *ListQueuesRequest) String() string {
 func (*ListQueuesRequest) ProtoMessage() {}
 
 func (x *ListQueuesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[132]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8777,7 +8649,7 @@ func (x *ListQueuesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQueuesRequest.ProtoReflect.Descriptor instead.
 func (*ListQueuesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{132}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *ListQueuesRequest) GetQueueType() int32 {
@@ -8811,7 +8683,7 @@ type ListQueuesResponse struct {
 
 func (x *ListQueuesResponse) Reset() {
 	*x = ListQueuesResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[133]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8823,7 +8695,7 @@ func (x *ListQueuesResponse) String() string {
 func (*ListQueuesResponse) ProtoMessage() {}
 
 func (x *ListQueuesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[133]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8836,7 +8708,7 @@ func (x *ListQueuesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQueuesResponse.ProtoReflect.Descriptor instead.
 func (*ListQueuesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{133}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *ListQueuesResponse) GetQueues() []*ListQueuesResponse_QueueInfo {
@@ -8867,7 +8739,7 @@ type AddTasksRequest struct {
 
 func (x *AddTasksRequest) Reset() {
 	*x = AddTasksRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[134]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8879,7 +8751,7 @@ func (x *AddTasksRequest) String() string {
 func (*AddTasksRequest) ProtoMessage() {}
 
 func (x *AddTasksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[134]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8892,7 +8764,7 @@ func (x *AddTasksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddTasksRequest.ProtoReflect.Descriptor instead.
 func (*AddTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{134}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *AddTasksRequest) GetShardId() int32 {
@@ -8917,7 +8789,7 @@ type AddTasksResponse struct {
 
 func (x *AddTasksResponse) Reset() {
 	*x = AddTasksResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[135]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8929,7 +8801,7 @@ func (x *AddTasksResponse) String() string {
 func (*AddTasksResponse) ProtoMessage() {}
 
 func (x *AddTasksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[135]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8942,7 +8814,7 @@ func (x *AddTasksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddTasksResponse.ProtoReflect.Descriptor instead.
 func (*AddTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{135}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{133}
 }
 
 type ListTasksRequest struct {
@@ -8954,7 +8826,7 @@ type ListTasksRequest struct {
 
 func (x *ListTasksRequest) Reset() {
 	*x = ListTasksRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[136]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8966,7 +8838,7 @@ func (x *ListTasksRequest) String() string {
 func (*ListTasksRequest) ProtoMessage() {}
 
 func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[136]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8979,7 +8851,7 @@ func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTasksRequest.ProtoReflect.Descriptor instead.
 func (*ListTasksRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{136}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *ListTasksRequest) GetRequest() *v119.ListHistoryTasksRequest {
@@ -8998,7 +8870,7 @@ type ListTasksResponse struct {
 
 func (x *ListTasksResponse) Reset() {
 	*x = ListTasksResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[137]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9010,7 +8882,7 @@ func (x *ListTasksResponse) String() string {
 func (*ListTasksResponse) ProtoMessage() {}
 
 func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[137]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9023,7 +8895,7 @@ func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTasksResponse.ProtoReflect.Descriptor instead.
 func (*ListTasksResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{137}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *ListTasksResponse) GetResponse() *v119.ListHistoryTasksResponse {
@@ -9057,7 +8929,7 @@ type CompleteNexusOperationChasmRequest struct {
 
 func (x *CompleteNexusOperationChasmRequest) Reset() {
 	*x = CompleteNexusOperationChasmRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[138]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9069,7 +8941,7 @@ func (x *CompleteNexusOperationChasmRequest) String() string {
 func (*CompleteNexusOperationChasmRequest) ProtoMessage() {}
 
 func (x *CompleteNexusOperationChasmRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[138]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9082,7 +8954,7 @@ func (x *CompleteNexusOperationChasmRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use CompleteNexusOperationChasmRequest.ProtoReflect.Descriptor instead.
 func (*CompleteNexusOperationChasmRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{138}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *CompleteNexusOperationChasmRequest) GetCompletion() *v121.NexusOperationCompletion {
@@ -9171,7 +9043,7 @@ type CompleteNexusOperationChasmResponse struct {
 
 func (x *CompleteNexusOperationChasmResponse) Reset() {
 	*x = CompleteNexusOperationChasmResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[139]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9183,7 +9055,7 @@ func (x *CompleteNexusOperationChasmResponse) String() string {
 func (*CompleteNexusOperationChasmResponse) ProtoMessage() {}
 
 func (x *CompleteNexusOperationChasmResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[139]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9196,7 +9068,7 @@ func (x *CompleteNexusOperationChasmResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use CompleteNexusOperationChasmResponse.ProtoReflect.Descriptor instead.
 func (*CompleteNexusOperationChasmResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{139}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{137}
 }
 
 type CompleteNexusOperationRequest struct {
@@ -9222,7 +9094,7 @@ type CompleteNexusOperationRequest struct {
 
 func (x *CompleteNexusOperationRequest) Reset() {
 	*x = CompleteNexusOperationRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[140]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9234,7 +9106,7 @@ func (x *CompleteNexusOperationRequest) String() string {
 func (*CompleteNexusOperationRequest) ProtoMessage() {}
 
 func (x *CompleteNexusOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[140]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9247,7 +9119,7 @@ func (x *CompleteNexusOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteNexusOperationRequest.ProtoReflect.Descriptor instead.
 func (*CompleteNexusOperationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{140}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *CompleteNexusOperationRequest) GetCompletion() *v121.NexusOperationCompletion {
@@ -9336,7 +9208,7 @@ type CompleteNexusOperationResponse struct {
 
 func (x *CompleteNexusOperationResponse) Reset() {
 	*x = CompleteNexusOperationResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[141]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9348,7 +9220,7 @@ func (x *CompleteNexusOperationResponse) String() string {
 func (*CompleteNexusOperationResponse) ProtoMessage() {}
 
 func (x *CompleteNexusOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[141]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9361,7 +9233,7 @@ func (x *CompleteNexusOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteNexusOperationResponse.ProtoReflect.Descriptor instead.
 func (*CompleteNexusOperationResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{141}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{139}
 }
 
 type InvokeStateMachineMethodRequest struct {
@@ -9389,7 +9261,7 @@ type InvokeStateMachineMethodRequest struct {
 
 func (x *InvokeStateMachineMethodRequest) Reset() {
 	*x = InvokeStateMachineMethodRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[142]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9401,7 +9273,7 @@ func (x *InvokeStateMachineMethodRequest) String() string {
 func (*InvokeStateMachineMethodRequest) ProtoMessage() {}
 
 func (x *InvokeStateMachineMethodRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[142]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9414,7 +9286,7 @@ func (x *InvokeStateMachineMethodRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeStateMachineMethodRequest.ProtoReflect.Descriptor instead.
 func (*InvokeStateMachineMethodRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{142}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *InvokeStateMachineMethodRequest) GetNamespaceId() string {
@@ -9469,7 +9341,7 @@ type InvokeStateMachineMethodResponse struct {
 
 func (x *InvokeStateMachineMethodResponse) Reset() {
 	*x = InvokeStateMachineMethodResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[143]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9481,7 +9353,7 @@ func (x *InvokeStateMachineMethodResponse) String() string {
 func (*InvokeStateMachineMethodResponse) ProtoMessage() {}
 
 func (x *InvokeStateMachineMethodResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[143]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9494,7 +9366,7 @@ func (x *InvokeStateMachineMethodResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeStateMachineMethodResponse.ProtoReflect.Descriptor instead.
 func (*InvokeStateMachineMethodResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{143}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{141}
 }
 
 func (x *InvokeStateMachineMethodResponse) GetOutput() []byte {
@@ -9513,7 +9385,7 @@ type DeepHealthCheckRequest struct {
 
 func (x *DeepHealthCheckRequest) Reset() {
 	*x = DeepHealthCheckRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[144]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9525,7 +9397,7 @@ func (x *DeepHealthCheckRequest) String() string {
 func (*DeepHealthCheckRequest) ProtoMessage() {}
 
 func (x *DeepHealthCheckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[144]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9538,7 +9410,7 @@ func (x *DeepHealthCheckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeepHealthCheckRequest.ProtoReflect.Descriptor instead.
 func (*DeepHealthCheckRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{144}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{142}
 }
 
 func (x *DeepHealthCheckRequest) GetHostAddress() string {
@@ -9560,7 +9432,7 @@ type DeepHealthCheckResponse struct {
 
 func (x *DeepHealthCheckResponse) Reset() {
 	*x = DeepHealthCheckResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[145]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9572,7 +9444,7 @@ func (x *DeepHealthCheckResponse) String() string {
 func (*DeepHealthCheckResponse) ProtoMessage() {}
 
 func (x *DeepHealthCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[145]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9585,7 +9457,7 @@ func (x *DeepHealthCheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeepHealthCheckResponse.ProtoReflect.Descriptor instead.
 func (*DeepHealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{145}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *DeepHealthCheckResponse) GetState() v113.HealthState {
@@ -9624,7 +9496,7 @@ type SyncWorkflowStateRequest struct {
 
 func (x *SyncWorkflowStateRequest) Reset() {
 	*x = SyncWorkflowStateRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[146]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[144]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9636,7 +9508,7 @@ func (x *SyncWorkflowStateRequest) String() string {
 func (*SyncWorkflowStateRequest) ProtoMessage() {}
 
 func (x *SyncWorkflowStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[146]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[144]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9649,7 +9521,7 @@ func (x *SyncWorkflowStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncWorkflowStateRequest.ProtoReflect.Descriptor instead.
 func (*SyncWorkflowStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{146}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{144}
 }
 
 func (x *SyncWorkflowStateRequest) GetNamespaceId() string {
@@ -9703,7 +9575,7 @@ type SyncWorkflowStateResponse struct {
 
 func (x *SyncWorkflowStateResponse) Reset() {
 	*x = SyncWorkflowStateResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[147]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[145]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9715,7 +9587,7 @@ func (x *SyncWorkflowStateResponse) String() string {
 func (*SyncWorkflowStateResponse) ProtoMessage() {}
 
 func (x *SyncWorkflowStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[147]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[145]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9728,7 +9600,7 @@ func (x *SyncWorkflowStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncWorkflowStateResponse.ProtoReflect.Descriptor instead.
 func (*SyncWorkflowStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{147}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{145}
 }
 
 func (x *SyncWorkflowStateResponse) GetVersionedTransitionArtifact() *v118.VersionedTransitionArtifact {
@@ -9751,7 +9623,7 @@ type UpdateActivityOptionsRequest struct {
 
 func (x *UpdateActivityOptionsRequest) Reset() {
 	*x = UpdateActivityOptionsRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[148]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[146]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9763,7 +9635,7 @@ func (x *UpdateActivityOptionsRequest) String() string {
 func (*UpdateActivityOptionsRequest) ProtoMessage() {}
 
 func (x *UpdateActivityOptionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[148]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[146]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9776,7 +9648,7 @@ func (x *UpdateActivityOptionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateActivityOptionsRequest.ProtoReflect.Descriptor instead.
 func (*UpdateActivityOptionsRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{148}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{146}
 }
 
 func (x *UpdateActivityOptionsRequest) GetNamespaceId() string {
@@ -9803,7 +9675,7 @@ type UpdateActivityOptionsResponse struct {
 
 func (x *UpdateActivityOptionsResponse) Reset() {
 	*x = UpdateActivityOptionsResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[149]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[147]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9815,7 +9687,7 @@ func (x *UpdateActivityOptionsResponse) String() string {
 func (*UpdateActivityOptionsResponse) ProtoMessage() {}
 
 func (x *UpdateActivityOptionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[149]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[147]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9828,7 +9700,7 @@ func (x *UpdateActivityOptionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateActivityOptionsResponse.ProtoReflect.Descriptor instead.
 func (*UpdateActivityOptionsResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{149}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{147}
 }
 
 func (x *UpdateActivityOptionsResponse) GetActivityOptions() *v124.ActivityOptions {
@@ -9849,7 +9721,7 @@ type PauseActivityRequest struct {
 
 func (x *PauseActivityRequest) Reset() {
 	*x = PauseActivityRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[150]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9861,7 +9733,7 @@ func (x *PauseActivityRequest) String() string {
 func (*PauseActivityRequest) ProtoMessage() {}
 
 func (x *PauseActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[150]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9874,7 +9746,7 @@ func (x *PauseActivityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseActivityRequest.ProtoReflect.Descriptor instead.
 func (*PauseActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{150}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{148}
 }
 
 func (x *PauseActivityRequest) GetNamespaceId() string {
@@ -9899,7 +9771,7 @@ type PauseActivityResponse struct {
 
 func (x *PauseActivityResponse) Reset() {
 	*x = PauseActivityResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[151]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[149]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9911,7 +9783,7 @@ func (x *PauseActivityResponse) String() string {
 func (*PauseActivityResponse) ProtoMessage() {}
 
 func (x *PauseActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[151]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[149]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9924,7 +9796,7 @@ func (x *PauseActivityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseActivityResponse.ProtoReflect.Descriptor instead.
 func (*PauseActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{151}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{149}
 }
 
 type UnpauseActivityRequest struct {
@@ -9938,7 +9810,7 @@ type UnpauseActivityRequest struct {
 
 func (x *UnpauseActivityRequest) Reset() {
 	*x = UnpauseActivityRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[152]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[150]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9950,7 +9822,7 @@ func (x *UnpauseActivityRequest) String() string {
 func (*UnpauseActivityRequest) ProtoMessage() {}
 
 func (x *UnpauseActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[152]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[150]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9963,7 +9835,7 @@ func (x *UnpauseActivityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpauseActivityRequest.ProtoReflect.Descriptor instead.
 func (*UnpauseActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{152}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{150}
 }
 
 func (x *UnpauseActivityRequest) GetNamespaceId() string {
@@ -9988,7 +9860,7 @@ type UnpauseActivityResponse struct {
 
 func (x *UnpauseActivityResponse) Reset() {
 	*x = UnpauseActivityResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[153]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10000,7 +9872,7 @@ func (x *UnpauseActivityResponse) String() string {
 func (*UnpauseActivityResponse) ProtoMessage() {}
 
 func (x *UnpauseActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[153]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10013,7 +9885,7 @@ func (x *UnpauseActivityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpauseActivityResponse.ProtoReflect.Descriptor instead.
 func (*UnpauseActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{153}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{151}
 }
 
 type ResetActivityRequest struct {
@@ -10027,7 +9899,7 @@ type ResetActivityRequest struct {
 
 func (x *ResetActivityRequest) Reset() {
 	*x = ResetActivityRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[154]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10039,7 +9911,7 @@ func (x *ResetActivityRequest) String() string {
 func (*ResetActivityRequest) ProtoMessage() {}
 
 func (x *ResetActivityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[154]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10052,7 +9924,7 @@ func (x *ResetActivityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetActivityRequest.ProtoReflect.Descriptor instead.
 func (*ResetActivityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{154}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{152}
 }
 
 func (x *ResetActivityRequest) GetNamespaceId() string {
@@ -10077,7 +9949,7 @@ type ResetActivityResponse struct {
 
 func (x *ResetActivityResponse) Reset() {
 	*x = ResetActivityResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[155]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[153]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10089,7 +9961,7 @@ func (x *ResetActivityResponse) String() string {
 func (*ResetActivityResponse) ProtoMessage() {}
 
 func (x *ResetActivityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[155]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[153]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10102,7 +9974,7 @@ func (x *ResetActivityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetActivityResponse.ProtoReflect.Descriptor instead.
 func (*ResetActivityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{155}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{153}
 }
 
 // (-- api-linter: core::0134::request-mask-required=disabled
@@ -10117,7 +9989,7 @@ type UpdateWorkflowExecutionOptionsRequest struct {
 
 func (x *UpdateWorkflowExecutionOptionsRequest) Reset() {
 	*x = UpdateWorkflowExecutionOptionsRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[156]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[154]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10129,7 +10001,7 @@ func (x *UpdateWorkflowExecutionOptionsRequest) String() string {
 func (*UpdateWorkflowExecutionOptionsRequest) ProtoMessage() {}
 
 func (x *UpdateWorkflowExecutionOptionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[156]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[154]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10142,7 +10014,7 @@ func (x *UpdateWorkflowExecutionOptionsRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use UpdateWorkflowExecutionOptionsRequest.ProtoReflect.Descriptor instead.
 func (*UpdateWorkflowExecutionOptionsRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{156}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{154}
 }
 
 func (x *UpdateWorkflowExecutionOptionsRequest) GetNamespaceId() string {
@@ -10172,7 +10044,7 @@ type UpdateWorkflowExecutionOptionsResponse struct {
 
 func (x *UpdateWorkflowExecutionOptionsResponse) Reset() {
 	*x = UpdateWorkflowExecutionOptionsResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[157]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10184,7 +10056,7 @@ func (x *UpdateWorkflowExecutionOptionsResponse) String() string {
 func (*UpdateWorkflowExecutionOptionsResponse) ProtoMessage() {}
 
 func (x *UpdateWorkflowExecutionOptionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[157]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10197,7 +10069,7 @@ func (x *UpdateWorkflowExecutionOptionsResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use UpdateWorkflowExecutionOptionsResponse.ProtoReflect.Descriptor instead.
 func (*UpdateWorkflowExecutionOptionsResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{157}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *UpdateWorkflowExecutionOptionsResponse) GetWorkflowExecutionOptions() *v15.WorkflowExecutionOptions {
@@ -10225,7 +10097,7 @@ type PauseWorkflowExecutionRequest struct {
 
 func (x *PauseWorkflowExecutionRequest) Reset() {
 	*x = PauseWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[158]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[156]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10237,7 +10109,7 @@ func (x *PauseWorkflowExecutionRequest) String() string {
 func (*PauseWorkflowExecutionRequest) ProtoMessage() {}
 
 func (x *PauseWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[158]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[156]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10250,7 +10122,7 @@ func (x *PauseWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
 func (*PauseWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{158}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{156}
 }
 
 func (x *PauseWorkflowExecutionRequest) GetNamespaceId() string {
@@ -10275,7 +10147,7 @@ type PauseWorkflowExecutionResponse struct {
 
 func (x *PauseWorkflowExecutionResponse) Reset() {
 	*x = PauseWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[159]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[157]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10287,7 +10159,7 @@ func (x *PauseWorkflowExecutionResponse) String() string {
 func (*PauseWorkflowExecutionResponse) ProtoMessage() {}
 
 func (x *PauseWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[159]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[157]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10300,7 +10172,7 @@ func (x *PauseWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
 func (*PauseWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{159}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{157}
 }
 
 type UnpauseWorkflowExecutionRequest struct {
@@ -10314,7 +10186,7 @@ type UnpauseWorkflowExecutionRequest struct {
 
 func (x *UnpauseWorkflowExecutionRequest) Reset() {
 	*x = UnpauseWorkflowExecutionRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[160]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[158]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10326,7 +10198,7 @@ func (x *UnpauseWorkflowExecutionRequest) String() string {
 func (*UnpauseWorkflowExecutionRequest) ProtoMessage() {}
 
 func (x *UnpauseWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[160]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[158]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10339,7 +10211,7 @@ func (x *UnpauseWorkflowExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpauseWorkflowExecutionRequest.ProtoReflect.Descriptor instead.
 func (*UnpauseWorkflowExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{160}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{158}
 }
 
 func (x *UnpauseWorkflowExecutionRequest) GetNamespaceId() string {
@@ -10364,7 +10236,7 @@ type UnpauseWorkflowExecutionResponse struct {
 
 func (x *UnpauseWorkflowExecutionResponse) Reset() {
 	*x = UnpauseWorkflowExecutionResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[161]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[159]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10376,7 +10248,7 @@ func (x *UnpauseWorkflowExecutionResponse) String() string {
 func (*UnpauseWorkflowExecutionResponse) ProtoMessage() {}
 
 func (x *UnpauseWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[161]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[159]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10389,7 +10261,7 @@ func (x *UnpauseWorkflowExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpauseWorkflowExecutionResponse.ProtoReflect.Descriptor instead.
 func (*UnpauseWorkflowExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{161}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{159}
 }
 
 type StartNexusOperationRequest struct {
@@ -10403,7 +10275,7 @@ type StartNexusOperationRequest struct {
 
 func (x *StartNexusOperationRequest) Reset() {
 	*x = StartNexusOperationRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[162]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[160]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10415,7 +10287,7 @@ func (x *StartNexusOperationRequest) String() string {
 func (*StartNexusOperationRequest) ProtoMessage() {}
 
 func (x *StartNexusOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[162]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[160]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10428,7 +10300,7 @@ func (x *StartNexusOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartNexusOperationRequest.ProtoReflect.Descriptor instead.
 func (*StartNexusOperationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{162}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{160}
 }
 
 func (x *StartNexusOperationRequest) GetNamespaceId() string {
@@ -10461,7 +10333,7 @@ type StartNexusOperationResponse struct {
 
 func (x *StartNexusOperationResponse) Reset() {
 	*x = StartNexusOperationResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[163]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[161]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10473,7 +10345,7 @@ func (x *StartNexusOperationResponse) String() string {
 func (*StartNexusOperationResponse) ProtoMessage() {}
 
 func (x *StartNexusOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[163]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[161]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10486,7 +10358,7 @@ func (x *StartNexusOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartNexusOperationResponse.ProtoReflect.Descriptor instead.
 func (*StartNexusOperationResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{163}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{161}
 }
 
 func (x *StartNexusOperationResponse) GetResponse() *v122.StartOperationResponse {
@@ -10507,7 +10379,7 @@ type CancelNexusOperationRequest struct {
 
 func (x *CancelNexusOperationRequest) Reset() {
 	*x = CancelNexusOperationRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[164]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[162]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10519,7 +10391,7 @@ func (x *CancelNexusOperationRequest) String() string {
 func (*CancelNexusOperationRequest) ProtoMessage() {}
 
 func (x *CancelNexusOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[164]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[162]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10532,7 +10404,7 @@ func (x *CancelNexusOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelNexusOperationRequest.ProtoReflect.Descriptor instead.
 func (*CancelNexusOperationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{164}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{162}
 }
 
 func (x *CancelNexusOperationRequest) GetNamespaceId() string {
@@ -10565,7 +10437,7 @@ type CancelNexusOperationResponse struct {
 
 func (x *CancelNexusOperationResponse) Reset() {
 	*x = CancelNexusOperationResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[165]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[163]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10577,7 +10449,7 @@ func (x *CancelNexusOperationResponse) String() string {
 func (*CancelNexusOperationResponse) ProtoMessage() {}
 
 func (x *CancelNexusOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[165]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[163]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10590,7 +10462,7 @@ func (x *CancelNexusOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelNexusOperationResponse.ProtoReflect.Descriptor instead.
 func (*CancelNexusOperationResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{165}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{163}
 }
 
 func (x *CancelNexusOperationResponse) GetResponse() *v122.CancelOperationResponse {
@@ -10610,7 +10482,7 @@ type PollWorkflowExecutionTimeSkippingRequest struct {
 
 func (x *PollWorkflowExecutionTimeSkippingRequest) Reset() {
 	*x = PollWorkflowExecutionTimeSkippingRequest{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[166]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[164]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10622,7 +10494,7 @@ func (x *PollWorkflowExecutionTimeSkippingRequest) String() string {
 func (*PollWorkflowExecutionTimeSkippingRequest) ProtoMessage() {}
 
 func (x *PollWorkflowExecutionTimeSkippingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[166]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[164]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10635,7 +10507,7 @@ func (x *PollWorkflowExecutionTimeSkippingRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use PollWorkflowExecutionTimeSkippingRequest.ProtoReflect.Descriptor instead.
 func (*PollWorkflowExecutionTimeSkippingRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{166}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{164}
 }
 
 func (x *PollWorkflowExecutionTimeSkippingRequest) GetNamespaceId() string {
@@ -10661,7 +10533,7 @@ type PollWorkflowExecutionTimeSkippingResponse struct {
 
 func (x *PollWorkflowExecutionTimeSkippingResponse) Reset() {
 	*x = PollWorkflowExecutionTimeSkippingResponse{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[167]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[165]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10673,7 +10545,7 @@ func (x *PollWorkflowExecutionTimeSkippingResponse) String() string {
 func (*PollWorkflowExecutionTimeSkippingResponse) ProtoMessage() {}
 
 func (x *PollWorkflowExecutionTimeSkippingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[167]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[165]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10686,7 +10558,7 @@ func (x *PollWorkflowExecutionTimeSkippingResponse) ProtoReflect() protoreflect.
 
 // Deprecated: Use PollWorkflowExecutionTimeSkippingResponse.ProtoReflect.Descriptor instead.
 func (*PollWorkflowExecutionTimeSkippingResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{167}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{165}
 }
 
 func (x *PollWorkflowExecutionTimeSkippingResponse) GetResponse() *v1.PollWorkflowExecutionTimeSkippingResponse {
@@ -10709,7 +10581,7 @@ type OrphanedChildReplacementInfo struct {
 
 func (x *OrphanedChildReplacementInfo) Reset() {
 	*x = OrphanedChildReplacementInfo{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[168]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[166]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10721,7 +10593,7 @@ func (x *OrphanedChildReplacementInfo) String() string {
 func (*OrphanedChildReplacementInfo) ProtoMessage() {}
 
 func (x *OrphanedChildReplacementInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[168]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[166]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10734,7 +10606,7 @@ func (x *OrphanedChildReplacementInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrphanedChildReplacementInfo.ProtoReflect.Descriptor instead.
 func (*OrphanedChildReplacementInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{168}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{166}
 }
 
 func (x *OrphanedChildReplacementInfo) GetParentCurrentVersionHistoryItems() []*v110.VersionHistoryItem {
@@ -10757,7 +10629,7 @@ type ExecuteMultiOperationRequest_Operation struct {
 
 func (x *ExecuteMultiOperationRequest_Operation) Reset() {
 	*x = ExecuteMultiOperationRequest_Operation{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[169]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[167]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10769,7 +10641,7 @@ func (x *ExecuteMultiOperationRequest_Operation) String() string {
 func (*ExecuteMultiOperationRequest_Operation) ProtoMessage() {}
 
 func (x *ExecuteMultiOperationRequest_Operation) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[169]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[167]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10841,7 +10713,7 @@ type ExecuteMultiOperationResponse_Response struct {
 
 func (x *ExecuteMultiOperationResponse_Response) Reset() {
 	*x = ExecuteMultiOperationResponse_Response{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[170]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[168]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10853,7 +10725,7 @@ func (x *ExecuteMultiOperationResponse_Response) String() string {
 func (*ExecuteMultiOperationResponse_Response) ProtoMessage() {}
 
 func (x *ExecuteMultiOperationResponse_Response) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[170]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[168]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10923,7 +10795,7 @@ type ListQueuesResponse_QueueInfo struct {
 
 func (x *ListQueuesResponse_QueueInfo) Reset() {
 	*x = ListQueuesResponse_QueueInfo{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[176]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[174]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10935,7 +10807,7 @@ func (x *ListQueuesResponse_QueueInfo) String() string {
 func (*ListQueuesResponse_QueueInfo) ProtoMessage() {}
 
 func (x *ListQueuesResponse_QueueInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[176]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[174]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10948,7 +10820,7 @@ func (x *ListQueuesResponse_QueueInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQueuesResponse_QueueInfo.ProtoReflect.Descriptor instead.
 func (*ListQueuesResponse_QueueInfo) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{133, 0}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{131, 0}
 }
 
 func (x *ListQueuesResponse_QueueInfo) GetQueueName() string {
@@ -10986,7 +10858,7 @@ type AddTasksRequest_Task struct {
 
 func (x *AddTasksRequest_Task) Reset() {
 	*x = AddTasksRequest_Task{}
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[177]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[175]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10998,7 +10870,7 @@ func (x *AddTasksRequest_Task) String() string {
 func (*AddTasksRequest_Task) ProtoMessage() {}
 
 func (x *AddTasksRequest_Task) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[177]
+	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[175]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11011,7 +10883,7 @@ func (x *AddTasksRequest_Task) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddTasksRequest_Task.ProtoReflect.Descriptor instead.
 func (*AddTasksRequest_Task) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{134, 0}
+	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{132, 0}
 }
 
 func (x *AddTasksRequest_Task) GetCategoryId() int32 {
@@ -11189,7 +11061,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	" \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12\x14\n" +
 	"\x05stamp\x18\v \x01(\x05R\x05stamp\x12A\n" +
 	"\x1dtask_dispatch_revision_number\x18\f \x01(\x03R\x1ataskDispatchRevisionNumber\x12o\n" +
-	"\x19target_deployment_version\x18\r \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x17targetDeploymentVersion:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05\"\xc4\v\n" +
+	"\x19target_deployment_version\x18\r \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x17targetDeploymentVersion:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05\"\x8e\v\n" +
 	"!RecordWorkflowTaskStartedResponse\x12I\n" +
 	"\rworkflow_type\x18\x01 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x129\n" +
 	"\x19previous_started_event_id\x18\x02 \x01(\x03R\x16previousStartedEventId\x12,\n" +
@@ -11212,12 +11084,11 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\vraw_history\x18\x14 \x01(\v2 .temporal.api.history.v1.HistoryB\x02\x18\x01R\n" +
 	"rawHistory\x12*\n" +
 	"\x11raw_history_bytes\x18\x15 \x03(\fR\x0frawHistoryBytes\x12H\n" +
-	"\rstream_slices\x18\x16 \x03(\v2#.temporal.api.stream.v1.StreamSliceR\fstreamSlices\x124\n" +
-	"\x05wakes\x18\x17 \x03(\v2\x1e.temporal.api.workflow.v1.WakeR\x05wakes\x1a`\n" +
+	"\rstream_slices\x18\x16 \x03(\v2#.temporal.api.stream.v1.StreamSliceR\fstreamSlices\x1a`\n" +
 	"\fQueriesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
 	"\x05value\x18\x02 \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05value:\x028\x01J\x04\b\n" +
-	"\x10\v\"\xbe\v\n" +
+	"\x10\v\"\x88\v\n" +
 	"/RecordWorkflowTaskStartedResponseWithRawHistory\x12I\n" +
 	"\rworkflow_type\x18\x01 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x129\n" +
 	"\x19previous_started_event_id\x18\x02 \x01(\x03R\x16previousStartedEventId\x12,\n" +
@@ -11240,8 +11111,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\vraw_history\x18\x14 \x03(\fB\x02\x18\x01R\n" +
 	"rawHistory\x12*\n" +
 	"\x11raw_history_bytes\x18\x15 \x03(\fR\x0frawHistoryBytes\x12H\n" +
-	"\rstream_slices\x18\x16 \x03(\v2#.temporal.api.stream.v1.StreamSliceR\fstreamSlices\x124\n" +
-	"\x05wakes\x18\x17 \x03(\v2\x1e.temporal.api.workflow.v1.WakeR\x05wakes\x1a`\n" +
+	"\rstream_slices\x18\x16 \x03(\v2#.temporal.api.stream.v1.StreamSliceR\fstreamSlices\x1a`\n" +
 	"\fQueriesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
 	"\x05value\x18\x02 \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05value:\x028\x01J\x04\b\n" +
@@ -11330,13 +11200,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x1bexternal_workflow_execution\x18\x03 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x19externalWorkflowExecution\x12.\n" +
 	"\x13child_workflow_only\x18\x04 \x01(\bR\x11childWorkflowOnly:3\x92\xc4\x03/*-signal_request.workflow_execution.workflow_id\"S\n" +
 	"\x1fSignalWorkflowExecutionResponse\x120\n" +
-	"\x04link\x18\x01 \x01(\v2\x1c.temporal.api.common.v1.LinkR\x04link\"\xd6\x01\n" +
-	"\x1cWakeWorkflowExecutionRequest\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12`\n" +
-	"\fwake_request\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.WakeWorkflowExecutionRequestR\vwakeRequest:1\x92\xc4\x03-*+wake_request.workflow_execution.workflow_id\"N\n" +
-	"\x1dWakeWorkflowExecutionResponse\x12\x15\n" +
-	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x16\n" +
-	"\x06folded\x18\x02 \x01(\bR\x06folded\"\xff\x01\n" +
+	"\x04link\x18\x01 \x01(\v2\x1c.temporal.api.common.v1.LinkR\x04link\"\xff\x01\n" +
 	"'SignalWithStartWorkflowExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x83\x01\n" +
 	"\x19signal_with_start_request\x18\x02 \x01(\v2H.temporal.api.workflowservice.v1.SignalWithStartWorkflowExecutionRequestR\x16signalWithStartRequest:+\x92\xc4\x03'*%signal_with_start_request.workflow_id\"\xcf\x01\n" +
@@ -11859,7 +11723,7 @@ func file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZ
 	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 178)
+var file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 176)
 var file_temporal_server_api_historyservice_v1_request_response_proto_goTypes = []any{
 	(*RoutingOptions)(nil),                                  // 0: temporal.server.api.historyservice.v1.RoutingOptions
 	(*StartWorkflowExecutionRequest)(nil),                   // 1: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest
@@ -11897,555 +11761,548 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_goTypes = 
 	(*IsActivityTaskValidResponse)(nil),                     // 33: temporal.server.api.historyservice.v1.IsActivityTaskValidResponse
 	(*SignalWorkflowExecutionRequest)(nil),                  // 34: temporal.server.api.historyservice.v1.SignalWorkflowExecutionRequest
 	(*SignalWorkflowExecutionResponse)(nil),                 // 35: temporal.server.api.historyservice.v1.SignalWorkflowExecutionResponse
-	(*WakeWorkflowExecutionRequest)(nil),                    // 36: temporal.server.api.historyservice.v1.WakeWorkflowExecutionRequest
-	(*WakeWorkflowExecutionResponse)(nil),                   // 37: temporal.server.api.historyservice.v1.WakeWorkflowExecutionResponse
-	(*SignalWithStartWorkflowExecutionRequest)(nil),         // 38: temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionRequest
-	(*SignalWithStartWorkflowExecutionResponse)(nil),        // 39: temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionResponse
-	(*RemoveSignalMutableStateRequest)(nil),                 // 40: temporal.server.api.historyservice.v1.RemoveSignalMutableStateRequest
-	(*RemoveSignalMutableStateResponse)(nil),                // 41: temporal.server.api.historyservice.v1.RemoveSignalMutableStateResponse
-	(*TerminateWorkflowExecutionRequest)(nil),               // 42: temporal.server.api.historyservice.v1.TerminateWorkflowExecutionRequest
-	(*TerminateWorkflowExecutionResponse)(nil),              // 43: temporal.server.api.historyservice.v1.TerminateWorkflowExecutionResponse
-	(*DeleteWorkflowExecutionRequest)(nil),                  // 44: temporal.server.api.historyservice.v1.DeleteWorkflowExecutionRequest
-	(*DeleteWorkflowExecutionResponse)(nil),                 // 45: temporal.server.api.historyservice.v1.DeleteWorkflowExecutionResponse
-	(*ResetWorkflowExecutionRequest)(nil),                   // 46: temporal.server.api.historyservice.v1.ResetWorkflowExecutionRequest
-	(*ResetWorkflowExecutionResponse)(nil),                  // 47: temporal.server.api.historyservice.v1.ResetWorkflowExecutionResponse
-	(*RequestCancelWorkflowExecutionRequest)(nil),           // 48: temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionRequest
-	(*RequestCancelWorkflowExecutionResponse)(nil),          // 49: temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionResponse
-	(*ScheduleWorkflowTaskRequest)(nil),                     // 50: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskRequest
-	(*ScheduleWorkflowTaskResponse)(nil),                    // 51: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskResponse
-	(*VerifyFirstWorkflowTaskScheduledRequest)(nil),         // 52: temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledRequest
-	(*VerifyFirstWorkflowTaskScheduledResponse)(nil),        // 53: temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledResponse
-	(*RecordChildExecutionCompletedRequest)(nil),            // 54: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedRequest
-	(*RecordChildExecutionCompletedResponse)(nil),           // 55: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedResponse
-	(*VerifyChildExecutionCompletionRecordedRequest)(nil),   // 56: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedRequest
-	(*VerifyChildExecutionCompletionRecordedResponse)(nil),  // 57: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedResponse
-	(*DescribeWorkflowExecutionRequest)(nil),                // 58: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionRequest
-	(*DescribeWorkflowExecutionResponse)(nil),               // 59: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse
-	(*ReplicateEventsV2Request)(nil),                        // 60: temporal.server.api.historyservice.v1.ReplicateEventsV2Request
-	(*ReplicateEventsV2Response)(nil),                       // 61: temporal.server.api.historyservice.v1.ReplicateEventsV2Response
-	(*ReplicateWorkflowStateRequest)(nil),                   // 62: temporal.server.api.historyservice.v1.ReplicateWorkflowStateRequest
-	(*ReplicateWorkflowStateResponse)(nil),                  // 63: temporal.server.api.historyservice.v1.ReplicateWorkflowStateResponse
-	(*SyncShardStatusRequest)(nil),                          // 64: temporal.server.api.historyservice.v1.SyncShardStatusRequest
-	(*SyncShardStatusResponse)(nil),                         // 65: temporal.server.api.historyservice.v1.SyncShardStatusResponse
-	(*SyncActivityRequest)(nil),                             // 66: temporal.server.api.historyservice.v1.SyncActivityRequest
-	(*SyncActivitiesRequest)(nil),                           // 67: temporal.server.api.historyservice.v1.SyncActivitiesRequest
-	(*ActivitySyncInfo)(nil),                                // 68: temporal.server.api.historyservice.v1.ActivitySyncInfo
-	(*SyncActivityResponse)(nil),                            // 69: temporal.server.api.historyservice.v1.SyncActivityResponse
-	(*DescribeMutableStateRequest)(nil),                     // 70: temporal.server.api.historyservice.v1.DescribeMutableStateRequest
-	(*DescribeMutableStateResponse)(nil),                    // 71: temporal.server.api.historyservice.v1.DescribeMutableStateResponse
-	(*DescribeHistoryHostRequest)(nil),                      // 72: temporal.server.api.historyservice.v1.DescribeHistoryHostRequest
-	(*DescribeHistoryHostResponse)(nil),                     // 73: temporal.server.api.historyservice.v1.DescribeHistoryHostResponse
-	(*CloseShardRequest)(nil),                               // 74: temporal.server.api.historyservice.v1.CloseShardRequest
-	(*CloseShardResponse)(nil),                              // 75: temporal.server.api.historyservice.v1.CloseShardResponse
-	(*GetShardRequest)(nil),                                 // 76: temporal.server.api.historyservice.v1.GetShardRequest
-	(*GetShardResponse)(nil),                                // 77: temporal.server.api.historyservice.v1.GetShardResponse
-	(*RemoveTaskRequest)(nil),                               // 78: temporal.server.api.historyservice.v1.RemoveTaskRequest
-	(*RemoveTaskResponse)(nil),                              // 79: temporal.server.api.historyservice.v1.RemoveTaskResponse
-	(*GetReplicationMessagesRequest)(nil),                   // 80: temporal.server.api.historyservice.v1.GetReplicationMessagesRequest
-	(*GetReplicationMessagesResponse)(nil),                  // 81: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse
-	(*GetDLQReplicationMessagesRequest)(nil),                // 82: temporal.server.api.historyservice.v1.GetDLQReplicationMessagesRequest
-	(*GetDLQReplicationMessagesResponse)(nil),               // 83: temporal.server.api.historyservice.v1.GetDLQReplicationMessagesResponse
-	(*QueryWorkflowRequest)(nil),                            // 84: temporal.server.api.historyservice.v1.QueryWorkflowRequest
-	(*QueryWorkflowResponse)(nil),                           // 85: temporal.server.api.historyservice.v1.QueryWorkflowResponse
-	(*ReapplyEventsRequest)(nil),                            // 86: temporal.server.api.historyservice.v1.ReapplyEventsRequest
-	(*ReapplyEventsResponse)(nil),                           // 87: temporal.server.api.historyservice.v1.ReapplyEventsResponse
-	(*GetDLQMessagesRequest)(nil),                           // 88: temporal.server.api.historyservice.v1.GetDLQMessagesRequest
-	(*GetDLQMessagesResponse)(nil),                          // 89: temporal.server.api.historyservice.v1.GetDLQMessagesResponse
-	(*PurgeDLQMessagesRequest)(nil),                         // 90: temporal.server.api.historyservice.v1.PurgeDLQMessagesRequest
-	(*PurgeDLQMessagesResponse)(nil),                        // 91: temporal.server.api.historyservice.v1.PurgeDLQMessagesResponse
-	(*MergeDLQMessagesRequest)(nil),                         // 92: temporal.server.api.historyservice.v1.MergeDLQMessagesRequest
-	(*MergeDLQMessagesResponse)(nil),                        // 93: temporal.server.api.historyservice.v1.MergeDLQMessagesResponse
-	(*RefreshWorkflowTasksRequest)(nil),                     // 94: temporal.server.api.historyservice.v1.RefreshWorkflowTasksRequest
-	(*RefreshWorkflowTasksResponse)(nil),                    // 95: temporal.server.api.historyservice.v1.RefreshWorkflowTasksResponse
-	(*GenerateLastHistoryReplicationTasksRequest)(nil),      // 96: temporal.server.api.historyservice.v1.GenerateLastHistoryReplicationTasksRequest
-	(*GenerateLastHistoryReplicationTasksResponse)(nil),     // 97: temporal.server.api.historyservice.v1.GenerateLastHistoryReplicationTasksResponse
-	(*GetReplicationStatusRequest)(nil),                     // 98: temporal.server.api.historyservice.v1.GetReplicationStatusRequest
-	(*GetReplicationStatusResponse)(nil),                    // 99: temporal.server.api.historyservice.v1.GetReplicationStatusResponse
-	(*ShardReplicationStatus)(nil),                          // 100: temporal.server.api.historyservice.v1.ShardReplicationStatus
-	(*HandoverNamespaceInfo)(nil),                           // 101: temporal.server.api.historyservice.v1.HandoverNamespaceInfo
-	(*ShardReplicationStatusPerCluster)(nil),                // 102: temporal.server.api.historyservice.v1.ShardReplicationStatusPerCluster
-	(*RebuildMutableStateRequest)(nil),                      // 103: temporal.server.api.historyservice.v1.RebuildMutableStateRequest
-	(*RebuildMutableStateResponse)(nil),                     // 104: temporal.server.api.historyservice.v1.RebuildMutableStateResponse
-	(*ImportWorkflowExecutionRequest)(nil),                  // 105: temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest
-	(*ImportWorkflowExecutionResponse)(nil),                 // 106: temporal.server.api.historyservice.v1.ImportWorkflowExecutionResponse
-	(*DeleteWorkflowVisibilityRecordRequest)(nil),           // 107: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest
-	(*DeleteWorkflowVisibilityRecordResponse)(nil),          // 108: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordResponse
-	(*UpdateWorkflowExecutionRequest)(nil),                  // 109: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionRequest
-	(*UpdateWorkflowExecutionResponse)(nil),                 // 110: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse
-	(*StreamWorkflowReplicationMessagesRequest)(nil),        // 111: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesRequest
-	(*StreamWorkflowReplicationMessagesResponse)(nil),       // 112: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesResponse
-	(*PollWorkflowExecutionUpdateRequest)(nil),              // 113: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateRequest
-	(*PollWorkflowExecutionUpdateResponse)(nil),             // 114: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateResponse
-	(*GetWorkflowExecutionHistoryRequest)(nil),              // 115: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryRequest
-	(*GetWorkflowExecutionHistoryResponse)(nil),             // 116: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse
-	(*GetWorkflowExecutionHistoryResponseWithRaw)(nil),      // 117: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponseWithRaw
-	(*GetWorkflowExecutionHistoryReverseRequest)(nil),       // 118: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseRequest
-	(*GetWorkflowExecutionHistoryReverseResponse)(nil),      // 119: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseResponse
-	(*GetWorkflowExecutionRawHistoryV2Request)(nil),         // 120: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Request
-	(*GetWorkflowExecutionRawHistoryV2Response)(nil),        // 121: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Response
-	(*GetWorkflowExecutionRawHistoryRequest)(nil),           // 122: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryRequest
-	(*GetWorkflowExecutionRawHistoryResponse)(nil),          // 123: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryResponse
-	(*ForceDeleteWorkflowExecutionRequest)(nil),             // 124: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionRequest
-	(*ForceDeleteWorkflowExecutionResponse)(nil),            // 125: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionResponse
-	(*DeleteExecutionRequest)(nil),                          // 126: temporal.server.api.historyservice.v1.DeleteExecutionRequest
-	(*DeleteExecutionResponse)(nil),                         // 127: temporal.server.api.historyservice.v1.DeleteExecutionResponse
-	(*GetDLQTasksRequest)(nil),                              // 128: temporal.server.api.historyservice.v1.GetDLQTasksRequest
-	(*GetDLQTasksResponse)(nil),                             // 129: temporal.server.api.historyservice.v1.GetDLQTasksResponse
-	(*DeleteDLQTasksRequest)(nil),                           // 130: temporal.server.api.historyservice.v1.DeleteDLQTasksRequest
-	(*DeleteDLQTasksResponse)(nil),                          // 131: temporal.server.api.historyservice.v1.DeleteDLQTasksResponse
-	(*ListQueuesRequest)(nil),                               // 132: temporal.server.api.historyservice.v1.ListQueuesRequest
-	(*ListQueuesResponse)(nil),                              // 133: temporal.server.api.historyservice.v1.ListQueuesResponse
-	(*AddTasksRequest)(nil),                                 // 134: temporal.server.api.historyservice.v1.AddTasksRequest
-	(*AddTasksResponse)(nil),                                // 135: temporal.server.api.historyservice.v1.AddTasksResponse
-	(*ListTasksRequest)(nil),                                // 136: temporal.server.api.historyservice.v1.ListTasksRequest
-	(*ListTasksResponse)(nil),                               // 137: temporal.server.api.historyservice.v1.ListTasksResponse
-	(*CompleteNexusOperationChasmRequest)(nil),              // 138: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest
-	(*CompleteNexusOperationChasmResponse)(nil),             // 139: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmResponse
-	(*CompleteNexusOperationRequest)(nil),                   // 140: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest
-	(*CompleteNexusOperationResponse)(nil),                  // 141: temporal.server.api.historyservice.v1.CompleteNexusOperationResponse
-	(*InvokeStateMachineMethodRequest)(nil),                 // 142: temporal.server.api.historyservice.v1.InvokeStateMachineMethodRequest
-	(*InvokeStateMachineMethodResponse)(nil),                // 143: temporal.server.api.historyservice.v1.InvokeStateMachineMethodResponse
-	(*DeepHealthCheckRequest)(nil),                          // 144: temporal.server.api.historyservice.v1.DeepHealthCheckRequest
-	(*DeepHealthCheckResponse)(nil),                         // 145: temporal.server.api.historyservice.v1.DeepHealthCheckResponse
-	(*SyncWorkflowStateRequest)(nil),                        // 146: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest
-	(*SyncWorkflowStateResponse)(nil),                       // 147: temporal.server.api.historyservice.v1.SyncWorkflowStateResponse
-	(*UpdateActivityOptionsRequest)(nil),                    // 148: temporal.server.api.historyservice.v1.UpdateActivityOptionsRequest
-	(*UpdateActivityOptionsResponse)(nil),                   // 149: temporal.server.api.historyservice.v1.UpdateActivityOptionsResponse
-	(*PauseActivityRequest)(nil),                            // 150: temporal.server.api.historyservice.v1.PauseActivityRequest
-	(*PauseActivityResponse)(nil),                           // 151: temporal.server.api.historyservice.v1.PauseActivityResponse
-	(*UnpauseActivityRequest)(nil),                          // 152: temporal.server.api.historyservice.v1.UnpauseActivityRequest
-	(*UnpauseActivityResponse)(nil),                         // 153: temporal.server.api.historyservice.v1.UnpauseActivityResponse
-	(*ResetActivityRequest)(nil),                            // 154: temporal.server.api.historyservice.v1.ResetActivityRequest
-	(*ResetActivityResponse)(nil),                           // 155: temporal.server.api.historyservice.v1.ResetActivityResponse
-	(*UpdateWorkflowExecutionOptionsRequest)(nil),           // 156: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsRequest
-	(*UpdateWorkflowExecutionOptionsResponse)(nil),          // 157: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsResponse
-	(*PauseWorkflowExecutionRequest)(nil),                   // 158: temporal.server.api.historyservice.v1.PauseWorkflowExecutionRequest
-	(*PauseWorkflowExecutionResponse)(nil),                  // 159: temporal.server.api.historyservice.v1.PauseWorkflowExecutionResponse
-	(*UnpauseWorkflowExecutionRequest)(nil),                 // 160: temporal.server.api.historyservice.v1.UnpauseWorkflowExecutionRequest
-	(*UnpauseWorkflowExecutionResponse)(nil),                // 161: temporal.server.api.historyservice.v1.UnpauseWorkflowExecutionResponse
-	(*StartNexusOperationRequest)(nil),                      // 162: temporal.server.api.historyservice.v1.StartNexusOperationRequest
-	(*StartNexusOperationResponse)(nil),                     // 163: temporal.server.api.historyservice.v1.StartNexusOperationResponse
-	(*CancelNexusOperationRequest)(nil),                     // 164: temporal.server.api.historyservice.v1.CancelNexusOperationRequest
-	(*CancelNexusOperationResponse)(nil),                    // 165: temporal.server.api.historyservice.v1.CancelNexusOperationResponse
-	(*PollWorkflowExecutionTimeSkippingRequest)(nil),        // 166: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingRequest
-	(*PollWorkflowExecutionTimeSkippingResponse)(nil),       // 167: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingResponse
-	(*OrphanedChildReplacementInfo)(nil),                    // 168: temporal.server.api.historyservice.v1.OrphanedChildReplacementInfo
-	(*ExecuteMultiOperationRequest_Operation)(nil),          // 169: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation
-	(*ExecuteMultiOperationResponse_Response)(nil),          // 170: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response
-	nil,                                                   // 171: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.QueriesEntry
-	nil,                                                   // 172: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.QueriesEntry
-	nil,                                                   // 173: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry
-	nil,                                                   // 174: temporal.server.api.historyservice.v1.ShardReplicationStatus.RemoteClustersEntry
-	nil,                                                   // 175: temporal.server.api.historyservice.v1.ShardReplicationStatus.HandoverNamespacesEntry
-	(*ListQueuesResponse_QueueInfo)(nil),                  // 176: temporal.server.api.historyservice.v1.ListQueuesResponse.QueueInfo
-	(*AddTasksRequest_Task)(nil),                          // 177: temporal.server.api.historyservice.v1.AddTasksRequest.Task
-	(*v1.StartWorkflowExecutionRequest)(nil),              // 178: temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
-	(*v11.ParentExecutionInfo)(nil),                       // 179: temporal.server.api.workflow.v1.ParentExecutionInfo
-	(*timestamppb.Timestamp)(nil),                         // 180: google.protobuf.Timestamp
-	(v12.ContinueAsNewInitiator)(0),                       // 181: temporal.api.enums.v1.ContinueAsNewInitiator
-	(*v13.Failure)(nil),                                   // 182: temporal.api.failure.v1.Failure
-	(*v14.Payloads)(nil),                                  // 183: temporal.api.common.v1.Payloads
-	(*durationpb.Duration)(nil),                           // 184: google.protobuf.Duration
-	(*v14.WorkerVersionStamp)(nil),                        // 185: temporal.api.common.v1.WorkerVersionStamp
-	(*v11.RootExecutionInfo)(nil),                         // 186: temporal.server.api.workflow.v1.RootExecutionInfo
-	(*v15.VersioningOverride)(nil),                        // 187: temporal.api.workflow.v1.VersioningOverride
-	(*v16.WorkerDeploymentVersion)(nil),                   // 188: temporal.api.deployment.v1.WorkerDeploymentVersion
-	(*v16.InheritedAutoUpgradeInfo)(nil),                  // 189: temporal.api.deployment.v1.InheritedAutoUpgradeInfo
-	(*v17.DeclinedTargetVersionUpgrade)(nil),              // 190: temporal.api.history.v1.DeclinedTargetVersionUpgrade
-	(*v14.TimeSkippingStatePropagation)(nil),              // 191: temporal.api.common.v1.TimeSkippingStatePropagation
-	(*v18.VectorClock)(nil),                               // 192: temporal.server.api.clock.v1.VectorClock
-	(*v1.PollWorkflowTaskQueueResponse)(nil),              // 193: temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse
-	(v12.WorkflowExecutionStatus)(0),                      // 194: temporal.api.enums.v1.WorkflowExecutionStatus
-	(*v14.Link)(nil),                                      // 195: temporal.api.common.v1.Link
-	(*v14.WorkflowExecution)(nil),                         // 196: temporal.api.common.v1.WorkflowExecution
-	(*v19.StreamSlice)(nil),                               // 197: temporal.api.stream.v1.StreamSlice
-	(*v110.VersionHistoryItem)(nil),                       // 198: temporal.server.api.history.v1.VersionHistoryItem
-	(*v111.VersionedTransition)(nil),                      // 199: temporal.server.api.persistence.v1.VersionedTransition
-	(*v14.WorkflowType)(nil),                              // 200: temporal.api.common.v1.WorkflowType
-	(*v112.TaskQueue)(nil),                                // 201: temporal.api.taskqueue.v1.TaskQueue
-	(v113.WorkflowExecutionState)(0),                      // 202: temporal.server.api.enums.v1.WorkflowExecutionState
-	(*v110.VersionHistories)(nil),                         // 203: temporal.server.api.history.v1.VersionHistories
-	(*v15.WorkflowExecutionVersioningInfo)(nil),           // 204: temporal.api.workflow.v1.WorkflowExecutionVersioningInfo
-	(*v110.TransientWorkflowTaskInfo)(nil),                // 205: temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	(*v1.PollWorkflowTaskQueueRequest)(nil),               // 206: temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
-	(*v114.BuildIdRedirectInfo)(nil),                      // 207: temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
-	(*v16.Deployment)(nil),                                // 208: temporal.api.deployment.v1.Deployment
-	(*v114.TaskVersionDirective)(nil),                     // 209: temporal.server.api.taskqueue.v1.TaskVersionDirective
-	(*v116.Message)(nil),                                  // 210: temporal.api.protocol.v1.Message
-	(*v17.History)(nil),                                   // 211: temporal.api.history.v1.History
-	(*v15.Wake)(nil),                                      // 212: temporal.api.workflow.v1.Wake
-	(*v1.PollActivityTaskQueueRequest)(nil),               // 213: temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
-	(*v17.HistoryEvent)(nil),                              // 214: temporal.api.history.v1.HistoryEvent
-	(*v14.Priority)(nil),                                  // 215: temporal.api.common.v1.Priority
-	(*v14.RetryPolicy)(nil),                               // 216: temporal.api.common.v1.RetryPolicy
-	(*v1.RespondWorkflowTaskCompletedRequest)(nil),        // 217: temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest
-	(*v1.PollActivityTaskQueueResponse)(nil),              // 218: temporal.api.workflowservice.v1.PollActivityTaskQueueResponse
-	(*v1.RespondWorkflowTaskFailedRequest)(nil),           // 219: temporal.api.workflowservice.v1.RespondWorkflowTaskFailedRequest
-	(*v1.RecordActivityTaskHeartbeatRequest)(nil),         // 220: temporal.api.workflowservice.v1.RecordActivityTaskHeartbeatRequest
-	(*v1.RespondActivityTaskCompletedRequest)(nil),        // 221: temporal.api.workflowservice.v1.RespondActivityTaskCompletedRequest
-	(*v1.RespondActivityTaskFailedRequest)(nil),           // 222: temporal.api.workflowservice.v1.RespondActivityTaskFailedRequest
-	(*v1.RespondActivityTaskCanceledRequest)(nil),         // 223: temporal.api.workflowservice.v1.RespondActivityTaskCanceledRequest
-	(*v1.SignalWorkflowExecutionRequest)(nil),             // 224: temporal.api.workflowservice.v1.SignalWorkflowExecutionRequest
-	(*v1.WakeWorkflowExecutionRequest)(nil),               // 225: temporal.api.workflowservice.v1.WakeWorkflowExecutionRequest
-	(*v1.SignalWithStartWorkflowExecutionRequest)(nil),    // 226: temporal.api.workflowservice.v1.SignalWithStartWorkflowExecutionRequest
-	(*v1.TerminateWorkflowExecutionRequest)(nil),          // 227: temporal.api.workflowservice.v1.TerminateWorkflowExecutionRequest
-	(*v1.ResetWorkflowExecutionRequest)(nil),              // 228: temporal.api.workflowservice.v1.ResetWorkflowExecutionRequest
-	(*v1.RequestCancelWorkflowExecutionRequest)(nil),      // 229: temporal.api.workflowservice.v1.RequestCancelWorkflowExecutionRequest
-	(*v1.DescribeWorkflowExecutionRequest)(nil),           // 230: temporal.api.workflowservice.v1.DescribeWorkflowExecutionRequest
-	(*v15.WorkflowExecutionConfig)(nil),                   // 231: temporal.api.workflow.v1.WorkflowExecutionConfig
-	(*v15.WorkflowExecutionInfo)(nil),                     // 232: temporal.api.workflow.v1.WorkflowExecutionInfo
-	(*v15.PendingActivityInfo)(nil),                       // 233: temporal.api.workflow.v1.PendingActivityInfo
-	(*v15.PendingChildExecutionInfo)(nil),                 // 234: temporal.api.workflow.v1.PendingChildExecutionInfo
-	(*v15.PendingWorkflowTaskInfo)(nil),                   // 235: temporal.api.workflow.v1.PendingWorkflowTaskInfo
-	(*v15.CallbackInfo)(nil),                              // 236: temporal.api.workflow.v1.CallbackInfo
-	(*v15.PendingNexusOperationInfo)(nil),                 // 237: temporal.api.workflow.v1.PendingNexusOperationInfo
-	(*v15.WorkflowExecutionExtendedInfo)(nil),             // 238: temporal.api.workflow.v1.WorkflowExecutionExtendedInfo
-	(*v14.DataBlob)(nil),                                  // 239: temporal.api.common.v1.DataBlob
-	(*v11.BaseExecutionInfo)(nil),                         // 240: temporal.server.api.workflow.v1.BaseExecutionInfo
-	(*v111.WorkflowMutableState)(nil),                     // 241: temporal.server.api.persistence.v1.WorkflowMutableState
-	(*v110.VersionHistory)(nil),                           // 242: temporal.server.api.history.v1.VersionHistory
-	(*v117.NamespaceCacheInfo)(nil),                       // 243: temporal.server.api.namespace.v1.NamespaceCacheInfo
-	(*v111.ShardInfo)(nil),                                // 244: temporal.server.api.persistence.v1.ShardInfo
-	(*v118.ReplicationToken)(nil),                         // 245: temporal.server.api.replication.v1.ReplicationToken
-	(*v118.ReplicationTaskInfo)(nil),                      // 246: temporal.server.api.replication.v1.ReplicationTaskInfo
-	(*v118.ReplicationTask)(nil),                          // 247: temporal.server.api.replication.v1.ReplicationTask
-	(*v1.QueryWorkflowRequest)(nil),                       // 248: temporal.api.workflowservice.v1.QueryWorkflowRequest
-	(*v1.QueryWorkflowResponse)(nil),                      // 249: temporal.api.workflowservice.v1.QueryWorkflowResponse
-	(*v119.ReapplyEventsRequest)(nil),                     // 250: temporal.server.api.adminservice.v1.ReapplyEventsRequest
-	(v113.DeadLetterQueueType)(0),                         // 251: temporal.server.api.enums.v1.DeadLetterQueueType
-	(*v119.RefreshWorkflowTasksRequest)(nil),              // 252: temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest
-	(*v1.UpdateWorkflowExecutionRequest)(nil),             // 253: temporal.api.workflowservice.v1.UpdateWorkflowExecutionRequest
-	(*v1.UpdateWorkflowExecutionResponse)(nil),            // 254: temporal.api.workflowservice.v1.UpdateWorkflowExecutionResponse
-	(*v118.SyncReplicationState)(nil),                     // 255: temporal.server.api.replication.v1.SyncReplicationState
-	(*v118.WorkflowReplicationMessages)(nil),              // 256: temporal.server.api.replication.v1.WorkflowReplicationMessages
-	(*v1.PollWorkflowExecutionUpdateRequest)(nil),         // 257: temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateRequest
-	(*v1.PollWorkflowExecutionUpdateResponse)(nil),        // 258: temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateResponse
-	(*v1.GetWorkflowExecutionHistoryRequest)(nil),         // 259: temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryRequest
-	(*v1.GetWorkflowExecutionHistoryResponse)(nil),        // 260: temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse
-	(*v1.GetWorkflowExecutionHistoryReverseRequest)(nil),  // 261: temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseRequest
-	(*v1.GetWorkflowExecutionHistoryReverseResponse)(nil), // 262: temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseResponse
-	(*v119.GetWorkflowExecutionRawHistoryV2Request)(nil),  // 263: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request
-	(*v119.GetWorkflowExecutionRawHistoryV2Response)(nil), // 264: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response
-	(*v119.GetWorkflowExecutionRawHistoryRequest)(nil),    // 265: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest
-	(*v119.GetWorkflowExecutionRawHistoryResponse)(nil),   // 266: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse
-	(*v119.DeleteWorkflowExecutionRequest)(nil),           // 267: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest
-	(*v119.DeleteWorkflowExecutionResponse)(nil),          // 268: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse
-	(*v120.HistoryDLQKey)(nil),                            // 269: temporal.server.api.common.v1.HistoryDLQKey
-	(*v120.HistoryDLQTask)(nil),                           // 270: temporal.server.api.common.v1.HistoryDLQTask
-	(*v120.HistoryDLQTaskMetadata)(nil),                   // 271: temporal.server.api.common.v1.HistoryDLQTaskMetadata
-	(*v119.ListHistoryTasksRequest)(nil),                  // 272: temporal.server.api.adminservice.v1.ListHistoryTasksRequest
-	(*v119.ListHistoryTasksResponse)(nil),                 // 273: temporal.server.api.adminservice.v1.ListHistoryTasksResponse
-	(*v121.NexusOperationCompletion)(nil),                 // 274: temporal.server.api.token.v1.NexusOperationCompletion
-	(*v14.Payload)(nil),                                   // 275: temporal.api.common.v1.Payload
-	(*v122.Failure)(nil),                                  // 276: temporal.api.nexus.v1.Failure
-	(*v111.StateMachineRef)(nil),                          // 277: temporal.server.api.persistence.v1.StateMachineRef
-	(v113.HealthState)(0),                                 // 278: temporal.server.api.enums.v1.HealthState
-	(*v123.HealthCheck)(nil),                              // 279: temporal.server.api.health.v1.HealthCheck
-	(*v118.VersionedTransitionArtifact)(nil),              // 280: temporal.server.api.replication.v1.VersionedTransitionArtifact
-	(*v1.UpdateActivityOptionsRequest)(nil),               // 281: temporal.api.workflowservice.v1.UpdateActivityOptionsRequest
-	(*v124.ActivityOptions)(nil),                          // 282: temporal.api.activity.v1.ActivityOptions
-	(*v1.PauseActivityRequest)(nil),                       // 283: temporal.api.workflowservice.v1.PauseActivityRequest
-	(*v1.UnpauseActivityRequest)(nil),                     // 284: temporal.api.workflowservice.v1.UnpauseActivityRequest
-	(*v1.ResetActivityRequest)(nil),                       // 285: temporal.api.workflowservice.v1.ResetActivityRequest
-	(*v1.UpdateWorkflowExecutionOptionsRequest)(nil),      // 286: temporal.api.workflowservice.v1.UpdateWorkflowExecutionOptionsRequest
-	(*v15.WorkflowExecutionOptions)(nil),                  // 287: temporal.api.workflow.v1.WorkflowExecutionOptions
-	(*v1.PauseWorkflowExecutionRequest)(nil),              // 288: temporal.api.workflowservice.v1.PauseWorkflowExecutionRequest
-	(*v1.UnpauseWorkflowExecutionRequest)(nil),            // 289: temporal.api.workflowservice.v1.UnpauseWorkflowExecutionRequest
-	(*v122.StartOperationRequest)(nil),                    // 290: temporal.api.nexus.v1.StartOperationRequest
-	(*v122.StartOperationResponse)(nil),                   // 291: temporal.api.nexus.v1.StartOperationResponse
-	(*v122.CancelOperationRequest)(nil),                   // 292: temporal.api.nexus.v1.CancelOperationRequest
-	(*v122.CancelOperationResponse)(nil),                  // 293: temporal.api.nexus.v1.CancelOperationResponse
-	(*v1.PollWorkflowExecutionTimeSkippingRequest)(nil),   // 294: temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingRequest
-	(*v1.PollWorkflowExecutionTimeSkippingResponse)(nil),  // 295: temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponse
-	(*v115.WorkflowQuery)(nil),                            // 296: temporal.api.query.v1.WorkflowQuery
-	(*v118.ReplicationMessages)(nil),                      // 297: temporal.server.api.replication.v1.ReplicationMessages
-	(*descriptorpb.MessageOptions)(nil),                   // 298: google.protobuf.MessageOptions
+	(*SignalWithStartWorkflowExecutionRequest)(nil),         // 36: temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionRequest
+	(*SignalWithStartWorkflowExecutionResponse)(nil),        // 37: temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionResponse
+	(*RemoveSignalMutableStateRequest)(nil),                 // 38: temporal.server.api.historyservice.v1.RemoveSignalMutableStateRequest
+	(*RemoveSignalMutableStateResponse)(nil),                // 39: temporal.server.api.historyservice.v1.RemoveSignalMutableStateResponse
+	(*TerminateWorkflowExecutionRequest)(nil),               // 40: temporal.server.api.historyservice.v1.TerminateWorkflowExecutionRequest
+	(*TerminateWorkflowExecutionResponse)(nil),              // 41: temporal.server.api.historyservice.v1.TerminateWorkflowExecutionResponse
+	(*DeleteWorkflowExecutionRequest)(nil),                  // 42: temporal.server.api.historyservice.v1.DeleteWorkflowExecutionRequest
+	(*DeleteWorkflowExecutionResponse)(nil),                 // 43: temporal.server.api.historyservice.v1.DeleteWorkflowExecutionResponse
+	(*ResetWorkflowExecutionRequest)(nil),                   // 44: temporal.server.api.historyservice.v1.ResetWorkflowExecutionRequest
+	(*ResetWorkflowExecutionResponse)(nil),                  // 45: temporal.server.api.historyservice.v1.ResetWorkflowExecutionResponse
+	(*RequestCancelWorkflowExecutionRequest)(nil),           // 46: temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionRequest
+	(*RequestCancelWorkflowExecutionResponse)(nil),          // 47: temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionResponse
+	(*ScheduleWorkflowTaskRequest)(nil),                     // 48: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskRequest
+	(*ScheduleWorkflowTaskResponse)(nil),                    // 49: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskResponse
+	(*VerifyFirstWorkflowTaskScheduledRequest)(nil),         // 50: temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledRequest
+	(*VerifyFirstWorkflowTaskScheduledResponse)(nil),        // 51: temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledResponse
+	(*RecordChildExecutionCompletedRequest)(nil),            // 52: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedRequest
+	(*RecordChildExecutionCompletedResponse)(nil),           // 53: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedResponse
+	(*VerifyChildExecutionCompletionRecordedRequest)(nil),   // 54: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedRequest
+	(*VerifyChildExecutionCompletionRecordedResponse)(nil),  // 55: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedResponse
+	(*DescribeWorkflowExecutionRequest)(nil),                // 56: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionRequest
+	(*DescribeWorkflowExecutionResponse)(nil),               // 57: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse
+	(*ReplicateEventsV2Request)(nil),                        // 58: temporal.server.api.historyservice.v1.ReplicateEventsV2Request
+	(*ReplicateEventsV2Response)(nil),                       // 59: temporal.server.api.historyservice.v1.ReplicateEventsV2Response
+	(*ReplicateWorkflowStateRequest)(nil),                   // 60: temporal.server.api.historyservice.v1.ReplicateWorkflowStateRequest
+	(*ReplicateWorkflowStateResponse)(nil),                  // 61: temporal.server.api.historyservice.v1.ReplicateWorkflowStateResponse
+	(*SyncShardStatusRequest)(nil),                          // 62: temporal.server.api.historyservice.v1.SyncShardStatusRequest
+	(*SyncShardStatusResponse)(nil),                         // 63: temporal.server.api.historyservice.v1.SyncShardStatusResponse
+	(*SyncActivityRequest)(nil),                             // 64: temporal.server.api.historyservice.v1.SyncActivityRequest
+	(*SyncActivitiesRequest)(nil),                           // 65: temporal.server.api.historyservice.v1.SyncActivitiesRequest
+	(*ActivitySyncInfo)(nil),                                // 66: temporal.server.api.historyservice.v1.ActivitySyncInfo
+	(*SyncActivityResponse)(nil),                            // 67: temporal.server.api.historyservice.v1.SyncActivityResponse
+	(*DescribeMutableStateRequest)(nil),                     // 68: temporal.server.api.historyservice.v1.DescribeMutableStateRequest
+	(*DescribeMutableStateResponse)(nil),                    // 69: temporal.server.api.historyservice.v1.DescribeMutableStateResponse
+	(*DescribeHistoryHostRequest)(nil),                      // 70: temporal.server.api.historyservice.v1.DescribeHistoryHostRequest
+	(*DescribeHistoryHostResponse)(nil),                     // 71: temporal.server.api.historyservice.v1.DescribeHistoryHostResponse
+	(*CloseShardRequest)(nil),                               // 72: temporal.server.api.historyservice.v1.CloseShardRequest
+	(*CloseShardResponse)(nil),                              // 73: temporal.server.api.historyservice.v1.CloseShardResponse
+	(*GetShardRequest)(nil),                                 // 74: temporal.server.api.historyservice.v1.GetShardRequest
+	(*GetShardResponse)(nil),                                // 75: temporal.server.api.historyservice.v1.GetShardResponse
+	(*RemoveTaskRequest)(nil),                               // 76: temporal.server.api.historyservice.v1.RemoveTaskRequest
+	(*RemoveTaskResponse)(nil),                              // 77: temporal.server.api.historyservice.v1.RemoveTaskResponse
+	(*GetReplicationMessagesRequest)(nil),                   // 78: temporal.server.api.historyservice.v1.GetReplicationMessagesRequest
+	(*GetReplicationMessagesResponse)(nil),                  // 79: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse
+	(*GetDLQReplicationMessagesRequest)(nil),                // 80: temporal.server.api.historyservice.v1.GetDLQReplicationMessagesRequest
+	(*GetDLQReplicationMessagesResponse)(nil),               // 81: temporal.server.api.historyservice.v1.GetDLQReplicationMessagesResponse
+	(*QueryWorkflowRequest)(nil),                            // 82: temporal.server.api.historyservice.v1.QueryWorkflowRequest
+	(*QueryWorkflowResponse)(nil),                           // 83: temporal.server.api.historyservice.v1.QueryWorkflowResponse
+	(*ReapplyEventsRequest)(nil),                            // 84: temporal.server.api.historyservice.v1.ReapplyEventsRequest
+	(*ReapplyEventsResponse)(nil),                           // 85: temporal.server.api.historyservice.v1.ReapplyEventsResponse
+	(*GetDLQMessagesRequest)(nil),                           // 86: temporal.server.api.historyservice.v1.GetDLQMessagesRequest
+	(*GetDLQMessagesResponse)(nil),                          // 87: temporal.server.api.historyservice.v1.GetDLQMessagesResponse
+	(*PurgeDLQMessagesRequest)(nil),                         // 88: temporal.server.api.historyservice.v1.PurgeDLQMessagesRequest
+	(*PurgeDLQMessagesResponse)(nil),                        // 89: temporal.server.api.historyservice.v1.PurgeDLQMessagesResponse
+	(*MergeDLQMessagesRequest)(nil),                         // 90: temporal.server.api.historyservice.v1.MergeDLQMessagesRequest
+	(*MergeDLQMessagesResponse)(nil),                        // 91: temporal.server.api.historyservice.v1.MergeDLQMessagesResponse
+	(*RefreshWorkflowTasksRequest)(nil),                     // 92: temporal.server.api.historyservice.v1.RefreshWorkflowTasksRequest
+	(*RefreshWorkflowTasksResponse)(nil),                    // 93: temporal.server.api.historyservice.v1.RefreshWorkflowTasksResponse
+	(*GenerateLastHistoryReplicationTasksRequest)(nil),      // 94: temporal.server.api.historyservice.v1.GenerateLastHistoryReplicationTasksRequest
+	(*GenerateLastHistoryReplicationTasksResponse)(nil),     // 95: temporal.server.api.historyservice.v1.GenerateLastHistoryReplicationTasksResponse
+	(*GetReplicationStatusRequest)(nil),                     // 96: temporal.server.api.historyservice.v1.GetReplicationStatusRequest
+	(*GetReplicationStatusResponse)(nil),                    // 97: temporal.server.api.historyservice.v1.GetReplicationStatusResponse
+	(*ShardReplicationStatus)(nil),                          // 98: temporal.server.api.historyservice.v1.ShardReplicationStatus
+	(*HandoverNamespaceInfo)(nil),                           // 99: temporal.server.api.historyservice.v1.HandoverNamespaceInfo
+	(*ShardReplicationStatusPerCluster)(nil),                // 100: temporal.server.api.historyservice.v1.ShardReplicationStatusPerCluster
+	(*RebuildMutableStateRequest)(nil),                      // 101: temporal.server.api.historyservice.v1.RebuildMutableStateRequest
+	(*RebuildMutableStateResponse)(nil),                     // 102: temporal.server.api.historyservice.v1.RebuildMutableStateResponse
+	(*ImportWorkflowExecutionRequest)(nil),                  // 103: temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest
+	(*ImportWorkflowExecutionResponse)(nil),                 // 104: temporal.server.api.historyservice.v1.ImportWorkflowExecutionResponse
+	(*DeleteWorkflowVisibilityRecordRequest)(nil),           // 105: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest
+	(*DeleteWorkflowVisibilityRecordResponse)(nil),          // 106: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordResponse
+	(*UpdateWorkflowExecutionRequest)(nil),                  // 107: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionRequest
+	(*UpdateWorkflowExecutionResponse)(nil),                 // 108: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse
+	(*StreamWorkflowReplicationMessagesRequest)(nil),        // 109: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesRequest
+	(*StreamWorkflowReplicationMessagesResponse)(nil),       // 110: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesResponse
+	(*PollWorkflowExecutionUpdateRequest)(nil),              // 111: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateRequest
+	(*PollWorkflowExecutionUpdateResponse)(nil),             // 112: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateResponse
+	(*GetWorkflowExecutionHistoryRequest)(nil),              // 113: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryRequest
+	(*GetWorkflowExecutionHistoryResponse)(nil),             // 114: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse
+	(*GetWorkflowExecutionHistoryResponseWithRaw)(nil),      // 115: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponseWithRaw
+	(*GetWorkflowExecutionHistoryReverseRequest)(nil),       // 116: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseRequest
+	(*GetWorkflowExecutionHistoryReverseResponse)(nil),      // 117: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseResponse
+	(*GetWorkflowExecutionRawHistoryV2Request)(nil),         // 118: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Request
+	(*GetWorkflowExecutionRawHistoryV2Response)(nil),        // 119: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Response
+	(*GetWorkflowExecutionRawHistoryRequest)(nil),           // 120: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryRequest
+	(*GetWorkflowExecutionRawHistoryResponse)(nil),          // 121: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryResponse
+	(*ForceDeleteWorkflowExecutionRequest)(nil),             // 122: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionRequest
+	(*ForceDeleteWorkflowExecutionResponse)(nil),            // 123: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionResponse
+	(*DeleteExecutionRequest)(nil),                          // 124: temporal.server.api.historyservice.v1.DeleteExecutionRequest
+	(*DeleteExecutionResponse)(nil),                         // 125: temporal.server.api.historyservice.v1.DeleteExecutionResponse
+	(*GetDLQTasksRequest)(nil),                              // 126: temporal.server.api.historyservice.v1.GetDLQTasksRequest
+	(*GetDLQTasksResponse)(nil),                             // 127: temporal.server.api.historyservice.v1.GetDLQTasksResponse
+	(*DeleteDLQTasksRequest)(nil),                           // 128: temporal.server.api.historyservice.v1.DeleteDLQTasksRequest
+	(*DeleteDLQTasksResponse)(nil),                          // 129: temporal.server.api.historyservice.v1.DeleteDLQTasksResponse
+	(*ListQueuesRequest)(nil),                               // 130: temporal.server.api.historyservice.v1.ListQueuesRequest
+	(*ListQueuesResponse)(nil),                              // 131: temporal.server.api.historyservice.v1.ListQueuesResponse
+	(*AddTasksRequest)(nil),                                 // 132: temporal.server.api.historyservice.v1.AddTasksRequest
+	(*AddTasksResponse)(nil),                                // 133: temporal.server.api.historyservice.v1.AddTasksResponse
+	(*ListTasksRequest)(nil),                                // 134: temporal.server.api.historyservice.v1.ListTasksRequest
+	(*ListTasksResponse)(nil),                               // 135: temporal.server.api.historyservice.v1.ListTasksResponse
+	(*CompleteNexusOperationChasmRequest)(nil),              // 136: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest
+	(*CompleteNexusOperationChasmResponse)(nil),             // 137: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmResponse
+	(*CompleteNexusOperationRequest)(nil),                   // 138: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest
+	(*CompleteNexusOperationResponse)(nil),                  // 139: temporal.server.api.historyservice.v1.CompleteNexusOperationResponse
+	(*InvokeStateMachineMethodRequest)(nil),                 // 140: temporal.server.api.historyservice.v1.InvokeStateMachineMethodRequest
+	(*InvokeStateMachineMethodResponse)(nil),                // 141: temporal.server.api.historyservice.v1.InvokeStateMachineMethodResponse
+	(*DeepHealthCheckRequest)(nil),                          // 142: temporal.server.api.historyservice.v1.DeepHealthCheckRequest
+	(*DeepHealthCheckResponse)(nil),                         // 143: temporal.server.api.historyservice.v1.DeepHealthCheckResponse
+	(*SyncWorkflowStateRequest)(nil),                        // 144: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest
+	(*SyncWorkflowStateResponse)(nil),                       // 145: temporal.server.api.historyservice.v1.SyncWorkflowStateResponse
+	(*UpdateActivityOptionsRequest)(nil),                    // 146: temporal.server.api.historyservice.v1.UpdateActivityOptionsRequest
+	(*UpdateActivityOptionsResponse)(nil),                   // 147: temporal.server.api.historyservice.v1.UpdateActivityOptionsResponse
+	(*PauseActivityRequest)(nil),                            // 148: temporal.server.api.historyservice.v1.PauseActivityRequest
+	(*PauseActivityResponse)(nil),                           // 149: temporal.server.api.historyservice.v1.PauseActivityResponse
+	(*UnpauseActivityRequest)(nil),                          // 150: temporal.server.api.historyservice.v1.UnpauseActivityRequest
+	(*UnpauseActivityResponse)(nil),                         // 151: temporal.server.api.historyservice.v1.UnpauseActivityResponse
+	(*ResetActivityRequest)(nil),                            // 152: temporal.server.api.historyservice.v1.ResetActivityRequest
+	(*ResetActivityResponse)(nil),                           // 153: temporal.server.api.historyservice.v1.ResetActivityResponse
+	(*UpdateWorkflowExecutionOptionsRequest)(nil),           // 154: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsRequest
+	(*UpdateWorkflowExecutionOptionsResponse)(nil),          // 155: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsResponse
+	(*PauseWorkflowExecutionRequest)(nil),                   // 156: temporal.server.api.historyservice.v1.PauseWorkflowExecutionRequest
+	(*PauseWorkflowExecutionResponse)(nil),                  // 157: temporal.server.api.historyservice.v1.PauseWorkflowExecutionResponse
+	(*UnpauseWorkflowExecutionRequest)(nil),                 // 158: temporal.server.api.historyservice.v1.UnpauseWorkflowExecutionRequest
+	(*UnpauseWorkflowExecutionResponse)(nil),                // 159: temporal.server.api.historyservice.v1.UnpauseWorkflowExecutionResponse
+	(*StartNexusOperationRequest)(nil),                      // 160: temporal.server.api.historyservice.v1.StartNexusOperationRequest
+	(*StartNexusOperationResponse)(nil),                     // 161: temporal.server.api.historyservice.v1.StartNexusOperationResponse
+	(*CancelNexusOperationRequest)(nil),                     // 162: temporal.server.api.historyservice.v1.CancelNexusOperationRequest
+	(*CancelNexusOperationResponse)(nil),                    // 163: temporal.server.api.historyservice.v1.CancelNexusOperationResponse
+	(*PollWorkflowExecutionTimeSkippingRequest)(nil),        // 164: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingRequest
+	(*PollWorkflowExecutionTimeSkippingResponse)(nil),       // 165: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingResponse
+	(*OrphanedChildReplacementInfo)(nil),                    // 166: temporal.server.api.historyservice.v1.OrphanedChildReplacementInfo
+	(*ExecuteMultiOperationRequest_Operation)(nil),          // 167: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation
+	(*ExecuteMultiOperationResponse_Response)(nil),          // 168: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response
+	nil,                                                   // 169: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.QueriesEntry
+	nil,                                                   // 170: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.QueriesEntry
+	nil,                                                   // 171: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry
+	nil,                                                   // 172: temporal.server.api.historyservice.v1.ShardReplicationStatus.RemoteClustersEntry
+	nil,                                                   // 173: temporal.server.api.historyservice.v1.ShardReplicationStatus.HandoverNamespacesEntry
+	(*ListQueuesResponse_QueueInfo)(nil),                  // 174: temporal.server.api.historyservice.v1.ListQueuesResponse.QueueInfo
+	(*AddTasksRequest_Task)(nil),                          // 175: temporal.server.api.historyservice.v1.AddTasksRequest.Task
+	(*v1.StartWorkflowExecutionRequest)(nil),              // 176: temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
+	(*v11.ParentExecutionInfo)(nil),                       // 177: temporal.server.api.workflow.v1.ParentExecutionInfo
+	(*timestamppb.Timestamp)(nil),                         // 178: google.protobuf.Timestamp
+	(v12.ContinueAsNewInitiator)(0),                       // 179: temporal.api.enums.v1.ContinueAsNewInitiator
+	(*v13.Failure)(nil),                                   // 180: temporal.api.failure.v1.Failure
+	(*v14.Payloads)(nil),                                  // 181: temporal.api.common.v1.Payloads
+	(*durationpb.Duration)(nil),                           // 182: google.protobuf.Duration
+	(*v14.WorkerVersionStamp)(nil),                        // 183: temporal.api.common.v1.WorkerVersionStamp
+	(*v11.RootExecutionInfo)(nil),                         // 184: temporal.server.api.workflow.v1.RootExecutionInfo
+	(*v15.VersioningOverride)(nil),                        // 185: temporal.api.workflow.v1.VersioningOverride
+	(*v16.WorkerDeploymentVersion)(nil),                   // 186: temporal.api.deployment.v1.WorkerDeploymentVersion
+	(*v16.InheritedAutoUpgradeInfo)(nil),                  // 187: temporal.api.deployment.v1.InheritedAutoUpgradeInfo
+	(*v17.DeclinedTargetVersionUpgrade)(nil),              // 188: temporal.api.history.v1.DeclinedTargetVersionUpgrade
+	(*v14.TimeSkippingStatePropagation)(nil),              // 189: temporal.api.common.v1.TimeSkippingStatePropagation
+	(*v18.VectorClock)(nil),                               // 190: temporal.server.api.clock.v1.VectorClock
+	(*v1.PollWorkflowTaskQueueResponse)(nil),              // 191: temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse
+	(v12.WorkflowExecutionStatus)(0),                      // 192: temporal.api.enums.v1.WorkflowExecutionStatus
+	(*v14.Link)(nil),                                      // 193: temporal.api.common.v1.Link
+	(*v14.WorkflowExecution)(nil),                         // 194: temporal.api.common.v1.WorkflowExecution
+	(*v19.StreamSlice)(nil),                               // 195: temporal.api.stream.v1.StreamSlice
+	(*v110.VersionHistoryItem)(nil),                       // 196: temporal.server.api.history.v1.VersionHistoryItem
+	(*v111.VersionedTransition)(nil),                      // 197: temporal.server.api.persistence.v1.VersionedTransition
+	(*v14.WorkflowType)(nil),                              // 198: temporal.api.common.v1.WorkflowType
+	(*v112.TaskQueue)(nil),                                // 199: temporal.api.taskqueue.v1.TaskQueue
+	(v113.WorkflowExecutionState)(0),                      // 200: temporal.server.api.enums.v1.WorkflowExecutionState
+	(*v110.VersionHistories)(nil),                         // 201: temporal.server.api.history.v1.VersionHistories
+	(*v15.WorkflowExecutionVersioningInfo)(nil),           // 202: temporal.api.workflow.v1.WorkflowExecutionVersioningInfo
+	(*v110.TransientWorkflowTaskInfo)(nil),                // 203: temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	(*v1.PollWorkflowTaskQueueRequest)(nil),               // 204: temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
+	(*v114.BuildIdRedirectInfo)(nil),                      // 205: temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
+	(*v16.Deployment)(nil),                                // 206: temporal.api.deployment.v1.Deployment
+	(*v114.TaskVersionDirective)(nil),                     // 207: temporal.server.api.taskqueue.v1.TaskVersionDirective
+	(*v116.Message)(nil),                                  // 208: temporal.api.protocol.v1.Message
+	(*v17.History)(nil),                                   // 209: temporal.api.history.v1.History
+	(*v1.PollActivityTaskQueueRequest)(nil),               // 210: temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
+	(*v17.HistoryEvent)(nil),                              // 211: temporal.api.history.v1.HistoryEvent
+	(*v14.Priority)(nil),                                  // 212: temporal.api.common.v1.Priority
+	(*v14.RetryPolicy)(nil),                               // 213: temporal.api.common.v1.RetryPolicy
+	(*v1.RespondWorkflowTaskCompletedRequest)(nil),        // 214: temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest
+	(*v1.PollActivityTaskQueueResponse)(nil),              // 215: temporal.api.workflowservice.v1.PollActivityTaskQueueResponse
+	(*v1.RespondWorkflowTaskFailedRequest)(nil),           // 216: temporal.api.workflowservice.v1.RespondWorkflowTaskFailedRequest
+	(*v1.RecordActivityTaskHeartbeatRequest)(nil),         // 217: temporal.api.workflowservice.v1.RecordActivityTaskHeartbeatRequest
+	(*v1.RespondActivityTaskCompletedRequest)(nil),        // 218: temporal.api.workflowservice.v1.RespondActivityTaskCompletedRequest
+	(*v1.RespondActivityTaskFailedRequest)(nil),           // 219: temporal.api.workflowservice.v1.RespondActivityTaskFailedRequest
+	(*v1.RespondActivityTaskCanceledRequest)(nil),         // 220: temporal.api.workflowservice.v1.RespondActivityTaskCanceledRequest
+	(*v1.SignalWorkflowExecutionRequest)(nil),             // 221: temporal.api.workflowservice.v1.SignalWorkflowExecutionRequest
+	(*v1.SignalWithStartWorkflowExecutionRequest)(nil),    // 222: temporal.api.workflowservice.v1.SignalWithStartWorkflowExecutionRequest
+	(*v1.TerminateWorkflowExecutionRequest)(nil),          // 223: temporal.api.workflowservice.v1.TerminateWorkflowExecutionRequest
+	(*v1.ResetWorkflowExecutionRequest)(nil),              // 224: temporal.api.workflowservice.v1.ResetWorkflowExecutionRequest
+	(*v1.RequestCancelWorkflowExecutionRequest)(nil),      // 225: temporal.api.workflowservice.v1.RequestCancelWorkflowExecutionRequest
+	(*v1.DescribeWorkflowExecutionRequest)(nil),           // 226: temporal.api.workflowservice.v1.DescribeWorkflowExecutionRequest
+	(*v15.WorkflowExecutionConfig)(nil),                   // 227: temporal.api.workflow.v1.WorkflowExecutionConfig
+	(*v15.WorkflowExecutionInfo)(nil),                     // 228: temporal.api.workflow.v1.WorkflowExecutionInfo
+	(*v15.PendingActivityInfo)(nil),                       // 229: temporal.api.workflow.v1.PendingActivityInfo
+	(*v15.PendingChildExecutionInfo)(nil),                 // 230: temporal.api.workflow.v1.PendingChildExecutionInfo
+	(*v15.PendingWorkflowTaskInfo)(nil),                   // 231: temporal.api.workflow.v1.PendingWorkflowTaskInfo
+	(*v15.CallbackInfo)(nil),                              // 232: temporal.api.workflow.v1.CallbackInfo
+	(*v15.PendingNexusOperationInfo)(nil),                 // 233: temporal.api.workflow.v1.PendingNexusOperationInfo
+	(*v15.WorkflowExecutionExtendedInfo)(nil),             // 234: temporal.api.workflow.v1.WorkflowExecutionExtendedInfo
+	(*v14.DataBlob)(nil),                                  // 235: temporal.api.common.v1.DataBlob
+	(*v11.BaseExecutionInfo)(nil),                         // 236: temporal.server.api.workflow.v1.BaseExecutionInfo
+	(*v111.WorkflowMutableState)(nil),                     // 237: temporal.server.api.persistence.v1.WorkflowMutableState
+	(*v110.VersionHistory)(nil),                           // 238: temporal.server.api.history.v1.VersionHistory
+	(*v117.NamespaceCacheInfo)(nil),                       // 239: temporal.server.api.namespace.v1.NamespaceCacheInfo
+	(*v111.ShardInfo)(nil),                                // 240: temporal.server.api.persistence.v1.ShardInfo
+	(*v118.ReplicationToken)(nil),                         // 241: temporal.server.api.replication.v1.ReplicationToken
+	(*v118.ReplicationTaskInfo)(nil),                      // 242: temporal.server.api.replication.v1.ReplicationTaskInfo
+	(*v118.ReplicationTask)(nil),                          // 243: temporal.server.api.replication.v1.ReplicationTask
+	(*v1.QueryWorkflowRequest)(nil),                       // 244: temporal.api.workflowservice.v1.QueryWorkflowRequest
+	(*v1.QueryWorkflowResponse)(nil),                      // 245: temporal.api.workflowservice.v1.QueryWorkflowResponse
+	(*v119.ReapplyEventsRequest)(nil),                     // 246: temporal.server.api.adminservice.v1.ReapplyEventsRequest
+	(v113.DeadLetterQueueType)(0),                         // 247: temporal.server.api.enums.v1.DeadLetterQueueType
+	(*v119.RefreshWorkflowTasksRequest)(nil),              // 248: temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest
+	(*v1.UpdateWorkflowExecutionRequest)(nil),             // 249: temporal.api.workflowservice.v1.UpdateWorkflowExecutionRequest
+	(*v1.UpdateWorkflowExecutionResponse)(nil),            // 250: temporal.api.workflowservice.v1.UpdateWorkflowExecutionResponse
+	(*v118.SyncReplicationState)(nil),                     // 251: temporal.server.api.replication.v1.SyncReplicationState
+	(*v118.WorkflowReplicationMessages)(nil),              // 252: temporal.server.api.replication.v1.WorkflowReplicationMessages
+	(*v1.PollWorkflowExecutionUpdateRequest)(nil),         // 253: temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateRequest
+	(*v1.PollWorkflowExecutionUpdateResponse)(nil),        // 254: temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateResponse
+	(*v1.GetWorkflowExecutionHistoryRequest)(nil),         // 255: temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryRequest
+	(*v1.GetWorkflowExecutionHistoryResponse)(nil),        // 256: temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse
+	(*v1.GetWorkflowExecutionHistoryReverseRequest)(nil),  // 257: temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseRequest
+	(*v1.GetWorkflowExecutionHistoryReverseResponse)(nil), // 258: temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseResponse
+	(*v119.GetWorkflowExecutionRawHistoryV2Request)(nil),  // 259: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request
+	(*v119.GetWorkflowExecutionRawHistoryV2Response)(nil), // 260: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response
+	(*v119.GetWorkflowExecutionRawHistoryRequest)(nil),    // 261: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest
+	(*v119.GetWorkflowExecutionRawHistoryResponse)(nil),   // 262: temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse
+	(*v119.DeleteWorkflowExecutionRequest)(nil),           // 263: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest
+	(*v119.DeleteWorkflowExecutionResponse)(nil),          // 264: temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse
+	(*v120.HistoryDLQKey)(nil),                            // 265: temporal.server.api.common.v1.HistoryDLQKey
+	(*v120.HistoryDLQTask)(nil),                           // 266: temporal.server.api.common.v1.HistoryDLQTask
+	(*v120.HistoryDLQTaskMetadata)(nil),                   // 267: temporal.server.api.common.v1.HistoryDLQTaskMetadata
+	(*v119.ListHistoryTasksRequest)(nil),                  // 268: temporal.server.api.adminservice.v1.ListHistoryTasksRequest
+	(*v119.ListHistoryTasksResponse)(nil),                 // 269: temporal.server.api.adminservice.v1.ListHistoryTasksResponse
+	(*v121.NexusOperationCompletion)(nil),                 // 270: temporal.server.api.token.v1.NexusOperationCompletion
+	(*v14.Payload)(nil),                                   // 271: temporal.api.common.v1.Payload
+	(*v122.Failure)(nil),                                  // 272: temporal.api.nexus.v1.Failure
+	(*v111.StateMachineRef)(nil),                          // 273: temporal.server.api.persistence.v1.StateMachineRef
+	(v113.HealthState)(0),                                 // 274: temporal.server.api.enums.v1.HealthState
+	(*v123.HealthCheck)(nil),                              // 275: temporal.server.api.health.v1.HealthCheck
+	(*v118.VersionedTransitionArtifact)(nil),              // 276: temporal.server.api.replication.v1.VersionedTransitionArtifact
+	(*v1.UpdateActivityOptionsRequest)(nil),               // 277: temporal.api.workflowservice.v1.UpdateActivityOptionsRequest
+	(*v124.ActivityOptions)(nil),                          // 278: temporal.api.activity.v1.ActivityOptions
+	(*v1.PauseActivityRequest)(nil),                       // 279: temporal.api.workflowservice.v1.PauseActivityRequest
+	(*v1.UnpauseActivityRequest)(nil),                     // 280: temporal.api.workflowservice.v1.UnpauseActivityRequest
+	(*v1.ResetActivityRequest)(nil),                       // 281: temporal.api.workflowservice.v1.ResetActivityRequest
+	(*v1.UpdateWorkflowExecutionOptionsRequest)(nil),      // 282: temporal.api.workflowservice.v1.UpdateWorkflowExecutionOptionsRequest
+	(*v15.WorkflowExecutionOptions)(nil),                  // 283: temporal.api.workflow.v1.WorkflowExecutionOptions
+	(*v1.PauseWorkflowExecutionRequest)(nil),              // 284: temporal.api.workflowservice.v1.PauseWorkflowExecutionRequest
+	(*v1.UnpauseWorkflowExecutionRequest)(nil),            // 285: temporal.api.workflowservice.v1.UnpauseWorkflowExecutionRequest
+	(*v122.StartOperationRequest)(nil),                    // 286: temporal.api.nexus.v1.StartOperationRequest
+	(*v122.StartOperationResponse)(nil),                   // 287: temporal.api.nexus.v1.StartOperationResponse
+	(*v122.CancelOperationRequest)(nil),                   // 288: temporal.api.nexus.v1.CancelOperationRequest
+	(*v122.CancelOperationResponse)(nil),                  // 289: temporal.api.nexus.v1.CancelOperationResponse
+	(*v1.PollWorkflowExecutionTimeSkippingRequest)(nil),   // 290: temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingRequest
+	(*v1.PollWorkflowExecutionTimeSkippingResponse)(nil),  // 291: temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponse
+	(*v115.WorkflowQuery)(nil),                            // 292: temporal.api.query.v1.WorkflowQuery
+	(*v118.ReplicationMessages)(nil),                      // 293: temporal.server.api.replication.v1.ReplicationMessages
+	(*descriptorpb.MessageOptions)(nil),                   // 294: google.protobuf.MessageOptions
 }
 var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = []int32{
-	178, // 0: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.start_request:type_name -> temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
-	179, // 1: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.parent_execution_info:type_name -> temporal.server.api.workflow.v1.ParentExecutionInfo
-	180, // 2: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.workflow_execution_expiration_time:type_name -> google.protobuf.Timestamp
-	181, // 3: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.continue_as_new_initiator:type_name -> temporal.api.enums.v1.ContinueAsNewInitiator
-	182, // 4: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.continued_failure:type_name -> temporal.api.failure.v1.Failure
-	183, // 5: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.last_completion_result:type_name -> temporal.api.common.v1.Payloads
-	184, // 6: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.first_workflow_task_backoff:type_name -> google.protobuf.Duration
-	185, // 7: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.source_version_stamp:type_name -> temporal.api.common.v1.WorkerVersionStamp
-	186, // 8: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.root_execution_info:type_name -> temporal.server.api.workflow.v1.RootExecutionInfo
-	187, // 9: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.versioning_override:type_name -> temporal.api.workflow.v1.VersioningOverride
-	188, // 10: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.inherited_pinned_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
-	189, // 11: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.inherited_auto_upgrade_info:type_name -> temporal.api.deployment.v1.InheritedAutoUpgradeInfo
-	190, // 12: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.declined_target_version_upgrade:type_name -> temporal.api.history.v1.DeclinedTargetVersionUpgrade
-	191, // 13: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.time_skipping_state_propagation:type_name -> temporal.api.common.v1.TimeSkippingStatePropagation
-	168, // 14: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.orphaned_child_replacement_info:type_name -> temporal.server.api.historyservice.v1.OrphanedChildReplacementInfo
-	192, // 15: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	193, // 16: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.eager_workflow_task:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse
-	194, // 17: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
-	195, // 18: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.link:type_name -> temporal.api.common.v1.Link
-	196, // 19: temporal.server.api.historyservice.v1.GetStreamReplaySlicesRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	197, // 20: temporal.server.api.historyservice.v1.GetStreamReplaySlicesResponse.stream_slices:type_name -> temporal.api.stream.v1.StreamSlice
-	196, // 21: temporal.server.api.historyservice.v1.GetMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	198, // 22: temporal.server.api.historyservice.v1.GetMutableStateRequest.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	199, // 23: temporal.server.api.historyservice.v1.GetMutableStateRequest.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	196, // 24: temporal.server.api.historyservice.v1.GetMutableStateResponse.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	200, // 25: temporal.server.api.historyservice.v1.GetMutableStateResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
-	201, // 26: temporal.server.api.historyservice.v1.GetMutableStateResponse.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	201, // 27: temporal.server.api.historyservice.v1.GetMutableStateResponse.sticky_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	184, // 28: temporal.server.api.historyservice.v1.GetMutableStateResponse.sticky_task_queue_schedule_to_start_timeout:type_name -> google.protobuf.Duration
-	202, // 29: temporal.server.api.historyservice.v1.GetMutableStateResponse.workflow_state:type_name -> temporal.server.api.enums.v1.WorkflowExecutionState
-	194, // 30: temporal.server.api.historyservice.v1.GetMutableStateResponse.workflow_status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
-	203, // 31: temporal.server.api.historyservice.v1.GetMutableStateResponse.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
-	185, // 32: temporal.server.api.historyservice.v1.GetMutableStateResponse.most_recent_worker_version_stamp:type_name -> temporal.api.common.v1.WorkerVersionStamp
-	199, // 33: temporal.server.api.historyservice.v1.GetMutableStateResponse.transition_history:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	204, // 34: temporal.server.api.historyservice.v1.GetMutableStateResponse.versioning_info:type_name -> temporal.api.workflow.v1.WorkflowExecutionVersioningInfo
-	205, // 35: temporal.server.api.historyservice.v1.GetMutableStateResponse.transient_or_speculative_tasks:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	196, // 36: temporal.server.api.historyservice.v1.PollMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	198, // 37: temporal.server.api.historyservice.v1.PollMutableStateRequest.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	196, // 38: temporal.server.api.historyservice.v1.PollMutableStateResponse.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	200, // 39: temporal.server.api.historyservice.v1.PollMutableStateResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
-	201, // 40: temporal.server.api.historyservice.v1.PollMutableStateResponse.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	201, // 41: temporal.server.api.historyservice.v1.PollMutableStateResponse.sticky_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	184, // 42: temporal.server.api.historyservice.v1.PollMutableStateResponse.sticky_task_queue_schedule_to_start_timeout:type_name -> google.protobuf.Duration
-	203, // 43: temporal.server.api.historyservice.v1.PollMutableStateResponse.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
-	202, // 44: temporal.server.api.historyservice.v1.PollMutableStateResponse.workflow_state:type_name -> temporal.server.api.enums.v1.WorkflowExecutionState
-	194, // 45: temporal.server.api.historyservice.v1.PollMutableStateResponse.workflow_status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
-	196, // 46: temporal.server.api.historyservice.v1.ResetStickyTaskQueueRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	169, // 47: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.operations:type_name -> temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation
-	170, // 48: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.responses:type_name -> temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response
-	196, // 49: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	206, // 50: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
-	192, // 51: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	207, // 52: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.build_id_redirect_info:type_name -> temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
-	208, // 53: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.scheduled_deployment:type_name -> temporal.api.deployment.v1.Deployment
-	209, // 54: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
-	188, // 55: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.target_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
-	200, // 56: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
-	205, // 57: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	201, // 58: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.workflow_execution_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	180, // 59: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.scheduled_time:type_name -> google.protobuf.Timestamp
-	180, // 60: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.started_time:type_name -> google.protobuf.Timestamp
-	171, // 61: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.queries:type_name -> temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.QueriesEntry
-	192, // 62: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	210, // 63: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.messages:type_name -> temporal.api.protocol.v1.Message
-	211, // 64: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.history:type_name -> temporal.api.history.v1.History
-	211, // 65: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.raw_history:type_name -> temporal.api.history.v1.History
-	197, // 66: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.stream_slices:type_name -> temporal.api.stream.v1.StreamSlice
-	212, // 67: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.wakes:type_name -> temporal.api.workflow.v1.Wake
-	200, // 68: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
-	205, // 69: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	201, // 70: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.workflow_execution_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	180, // 71: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.scheduled_time:type_name -> google.protobuf.Timestamp
-	180, // 72: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.started_time:type_name -> google.protobuf.Timestamp
-	172, // 73: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.queries:type_name -> temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.QueriesEntry
-	192, // 74: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	210, // 75: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.messages:type_name -> temporal.api.protocol.v1.Message
-	211, // 76: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.history:type_name -> temporal.api.history.v1.History
-	197, // 77: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.stream_slices:type_name -> temporal.api.stream.v1.StreamSlice
-	212, // 78: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.wakes:type_name -> temporal.api.workflow.v1.Wake
-	196, // 79: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	213, // 80: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
-	192, // 81: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	207, // 82: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.build_id_redirect_info:type_name -> temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
-	208, // 83: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.scheduled_deployment:type_name -> temporal.api.deployment.v1.Deployment
-	209, // 84: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
-	214, // 85: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.scheduled_event:type_name -> temporal.api.history.v1.HistoryEvent
-	180, // 86: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.started_time:type_name -> google.protobuf.Timestamp
-	180, // 87: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.current_attempt_scheduled_time:type_name -> google.protobuf.Timestamp
-	183, // 88: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.heartbeat_details:type_name -> temporal.api.common.v1.Payloads
-	200, // 89: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
-	192, // 90: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	215, // 91: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.priority:type_name -> temporal.api.common.v1.Priority
-	216, // 92: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
-	217, // 93: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedRequest.complete_request:type_name -> temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest
-	14,  // 94: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse.started_response:type_name -> temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse
-	218, // 95: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse.activity_tasks:type_name -> temporal.api.workflowservice.v1.PollActivityTaskQueueResponse
-	193, // 96: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse.new_workflow_task:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse
-	219, // 97: temporal.server.api.historyservice.v1.RespondWorkflowTaskFailedRequest.failed_request:type_name -> temporal.api.workflowservice.v1.RespondWorkflowTaskFailedRequest
-	196, // 98: temporal.server.api.historyservice.v1.IsWorkflowTaskValidRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	192, // 99: temporal.server.api.historyservice.v1.IsWorkflowTaskValidRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	220, // 100: temporal.server.api.historyservice.v1.RecordActivityTaskHeartbeatRequest.heartbeat_request:type_name -> temporal.api.workflowservice.v1.RecordActivityTaskHeartbeatRequest
-	221, // 101: temporal.server.api.historyservice.v1.RespondActivityTaskCompletedRequest.complete_request:type_name -> temporal.api.workflowservice.v1.RespondActivityTaskCompletedRequest
-	222, // 102: temporal.server.api.historyservice.v1.RespondActivityTaskFailedRequest.failed_request:type_name -> temporal.api.workflowservice.v1.RespondActivityTaskFailedRequest
-	223, // 103: temporal.server.api.historyservice.v1.RespondActivityTaskCanceledRequest.cancel_request:type_name -> temporal.api.workflowservice.v1.RespondActivityTaskCanceledRequest
-	196, // 104: temporal.server.api.historyservice.v1.IsActivityTaskValidRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	192, // 105: temporal.server.api.historyservice.v1.IsActivityTaskValidRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	224, // 106: temporal.server.api.historyservice.v1.SignalWorkflowExecutionRequest.signal_request:type_name -> temporal.api.workflowservice.v1.SignalWorkflowExecutionRequest
-	196, // 107: temporal.server.api.historyservice.v1.SignalWorkflowExecutionRequest.external_workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	195, // 108: temporal.server.api.historyservice.v1.SignalWorkflowExecutionResponse.link:type_name -> temporal.api.common.v1.Link
-	225, // 109: temporal.server.api.historyservice.v1.WakeWorkflowExecutionRequest.wake_request:type_name -> temporal.api.workflowservice.v1.WakeWorkflowExecutionRequest
-	226, // 110: temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionRequest.signal_with_start_request:type_name -> temporal.api.workflowservice.v1.SignalWithStartWorkflowExecutionRequest
-	195, // 111: temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionResponse.signal_link:type_name -> temporal.api.common.v1.Link
-	196, // 112: temporal.server.api.historyservice.v1.RemoveSignalMutableStateRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	227, // 113: temporal.server.api.historyservice.v1.TerminateWorkflowExecutionRequest.terminate_request:type_name -> temporal.api.workflowservice.v1.TerminateWorkflowExecutionRequest
-	196, // 114: temporal.server.api.historyservice.v1.TerminateWorkflowExecutionRequest.external_workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	196, // 115: temporal.server.api.historyservice.v1.DeleteWorkflowExecutionRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	228, // 116: temporal.server.api.historyservice.v1.ResetWorkflowExecutionRequest.reset_request:type_name -> temporal.api.workflowservice.v1.ResetWorkflowExecutionRequest
-	229, // 117: temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionRequest.cancel_request:type_name -> temporal.api.workflowservice.v1.RequestCancelWorkflowExecutionRequest
-	196, // 118: temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionRequest.external_workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	196, // 119: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	192, // 120: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskRequest.child_clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	192, // 121: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskRequest.parent_clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	196, // 122: temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	192, // 123: temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	196, // 124: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedRequest.parent_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	196, // 125: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedRequest.child_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	214, // 126: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedRequest.completion_event:type_name -> temporal.api.history.v1.HistoryEvent
-	192, // 127: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	196, // 128: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedRequest.parent_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	196, // 129: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedRequest.child_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	192, // 130: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	230, // 131: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionRequest.request:type_name -> temporal.api.workflowservice.v1.DescribeWorkflowExecutionRequest
-	231, // 132: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.execution_config:type_name -> temporal.api.workflow.v1.WorkflowExecutionConfig
-	232, // 133: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.workflow_execution_info:type_name -> temporal.api.workflow.v1.WorkflowExecutionInfo
-	233, // 134: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.pending_activities:type_name -> temporal.api.workflow.v1.PendingActivityInfo
-	234, // 135: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.pending_children:type_name -> temporal.api.workflow.v1.PendingChildExecutionInfo
-	235, // 136: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.pending_workflow_task:type_name -> temporal.api.workflow.v1.PendingWorkflowTaskInfo
-	236, // 137: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.callbacks:type_name -> temporal.api.workflow.v1.CallbackInfo
-	237, // 138: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.pending_nexus_operations:type_name -> temporal.api.workflow.v1.PendingNexusOperationInfo
-	238, // 139: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.workflow_extended_info:type_name -> temporal.api.workflow.v1.WorkflowExecutionExtendedInfo
-	196, // 140: temporal.server.api.historyservice.v1.ReplicateEventsV2Request.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	198, // 141: temporal.server.api.historyservice.v1.ReplicateEventsV2Request.version_history_items:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	239, // 142: temporal.server.api.historyservice.v1.ReplicateEventsV2Request.events:type_name -> temporal.api.common.v1.DataBlob
-	239, // 143: temporal.server.api.historyservice.v1.ReplicateEventsV2Request.new_run_events:type_name -> temporal.api.common.v1.DataBlob
-	240, // 144: temporal.server.api.historyservice.v1.ReplicateEventsV2Request.base_execution_info:type_name -> temporal.server.api.workflow.v1.BaseExecutionInfo
-	241, // 145: temporal.server.api.historyservice.v1.ReplicateWorkflowStateRequest.workflow_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
-	180, // 146: temporal.server.api.historyservice.v1.SyncShardStatusRequest.status_time:type_name -> google.protobuf.Timestamp
-	180, // 147: temporal.server.api.historyservice.v1.SyncActivityRequest.scheduled_time:type_name -> google.protobuf.Timestamp
-	180, // 148: temporal.server.api.historyservice.v1.SyncActivityRequest.started_time:type_name -> google.protobuf.Timestamp
-	180, // 149: temporal.server.api.historyservice.v1.SyncActivityRequest.last_heartbeat_time:type_name -> google.protobuf.Timestamp
-	183, // 150: temporal.server.api.historyservice.v1.SyncActivityRequest.details:type_name -> temporal.api.common.v1.Payloads
-	182, // 151: temporal.server.api.historyservice.v1.SyncActivityRequest.last_failure:type_name -> temporal.api.failure.v1.Failure
-	242, // 152: temporal.server.api.historyservice.v1.SyncActivityRequest.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
-	240, // 153: temporal.server.api.historyservice.v1.SyncActivityRequest.base_execution_info:type_name -> temporal.server.api.workflow.v1.BaseExecutionInfo
-	180, // 154: temporal.server.api.historyservice.v1.SyncActivityRequest.first_scheduled_time:type_name -> google.protobuf.Timestamp
-	180, // 155: temporal.server.api.historyservice.v1.SyncActivityRequest.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	184, // 156: temporal.server.api.historyservice.v1.SyncActivityRequest.retry_initial_interval:type_name -> google.protobuf.Duration
-	184, // 157: temporal.server.api.historyservice.v1.SyncActivityRequest.retry_maximum_interval:type_name -> google.protobuf.Duration
-	68,  // 158: temporal.server.api.historyservice.v1.SyncActivitiesRequest.activities_info:type_name -> temporal.server.api.historyservice.v1.ActivitySyncInfo
-	180, // 159: temporal.server.api.historyservice.v1.ActivitySyncInfo.scheduled_time:type_name -> google.protobuf.Timestamp
-	180, // 160: temporal.server.api.historyservice.v1.ActivitySyncInfo.started_time:type_name -> google.protobuf.Timestamp
-	180, // 161: temporal.server.api.historyservice.v1.ActivitySyncInfo.last_heartbeat_time:type_name -> google.protobuf.Timestamp
-	183, // 162: temporal.server.api.historyservice.v1.ActivitySyncInfo.details:type_name -> temporal.api.common.v1.Payloads
-	182, // 163: temporal.server.api.historyservice.v1.ActivitySyncInfo.last_failure:type_name -> temporal.api.failure.v1.Failure
-	242, // 164: temporal.server.api.historyservice.v1.ActivitySyncInfo.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
-	180, // 165: temporal.server.api.historyservice.v1.ActivitySyncInfo.first_scheduled_time:type_name -> google.protobuf.Timestamp
-	180, // 166: temporal.server.api.historyservice.v1.ActivitySyncInfo.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	184, // 167: temporal.server.api.historyservice.v1.ActivitySyncInfo.retry_initial_interval:type_name -> google.protobuf.Duration
-	184, // 168: temporal.server.api.historyservice.v1.ActivitySyncInfo.retry_maximum_interval:type_name -> google.protobuf.Duration
-	196, // 169: temporal.server.api.historyservice.v1.DescribeMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	241, // 170: temporal.server.api.historyservice.v1.DescribeMutableStateResponse.cache_mutable_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
-	241, // 171: temporal.server.api.historyservice.v1.DescribeMutableStateResponse.database_mutable_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
-	196, // 172: temporal.server.api.historyservice.v1.DescribeHistoryHostRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	243, // 173: temporal.server.api.historyservice.v1.DescribeHistoryHostResponse.namespace_cache:type_name -> temporal.server.api.namespace.v1.NamespaceCacheInfo
-	244, // 174: temporal.server.api.historyservice.v1.GetShardResponse.shard_info:type_name -> temporal.server.api.persistence.v1.ShardInfo
-	180, // 175: temporal.server.api.historyservice.v1.RemoveTaskRequest.visibility_time:type_name -> google.protobuf.Timestamp
-	245, // 176: temporal.server.api.historyservice.v1.GetReplicationMessagesRequest.tokens:type_name -> temporal.server.api.replication.v1.ReplicationToken
-	173, // 177: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse.shard_messages:type_name -> temporal.server.api.historyservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry
-	246, // 178: temporal.server.api.historyservice.v1.GetDLQReplicationMessagesRequest.task_infos:type_name -> temporal.server.api.replication.v1.ReplicationTaskInfo
-	247, // 179: temporal.server.api.historyservice.v1.GetDLQReplicationMessagesResponse.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
-	248, // 180: temporal.server.api.historyservice.v1.QueryWorkflowRequest.request:type_name -> temporal.api.workflowservice.v1.QueryWorkflowRequest
-	249, // 181: temporal.server.api.historyservice.v1.QueryWorkflowResponse.response:type_name -> temporal.api.workflowservice.v1.QueryWorkflowResponse
-	250, // 182: temporal.server.api.historyservice.v1.ReapplyEventsRequest.request:type_name -> temporal.server.api.adminservice.v1.ReapplyEventsRequest
-	251, // 183: temporal.server.api.historyservice.v1.GetDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
-	251, // 184: temporal.server.api.historyservice.v1.GetDLQMessagesResponse.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
-	247, // 185: temporal.server.api.historyservice.v1.GetDLQMessagesResponse.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
-	246, // 186: temporal.server.api.historyservice.v1.GetDLQMessagesResponse.replication_tasks_info:type_name -> temporal.server.api.replication.v1.ReplicationTaskInfo
-	251, // 187: temporal.server.api.historyservice.v1.PurgeDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
-	251, // 188: temporal.server.api.historyservice.v1.MergeDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
-	252, // 189: temporal.server.api.historyservice.v1.RefreshWorkflowTasksRequest.request:type_name -> temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest
-	196, // 190: temporal.server.api.historyservice.v1.GenerateLastHistoryReplicationTasksRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	100, // 191: temporal.server.api.historyservice.v1.GetReplicationStatusResponse.shards:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatus
-	180, // 192: temporal.server.api.historyservice.v1.ShardReplicationStatus.shard_local_time:type_name -> google.protobuf.Timestamp
-	174, // 193: temporal.server.api.historyservice.v1.ShardReplicationStatus.remote_clusters:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatus.RemoteClustersEntry
-	175, // 194: temporal.server.api.historyservice.v1.ShardReplicationStatus.handover_namespaces:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatus.HandoverNamespacesEntry
-	180, // 195: temporal.server.api.historyservice.v1.ShardReplicationStatus.max_replication_task_visibility_time:type_name -> google.protobuf.Timestamp
-	180, // 196: temporal.server.api.historyservice.v1.ShardReplicationStatusPerCluster.acked_task_visibility_time:type_name -> google.protobuf.Timestamp
-	196, // 197: temporal.server.api.historyservice.v1.RebuildMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	196, // 198: temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	239, // 199: temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest.history_batches:type_name -> temporal.api.common.v1.DataBlob
-	242, // 200: temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
-	196, // 201: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	180, // 202: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest.workflow_start_time:type_name -> google.protobuf.Timestamp
-	180, // 203: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest.workflow_close_time:type_name -> google.protobuf.Timestamp
-	253, // 204: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkflowExecutionRequest
-	254, // 205: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse.response:type_name -> temporal.api.workflowservice.v1.UpdateWorkflowExecutionResponse
-	255, // 206: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesRequest.sync_replication_state:type_name -> temporal.server.api.replication.v1.SyncReplicationState
-	256, // 207: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesResponse.messages:type_name -> temporal.server.api.replication.v1.WorkflowReplicationMessages
-	257, // 208: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateRequest.request:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateRequest
-	258, // 209: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateResponse.response:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateResponse
-	259, // 210: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryRequest
-	260, // 211: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse
-	211, // 212: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse.history:type_name -> temporal.api.history.v1.History
-	260, // 213: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponseWithRaw.response:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse
-	261, // 214: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseRequest
-	262, // 215: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseResponse
-	263, // 216: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Request.request:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request
-	264, // 217: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Response.response:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response
-	265, // 218: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryRequest.request:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest
-	266, // 219: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryResponse.response:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse
-	267, // 220: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionRequest.request:type_name -> temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest
-	268, // 221: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionResponse.response:type_name -> temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse
-	196, // 222: temporal.server.api.historyservice.v1.DeleteExecutionRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	269, // 223: temporal.server.api.historyservice.v1.GetDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
-	270, // 224: temporal.server.api.historyservice.v1.GetDLQTasksResponse.dlq_tasks:type_name -> temporal.server.api.common.v1.HistoryDLQTask
-	269, // 225: temporal.server.api.historyservice.v1.DeleteDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
-	271, // 226: temporal.server.api.historyservice.v1.DeleteDLQTasksRequest.inclusive_max_task_metadata:type_name -> temporal.server.api.common.v1.HistoryDLQTaskMetadata
-	176, // 227: temporal.server.api.historyservice.v1.ListQueuesResponse.queues:type_name -> temporal.server.api.historyservice.v1.ListQueuesResponse.QueueInfo
-	177, // 228: temporal.server.api.historyservice.v1.AddTasksRequest.tasks:type_name -> temporal.server.api.historyservice.v1.AddTasksRequest.Task
-	272, // 229: temporal.server.api.historyservice.v1.ListTasksRequest.request:type_name -> temporal.server.api.adminservice.v1.ListHistoryTasksRequest
-	273, // 230: temporal.server.api.historyservice.v1.ListTasksResponse.response:type_name -> temporal.server.api.adminservice.v1.ListHistoryTasksResponse
-	274, // 231: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.completion:type_name -> temporal.server.api.token.v1.NexusOperationCompletion
-	275, // 232: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.success:type_name -> temporal.api.common.v1.Payload
-	182, // 233: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.failure:type_name -> temporal.api.failure.v1.Failure
-	180, // 234: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.close_time:type_name -> google.protobuf.Timestamp
-	195, // 235: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.links:type_name -> temporal.api.common.v1.Link
-	180, // 236: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.start_time:type_name -> google.protobuf.Timestamp
-	274, // 237: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.completion:type_name -> temporal.server.api.token.v1.NexusOperationCompletion
-	275, // 238: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.success:type_name -> temporal.api.common.v1.Payload
-	276, // 239: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.failure:type_name -> temporal.api.nexus.v1.Failure
-	180, // 240: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.start_time:type_name -> google.protobuf.Timestamp
-	195, // 241: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.links:type_name -> temporal.api.common.v1.Link
-	277, // 242: temporal.server.api.historyservice.v1.InvokeStateMachineMethodRequest.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
-	278, // 243: temporal.server.api.historyservice.v1.DeepHealthCheckResponse.state:type_name -> temporal.server.api.enums.v1.HealthState
-	279, // 244: temporal.server.api.historyservice.v1.DeepHealthCheckResponse.checks:type_name -> temporal.server.api.health.v1.HealthCheck
-	278, // 245: temporal.server.api.historyservice.v1.DeepHealthCheckResponse.unenforced_state:type_name -> temporal.server.api.enums.v1.HealthState
-	196, // 246: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	199, // 247: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	203, // 248: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
-	280, // 249: temporal.server.api.historyservice.v1.SyncWorkflowStateResponse.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
-	281, // 250: temporal.server.api.historyservice.v1.UpdateActivityOptionsRequest.update_request:type_name -> temporal.api.workflowservice.v1.UpdateActivityOptionsRequest
-	282, // 251: temporal.server.api.historyservice.v1.UpdateActivityOptionsResponse.activity_options:type_name -> temporal.api.activity.v1.ActivityOptions
-	283, // 252: temporal.server.api.historyservice.v1.PauseActivityRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.PauseActivityRequest
-	284, // 253: temporal.server.api.historyservice.v1.UnpauseActivityRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.UnpauseActivityRequest
-	285, // 254: temporal.server.api.historyservice.v1.ResetActivityRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.ResetActivityRequest
-	286, // 255: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsRequest.update_request:type_name -> temporal.api.workflowservice.v1.UpdateWorkflowExecutionOptionsRequest
-	287, // 256: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsResponse.workflow_execution_options:type_name -> temporal.api.workflow.v1.WorkflowExecutionOptions
-	180, // 257: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsResponse.update_time:type_name -> google.protobuf.Timestamp
-	288, // 258: temporal.server.api.historyservice.v1.PauseWorkflowExecutionRequest.pause_request:type_name -> temporal.api.workflowservice.v1.PauseWorkflowExecutionRequest
-	289, // 259: temporal.server.api.historyservice.v1.UnpauseWorkflowExecutionRequest.unpause_request:type_name -> temporal.api.workflowservice.v1.UnpauseWorkflowExecutionRequest
-	290, // 260: temporal.server.api.historyservice.v1.StartNexusOperationRequest.request:type_name -> temporal.api.nexus.v1.StartOperationRequest
-	291, // 261: temporal.server.api.historyservice.v1.StartNexusOperationResponse.response:type_name -> temporal.api.nexus.v1.StartOperationResponse
-	292, // 262: temporal.server.api.historyservice.v1.CancelNexusOperationRequest.request:type_name -> temporal.api.nexus.v1.CancelOperationRequest
-	293, // 263: temporal.server.api.historyservice.v1.CancelNexusOperationResponse.response:type_name -> temporal.api.nexus.v1.CancelOperationResponse
-	294, // 264: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingRequest.request:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingRequest
-	295, // 265: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingResponse.response:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponse
-	198, // 266: temporal.server.api.historyservice.v1.OrphanedChildReplacementInfo.parent_current_version_history_items:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	1,   // 267: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation.start_workflow:type_name -> temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest
-	109, // 268: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation.update_workflow:type_name -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionRequest
-	2,   // 269: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response.start_workflow:type_name -> temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse
-	110, // 270: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response.update_workflow:type_name -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse
-	296, // 271: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
-	296, // 272: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
-	297, // 273: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
-	102, // 274: temporal.server.api.historyservice.v1.ShardReplicationStatus.RemoteClustersEntry.value:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatusPerCluster
-	101, // 275: temporal.server.api.historyservice.v1.ShardReplicationStatus.HandoverNamespacesEntry.value:type_name -> temporal.server.api.historyservice.v1.HandoverNamespaceInfo
-	239, // 276: temporal.server.api.historyservice.v1.AddTasksRequest.Task.blob:type_name -> temporal.api.common.v1.DataBlob
-	298, // 277: temporal.server.api.historyservice.v1.routing:extendee -> google.protobuf.MessageOptions
-	0,   // 278: temporal.server.api.historyservice.v1.routing:type_name -> temporal.server.api.historyservice.v1.RoutingOptions
-	279, // [279:279] is the sub-list for method output_type
-	279, // [279:279] is the sub-list for method input_type
-	278, // [278:279] is the sub-list for extension type_name
-	277, // [277:278] is the sub-list for extension extendee
-	0,   // [0:277] is the sub-list for field type_name
+	176, // 0: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.start_request:type_name -> temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
+	177, // 1: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.parent_execution_info:type_name -> temporal.server.api.workflow.v1.ParentExecutionInfo
+	178, // 2: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.workflow_execution_expiration_time:type_name -> google.protobuf.Timestamp
+	179, // 3: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.continue_as_new_initiator:type_name -> temporal.api.enums.v1.ContinueAsNewInitiator
+	180, // 4: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.continued_failure:type_name -> temporal.api.failure.v1.Failure
+	181, // 5: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.last_completion_result:type_name -> temporal.api.common.v1.Payloads
+	182, // 6: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.first_workflow_task_backoff:type_name -> google.protobuf.Duration
+	183, // 7: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.source_version_stamp:type_name -> temporal.api.common.v1.WorkerVersionStamp
+	184, // 8: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.root_execution_info:type_name -> temporal.server.api.workflow.v1.RootExecutionInfo
+	185, // 9: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.versioning_override:type_name -> temporal.api.workflow.v1.VersioningOverride
+	186, // 10: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.inherited_pinned_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
+	187, // 11: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.inherited_auto_upgrade_info:type_name -> temporal.api.deployment.v1.InheritedAutoUpgradeInfo
+	188, // 12: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.declined_target_version_upgrade:type_name -> temporal.api.history.v1.DeclinedTargetVersionUpgrade
+	189, // 13: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.time_skipping_state_propagation:type_name -> temporal.api.common.v1.TimeSkippingStatePropagation
+	166, // 14: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.orphaned_child_replacement_info:type_name -> temporal.server.api.historyservice.v1.OrphanedChildReplacementInfo
+	190, // 15: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	191, // 16: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.eager_workflow_task:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse
+	192, // 17: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
+	193, // 18: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.link:type_name -> temporal.api.common.v1.Link
+	194, // 19: temporal.server.api.historyservice.v1.GetStreamReplaySlicesRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	195, // 20: temporal.server.api.historyservice.v1.GetStreamReplaySlicesResponse.stream_slices:type_name -> temporal.api.stream.v1.StreamSlice
+	194, // 21: temporal.server.api.historyservice.v1.GetMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	196, // 22: temporal.server.api.historyservice.v1.GetMutableStateRequest.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	197, // 23: temporal.server.api.historyservice.v1.GetMutableStateRequest.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	194, // 24: temporal.server.api.historyservice.v1.GetMutableStateResponse.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	198, // 25: temporal.server.api.historyservice.v1.GetMutableStateResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
+	199, // 26: temporal.server.api.historyservice.v1.GetMutableStateResponse.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	199, // 27: temporal.server.api.historyservice.v1.GetMutableStateResponse.sticky_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	182, // 28: temporal.server.api.historyservice.v1.GetMutableStateResponse.sticky_task_queue_schedule_to_start_timeout:type_name -> google.protobuf.Duration
+	200, // 29: temporal.server.api.historyservice.v1.GetMutableStateResponse.workflow_state:type_name -> temporal.server.api.enums.v1.WorkflowExecutionState
+	192, // 30: temporal.server.api.historyservice.v1.GetMutableStateResponse.workflow_status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
+	201, // 31: temporal.server.api.historyservice.v1.GetMutableStateResponse.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
+	183, // 32: temporal.server.api.historyservice.v1.GetMutableStateResponse.most_recent_worker_version_stamp:type_name -> temporal.api.common.v1.WorkerVersionStamp
+	197, // 33: temporal.server.api.historyservice.v1.GetMutableStateResponse.transition_history:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	202, // 34: temporal.server.api.historyservice.v1.GetMutableStateResponse.versioning_info:type_name -> temporal.api.workflow.v1.WorkflowExecutionVersioningInfo
+	203, // 35: temporal.server.api.historyservice.v1.GetMutableStateResponse.transient_or_speculative_tasks:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	194, // 36: temporal.server.api.historyservice.v1.PollMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	196, // 37: temporal.server.api.historyservice.v1.PollMutableStateRequest.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	194, // 38: temporal.server.api.historyservice.v1.PollMutableStateResponse.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	198, // 39: temporal.server.api.historyservice.v1.PollMutableStateResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
+	199, // 40: temporal.server.api.historyservice.v1.PollMutableStateResponse.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	199, // 41: temporal.server.api.historyservice.v1.PollMutableStateResponse.sticky_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	182, // 42: temporal.server.api.historyservice.v1.PollMutableStateResponse.sticky_task_queue_schedule_to_start_timeout:type_name -> google.protobuf.Duration
+	201, // 43: temporal.server.api.historyservice.v1.PollMutableStateResponse.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
+	200, // 44: temporal.server.api.historyservice.v1.PollMutableStateResponse.workflow_state:type_name -> temporal.server.api.enums.v1.WorkflowExecutionState
+	192, // 45: temporal.server.api.historyservice.v1.PollMutableStateResponse.workflow_status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
+	194, // 46: temporal.server.api.historyservice.v1.ResetStickyTaskQueueRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	167, // 47: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.operations:type_name -> temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation
+	168, // 48: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.responses:type_name -> temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response
+	194, // 49: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	204, // 50: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
+	190, // 51: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	205, // 52: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.build_id_redirect_info:type_name -> temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
+	206, // 53: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.scheduled_deployment:type_name -> temporal.api.deployment.v1.Deployment
+	207, // 54: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
+	186, // 55: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest.target_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
+	198, // 56: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
+	203, // 57: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	199, // 58: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.workflow_execution_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	178, // 59: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.scheduled_time:type_name -> google.protobuf.Timestamp
+	178, // 60: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.started_time:type_name -> google.protobuf.Timestamp
+	169, // 61: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.queries:type_name -> temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.QueriesEntry
+	190, // 62: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	208, // 63: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.messages:type_name -> temporal.api.protocol.v1.Message
+	209, // 64: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.history:type_name -> temporal.api.history.v1.History
+	209, // 65: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.raw_history:type_name -> temporal.api.history.v1.History
+	195, // 66: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.stream_slices:type_name -> temporal.api.stream.v1.StreamSlice
+	198, // 67: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
+	203, // 68: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	199, // 69: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.workflow_execution_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	178, // 70: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.scheduled_time:type_name -> google.protobuf.Timestamp
+	178, // 71: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.started_time:type_name -> google.protobuf.Timestamp
+	170, // 72: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.queries:type_name -> temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.QueriesEntry
+	190, // 73: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	208, // 74: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.messages:type_name -> temporal.api.protocol.v1.Message
+	209, // 75: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.history:type_name -> temporal.api.history.v1.History
+	195, // 76: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.stream_slices:type_name -> temporal.api.stream.v1.StreamSlice
+	194, // 77: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	210, // 78: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
+	190, // 79: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	205, // 80: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.build_id_redirect_info:type_name -> temporal.server.api.taskqueue.v1.BuildIdRedirectInfo
+	206, // 81: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.scheduled_deployment:type_name -> temporal.api.deployment.v1.Deployment
+	207, // 82: temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
+	211, // 83: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.scheduled_event:type_name -> temporal.api.history.v1.HistoryEvent
+	178, // 84: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.started_time:type_name -> google.protobuf.Timestamp
+	178, // 85: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.current_attempt_scheduled_time:type_name -> google.protobuf.Timestamp
+	181, // 86: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.heartbeat_details:type_name -> temporal.api.common.v1.Payloads
+	198, // 87: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
+	190, // 88: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	212, // 89: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.priority:type_name -> temporal.api.common.v1.Priority
+	213, // 90: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
+	214, // 91: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedRequest.complete_request:type_name -> temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest
+	14,  // 92: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse.started_response:type_name -> temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse
+	215, // 93: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse.activity_tasks:type_name -> temporal.api.workflowservice.v1.PollActivityTaskQueueResponse
+	191, // 94: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse.new_workflow_task:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse
+	216, // 95: temporal.server.api.historyservice.v1.RespondWorkflowTaskFailedRequest.failed_request:type_name -> temporal.api.workflowservice.v1.RespondWorkflowTaskFailedRequest
+	194, // 96: temporal.server.api.historyservice.v1.IsWorkflowTaskValidRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	190, // 97: temporal.server.api.historyservice.v1.IsWorkflowTaskValidRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	217, // 98: temporal.server.api.historyservice.v1.RecordActivityTaskHeartbeatRequest.heartbeat_request:type_name -> temporal.api.workflowservice.v1.RecordActivityTaskHeartbeatRequest
+	218, // 99: temporal.server.api.historyservice.v1.RespondActivityTaskCompletedRequest.complete_request:type_name -> temporal.api.workflowservice.v1.RespondActivityTaskCompletedRequest
+	219, // 100: temporal.server.api.historyservice.v1.RespondActivityTaskFailedRequest.failed_request:type_name -> temporal.api.workflowservice.v1.RespondActivityTaskFailedRequest
+	220, // 101: temporal.server.api.historyservice.v1.RespondActivityTaskCanceledRequest.cancel_request:type_name -> temporal.api.workflowservice.v1.RespondActivityTaskCanceledRequest
+	194, // 102: temporal.server.api.historyservice.v1.IsActivityTaskValidRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	190, // 103: temporal.server.api.historyservice.v1.IsActivityTaskValidRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	221, // 104: temporal.server.api.historyservice.v1.SignalWorkflowExecutionRequest.signal_request:type_name -> temporal.api.workflowservice.v1.SignalWorkflowExecutionRequest
+	194, // 105: temporal.server.api.historyservice.v1.SignalWorkflowExecutionRequest.external_workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	193, // 106: temporal.server.api.historyservice.v1.SignalWorkflowExecutionResponse.link:type_name -> temporal.api.common.v1.Link
+	222, // 107: temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionRequest.signal_with_start_request:type_name -> temporal.api.workflowservice.v1.SignalWithStartWorkflowExecutionRequest
+	193, // 108: temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionResponse.signal_link:type_name -> temporal.api.common.v1.Link
+	194, // 109: temporal.server.api.historyservice.v1.RemoveSignalMutableStateRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	223, // 110: temporal.server.api.historyservice.v1.TerminateWorkflowExecutionRequest.terminate_request:type_name -> temporal.api.workflowservice.v1.TerminateWorkflowExecutionRequest
+	194, // 111: temporal.server.api.historyservice.v1.TerminateWorkflowExecutionRequest.external_workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	194, // 112: temporal.server.api.historyservice.v1.DeleteWorkflowExecutionRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	224, // 113: temporal.server.api.historyservice.v1.ResetWorkflowExecutionRequest.reset_request:type_name -> temporal.api.workflowservice.v1.ResetWorkflowExecutionRequest
+	225, // 114: temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionRequest.cancel_request:type_name -> temporal.api.workflowservice.v1.RequestCancelWorkflowExecutionRequest
+	194, // 115: temporal.server.api.historyservice.v1.RequestCancelWorkflowExecutionRequest.external_workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	194, // 116: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	190, // 117: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskRequest.child_clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	190, // 118: temporal.server.api.historyservice.v1.ScheduleWorkflowTaskRequest.parent_clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	194, // 119: temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	190, // 120: temporal.server.api.historyservice.v1.VerifyFirstWorkflowTaskScheduledRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	194, // 121: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedRequest.parent_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	194, // 122: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedRequest.child_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	211, // 123: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedRequest.completion_event:type_name -> temporal.api.history.v1.HistoryEvent
+	190, // 124: temporal.server.api.historyservice.v1.RecordChildExecutionCompletedRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	194, // 125: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedRequest.parent_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	194, // 126: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedRequest.child_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	190, // 127: temporal.server.api.historyservice.v1.VerifyChildExecutionCompletionRecordedRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	226, // 128: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionRequest.request:type_name -> temporal.api.workflowservice.v1.DescribeWorkflowExecutionRequest
+	227, // 129: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.execution_config:type_name -> temporal.api.workflow.v1.WorkflowExecutionConfig
+	228, // 130: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.workflow_execution_info:type_name -> temporal.api.workflow.v1.WorkflowExecutionInfo
+	229, // 131: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.pending_activities:type_name -> temporal.api.workflow.v1.PendingActivityInfo
+	230, // 132: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.pending_children:type_name -> temporal.api.workflow.v1.PendingChildExecutionInfo
+	231, // 133: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.pending_workflow_task:type_name -> temporal.api.workflow.v1.PendingWorkflowTaskInfo
+	232, // 134: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.callbacks:type_name -> temporal.api.workflow.v1.CallbackInfo
+	233, // 135: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.pending_nexus_operations:type_name -> temporal.api.workflow.v1.PendingNexusOperationInfo
+	234, // 136: temporal.server.api.historyservice.v1.DescribeWorkflowExecutionResponse.workflow_extended_info:type_name -> temporal.api.workflow.v1.WorkflowExecutionExtendedInfo
+	194, // 137: temporal.server.api.historyservice.v1.ReplicateEventsV2Request.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	196, // 138: temporal.server.api.historyservice.v1.ReplicateEventsV2Request.version_history_items:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	235, // 139: temporal.server.api.historyservice.v1.ReplicateEventsV2Request.events:type_name -> temporal.api.common.v1.DataBlob
+	235, // 140: temporal.server.api.historyservice.v1.ReplicateEventsV2Request.new_run_events:type_name -> temporal.api.common.v1.DataBlob
+	236, // 141: temporal.server.api.historyservice.v1.ReplicateEventsV2Request.base_execution_info:type_name -> temporal.server.api.workflow.v1.BaseExecutionInfo
+	237, // 142: temporal.server.api.historyservice.v1.ReplicateWorkflowStateRequest.workflow_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
+	178, // 143: temporal.server.api.historyservice.v1.SyncShardStatusRequest.status_time:type_name -> google.protobuf.Timestamp
+	178, // 144: temporal.server.api.historyservice.v1.SyncActivityRequest.scheduled_time:type_name -> google.protobuf.Timestamp
+	178, // 145: temporal.server.api.historyservice.v1.SyncActivityRequest.started_time:type_name -> google.protobuf.Timestamp
+	178, // 146: temporal.server.api.historyservice.v1.SyncActivityRequest.last_heartbeat_time:type_name -> google.protobuf.Timestamp
+	181, // 147: temporal.server.api.historyservice.v1.SyncActivityRequest.details:type_name -> temporal.api.common.v1.Payloads
+	180, // 148: temporal.server.api.historyservice.v1.SyncActivityRequest.last_failure:type_name -> temporal.api.failure.v1.Failure
+	238, // 149: temporal.server.api.historyservice.v1.SyncActivityRequest.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
+	236, // 150: temporal.server.api.historyservice.v1.SyncActivityRequest.base_execution_info:type_name -> temporal.server.api.workflow.v1.BaseExecutionInfo
+	178, // 151: temporal.server.api.historyservice.v1.SyncActivityRequest.first_scheduled_time:type_name -> google.protobuf.Timestamp
+	178, // 152: temporal.server.api.historyservice.v1.SyncActivityRequest.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	182, // 153: temporal.server.api.historyservice.v1.SyncActivityRequest.retry_initial_interval:type_name -> google.protobuf.Duration
+	182, // 154: temporal.server.api.historyservice.v1.SyncActivityRequest.retry_maximum_interval:type_name -> google.protobuf.Duration
+	66,  // 155: temporal.server.api.historyservice.v1.SyncActivitiesRequest.activities_info:type_name -> temporal.server.api.historyservice.v1.ActivitySyncInfo
+	178, // 156: temporal.server.api.historyservice.v1.ActivitySyncInfo.scheduled_time:type_name -> google.protobuf.Timestamp
+	178, // 157: temporal.server.api.historyservice.v1.ActivitySyncInfo.started_time:type_name -> google.protobuf.Timestamp
+	178, // 158: temporal.server.api.historyservice.v1.ActivitySyncInfo.last_heartbeat_time:type_name -> google.protobuf.Timestamp
+	181, // 159: temporal.server.api.historyservice.v1.ActivitySyncInfo.details:type_name -> temporal.api.common.v1.Payloads
+	180, // 160: temporal.server.api.historyservice.v1.ActivitySyncInfo.last_failure:type_name -> temporal.api.failure.v1.Failure
+	238, // 161: temporal.server.api.historyservice.v1.ActivitySyncInfo.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
+	178, // 162: temporal.server.api.historyservice.v1.ActivitySyncInfo.first_scheduled_time:type_name -> google.protobuf.Timestamp
+	178, // 163: temporal.server.api.historyservice.v1.ActivitySyncInfo.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	182, // 164: temporal.server.api.historyservice.v1.ActivitySyncInfo.retry_initial_interval:type_name -> google.protobuf.Duration
+	182, // 165: temporal.server.api.historyservice.v1.ActivitySyncInfo.retry_maximum_interval:type_name -> google.protobuf.Duration
+	194, // 166: temporal.server.api.historyservice.v1.DescribeMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	237, // 167: temporal.server.api.historyservice.v1.DescribeMutableStateResponse.cache_mutable_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
+	237, // 168: temporal.server.api.historyservice.v1.DescribeMutableStateResponse.database_mutable_state:type_name -> temporal.server.api.persistence.v1.WorkflowMutableState
+	194, // 169: temporal.server.api.historyservice.v1.DescribeHistoryHostRequest.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	239, // 170: temporal.server.api.historyservice.v1.DescribeHistoryHostResponse.namespace_cache:type_name -> temporal.server.api.namespace.v1.NamespaceCacheInfo
+	240, // 171: temporal.server.api.historyservice.v1.GetShardResponse.shard_info:type_name -> temporal.server.api.persistence.v1.ShardInfo
+	178, // 172: temporal.server.api.historyservice.v1.RemoveTaskRequest.visibility_time:type_name -> google.protobuf.Timestamp
+	241, // 173: temporal.server.api.historyservice.v1.GetReplicationMessagesRequest.tokens:type_name -> temporal.server.api.replication.v1.ReplicationToken
+	171, // 174: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse.shard_messages:type_name -> temporal.server.api.historyservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry
+	242, // 175: temporal.server.api.historyservice.v1.GetDLQReplicationMessagesRequest.task_infos:type_name -> temporal.server.api.replication.v1.ReplicationTaskInfo
+	243, // 176: temporal.server.api.historyservice.v1.GetDLQReplicationMessagesResponse.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
+	244, // 177: temporal.server.api.historyservice.v1.QueryWorkflowRequest.request:type_name -> temporal.api.workflowservice.v1.QueryWorkflowRequest
+	245, // 178: temporal.server.api.historyservice.v1.QueryWorkflowResponse.response:type_name -> temporal.api.workflowservice.v1.QueryWorkflowResponse
+	246, // 179: temporal.server.api.historyservice.v1.ReapplyEventsRequest.request:type_name -> temporal.server.api.adminservice.v1.ReapplyEventsRequest
+	247, // 180: temporal.server.api.historyservice.v1.GetDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
+	247, // 181: temporal.server.api.historyservice.v1.GetDLQMessagesResponse.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
+	243, // 182: temporal.server.api.historyservice.v1.GetDLQMessagesResponse.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
+	242, // 183: temporal.server.api.historyservice.v1.GetDLQMessagesResponse.replication_tasks_info:type_name -> temporal.server.api.replication.v1.ReplicationTaskInfo
+	247, // 184: temporal.server.api.historyservice.v1.PurgeDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
+	247, // 185: temporal.server.api.historyservice.v1.MergeDLQMessagesRequest.type:type_name -> temporal.server.api.enums.v1.DeadLetterQueueType
+	248, // 186: temporal.server.api.historyservice.v1.RefreshWorkflowTasksRequest.request:type_name -> temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest
+	194, // 187: temporal.server.api.historyservice.v1.GenerateLastHistoryReplicationTasksRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	98,  // 188: temporal.server.api.historyservice.v1.GetReplicationStatusResponse.shards:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatus
+	178, // 189: temporal.server.api.historyservice.v1.ShardReplicationStatus.shard_local_time:type_name -> google.protobuf.Timestamp
+	172, // 190: temporal.server.api.historyservice.v1.ShardReplicationStatus.remote_clusters:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatus.RemoteClustersEntry
+	173, // 191: temporal.server.api.historyservice.v1.ShardReplicationStatus.handover_namespaces:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatus.HandoverNamespacesEntry
+	178, // 192: temporal.server.api.historyservice.v1.ShardReplicationStatus.max_replication_task_visibility_time:type_name -> google.protobuf.Timestamp
+	178, // 193: temporal.server.api.historyservice.v1.ShardReplicationStatusPerCluster.acked_task_visibility_time:type_name -> google.protobuf.Timestamp
+	194, // 194: temporal.server.api.historyservice.v1.RebuildMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	194, // 195: temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	235, // 196: temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest.history_batches:type_name -> temporal.api.common.v1.DataBlob
+	238, // 197: temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest.version_history:type_name -> temporal.server.api.history.v1.VersionHistory
+	194, // 198: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	178, // 199: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest.workflow_start_time:type_name -> google.protobuf.Timestamp
+	178, // 200: temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest.workflow_close_time:type_name -> google.protobuf.Timestamp
+	249, // 201: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkflowExecutionRequest
+	250, // 202: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse.response:type_name -> temporal.api.workflowservice.v1.UpdateWorkflowExecutionResponse
+	251, // 203: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesRequest.sync_replication_state:type_name -> temporal.server.api.replication.v1.SyncReplicationState
+	252, // 204: temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesResponse.messages:type_name -> temporal.server.api.replication.v1.WorkflowReplicationMessages
+	253, // 205: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateRequest.request:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateRequest
+	254, // 206: temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateResponse.response:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionUpdateResponse
+	255, // 207: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryRequest
+	256, // 208: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse
+	209, // 209: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse.history:type_name -> temporal.api.history.v1.History
+	256, // 210: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponseWithRaw.response:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryResponse
+	257, // 211: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseRequest
+	258, // 212: temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkflowExecutionHistoryReverseResponse
+	259, // 213: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Request.request:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request
+	260, // 214: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Response.response:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response
+	261, // 215: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryRequest.request:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest
+	262, // 216: temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryResponse.response:type_name -> temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse
+	263, // 217: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionRequest.request:type_name -> temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest
+	264, // 218: temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionResponse.response:type_name -> temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse
+	194, // 219: temporal.server.api.historyservice.v1.DeleteExecutionRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	265, // 220: temporal.server.api.historyservice.v1.GetDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	266, // 221: temporal.server.api.historyservice.v1.GetDLQTasksResponse.dlq_tasks:type_name -> temporal.server.api.common.v1.HistoryDLQTask
+	265, // 222: temporal.server.api.historyservice.v1.DeleteDLQTasksRequest.dlq_key:type_name -> temporal.server.api.common.v1.HistoryDLQKey
+	267, // 223: temporal.server.api.historyservice.v1.DeleteDLQTasksRequest.inclusive_max_task_metadata:type_name -> temporal.server.api.common.v1.HistoryDLQTaskMetadata
+	174, // 224: temporal.server.api.historyservice.v1.ListQueuesResponse.queues:type_name -> temporal.server.api.historyservice.v1.ListQueuesResponse.QueueInfo
+	175, // 225: temporal.server.api.historyservice.v1.AddTasksRequest.tasks:type_name -> temporal.server.api.historyservice.v1.AddTasksRequest.Task
+	268, // 226: temporal.server.api.historyservice.v1.ListTasksRequest.request:type_name -> temporal.server.api.adminservice.v1.ListHistoryTasksRequest
+	269, // 227: temporal.server.api.historyservice.v1.ListTasksResponse.response:type_name -> temporal.server.api.adminservice.v1.ListHistoryTasksResponse
+	270, // 228: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.completion:type_name -> temporal.server.api.token.v1.NexusOperationCompletion
+	271, // 229: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.success:type_name -> temporal.api.common.v1.Payload
+	180, // 230: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.failure:type_name -> temporal.api.failure.v1.Failure
+	178, // 231: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.close_time:type_name -> google.protobuf.Timestamp
+	193, // 232: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.links:type_name -> temporal.api.common.v1.Link
+	178, // 233: temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest.start_time:type_name -> google.protobuf.Timestamp
+	270, // 234: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.completion:type_name -> temporal.server.api.token.v1.NexusOperationCompletion
+	271, // 235: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.success:type_name -> temporal.api.common.v1.Payload
+	272, // 236: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.failure:type_name -> temporal.api.nexus.v1.Failure
+	178, // 237: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.start_time:type_name -> google.protobuf.Timestamp
+	193, // 238: temporal.server.api.historyservice.v1.CompleteNexusOperationRequest.links:type_name -> temporal.api.common.v1.Link
+	273, // 239: temporal.server.api.historyservice.v1.InvokeStateMachineMethodRequest.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
+	274, // 240: temporal.server.api.historyservice.v1.DeepHealthCheckResponse.state:type_name -> temporal.server.api.enums.v1.HealthState
+	275, // 241: temporal.server.api.historyservice.v1.DeepHealthCheckResponse.checks:type_name -> temporal.server.api.health.v1.HealthCheck
+	274, // 242: temporal.server.api.historyservice.v1.DeepHealthCheckResponse.unenforced_state:type_name -> temporal.server.api.enums.v1.HealthState
+	194, // 243: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	197, // 244: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	201, // 245: temporal.server.api.historyservice.v1.SyncWorkflowStateRequest.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
+	276, // 246: temporal.server.api.historyservice.v1.SyncWorkflowStateResponse.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
+	277, // 247: temporal.server.api.historyservice.v1.UpdateActivityOptionsRequest.update_request:type_name -> temporal.api.workflowservice.v1.UpdateActivityOptionsRequest
+	278, // 248: temporal.server.api.historyservice.v1.UpdateActivityOptionsResponse.activity_options:type_name -> temporal.api.activity.v1.ActivityOptions
+	279, // 249: temporal.server.api.historyservice.v1.PauseActivityRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.PauseActivityRequest
+	280, // 250: temporal.server.api.historyservice.v1.UnpauseActivityRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.UnpauseActivityRequest
+	281, // 251: temporal.server.api.historyservice.v1.ResetActivityRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.ResetActivityRequest
+	282, // 252: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsRequest.update_request:type_name -> temporal.api.workflowservice.v1.UpdateWorkflowExecutionOptionsRequest
+	283, // 253: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsResponse.workflow_execution_options:type_name -> temporal.api.workflow.v1.WorkflowExecutionOptions
+	178, // 254: temporal.server.api.historyservice.v1.UpdateWorkflowExecutionOptionsResponse.update_time:type_name -> google.protobuf.Timestamp
+	284, // 255: temporal.server.api.historyservice.v1.PauseWorkflowExecutionRequest.pause_request:type_name -> temporal.api.workflowservice.v1.PauseWorkflowExecutionRequest
+	285, // 256: temporal.server.api.historyservice.v1.UnpauseWorkflowExecutionRequest.unpause_request:type_name -> temporal.api.workflowservice.v1.UnpauseWorkflowExecutionRequest
+	286, // 257: temporal.server.api.historyservice.v1.StartNexusOperationRequest.request:type_name -> temporal.api.nexus.v1.StartOperationRequest
+	287, // 258: temporal.server.api.historyservice.v1.StartNexusOperationResponse.response:type_name -> temporal.api.nexus.v1.StartOperationResponse
+	288, // 259: temporal.server.api.historyservice.v1.CancelNexusOperationRequest.request:type_name -> temporal.api.nexus.v1.CancelOperationRequest
+	289, // 260: temporal.server.api.historyservice.v1.CancelNexusOperationResponse.response:type_name -> temporal.api.nexus.v1.CancelOperationResponse
+	290, // 261: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingRequest.request:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingRequest
+	291, // 262: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingResponse.response:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponse
+	196, // 263: temporal.server.api.historyservice.v1.OrphanedChildReplacementInfo.parent_current_version_history_items:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	1,   // 264: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation.start_workflow:type_name -> temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest
+	107, // 265: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation.update_workflow:type_name -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionRequest
+	2,   // 266: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response.start_workflow:type_name -> temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse
+	108, // 267: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response.update_workflow:type_name -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse
+	292, // 268: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
+	292, // 269: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
+	293, // 270: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
+	100, // 271: temporal.server.api.historyservice.v1.ShardReplicationStatus.RemoteClustersEntry.value:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatusPerCluster
+	99,  // 272: temporal.server.api.historyservice.v1.ShardReplicationStatus.HandoverNamespacesEntry.value:type_name -> temporal.server.api.historyservice.v1.HandoverNamespaceInfo
+	235, // 273: temporal.server.api.historyservice.v1.AddTasksRequest.Task.blob:type_name -> temporal.api.common.v1.DataBlob
+	294, // 274: temporal.server.api.historyservice.v1.routing:extendee -> google.protobuf.MessageOptions
+	0,   // 275: temporal.server.api.historyservice.v1.routing:type_name -> temporal.server.api.historyservice.v1.RoutingOptions
+	276, // [276:276] is the sub-list for method output_type
+	276, // [276:276] is the sub-list for method input_type
+	275, // [275:276] is the sub-list for extension type_name
+	274, // [274:275] is the sub-list for extension extendee
+	0,   // [0:274] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_historyservice_v1_request_response_proto_init() }
@@ -12453,25 +12310,25 @@ func file_temporal_server_api_historyservice_v1_request_response_proto_init() {
 	if File_temporal_server_api_historyservice_v1_request_response_proto != nil {
 		return
 	}
-	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[111].OneofWrappers = []any{
+	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[109].OneofWrappers = []any{
 		(*StreamWorkflowReplicationMessagesRequest_SyncReplicationState)(nil),
 	}
-	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[112].OneofWrappers = []any{
+	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[110].OneofWrappers = []any{
 		(*StreamWorkflowReplicationMessagesResponse_Messages)(nil),
 	}
-	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[138].OneofWrappers = []any{
+	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[136].OneofWrappers = []any{
 		(*CompleteNexusOperationChasmRequest_Success)(nil),
 		(*CompleteNexusOperationChasmRequest_Failure)(nil),
 	}
-	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[140].OneofWrappers = []any{
+	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[138].OneofWrappers = []any{
 		(*CompleteNexusOperationRequest_Success)(nil),
 		(*CompleteNexusOperationRequest_Failure)(nil),
 	}
-	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[169].OneofWrappers = []any{
+	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[167].OneofWrappers = []any{
 		(*ExecuteMultiOperationRequest_Operation_StartWorkflow)(nil),
 		(*ExecuteMultiOperationRequest_Operation_UpdateWorkflow)(nil),
 	}
-	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[170].OneofWrappers = []any{
+	file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[168].OneofWrappers = []any{
 		(*ExecuteMultiOperationResponse_Response_StartWorkflow)(nil),
 		(*ExecuteMultiOperationResponse_Response_UpdateWorkflow)(nil),
 	}
@@ -12481,7 +12338,7 @@ func file_temporal_server_api_historyservice_v1_request_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc), len(file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   178,
+			NumMessages:   176,
 			NumExtensions: 1,
 			NumServices:   0,
 		},

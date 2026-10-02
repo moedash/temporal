@@ -12,6 +12,14 @@ import (
 	"go.temporal.io/server/common"
 )
 
+// readOnly hides the mutable half of a context. Reaching a data field through
+// a mutable context marks it for persistence, and the subscription and
+// notification tables are read on paths that must leave an execution
+// untouched when nothing changes.
+func readOnly(ctx chasm.Context) chasm.Context {
+	return struct{ chasm.Context }{ctx}
+}
+
 // SubscribedToChannel reports whether this run subscribed to the channel.
 // The channel's fan-out asks, through a probe of the run, before it delivers,
 // and a run that does not answer yes is dropped from the channel.

@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -18,8 +19,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	notificationpb "go.temporal.io/api/notification/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/channel"
 	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
@@ -34,7 +37,9 @@ import (
 // channelTestEnv drives the notification channel with the raw client, playing
 // the worker by hand so each scheduled event can be inspected.
 type channelTestEnv struct {
-	*wakeTestEnv
+	t   *testing.T
+	env *testcore.TestEnv
+	ns  string
 }
 
 func newChannelTestEnv(t *testing.T, opts ...testcore.TestOption) *channelTestEnv {
@@ -44,7 +49,115 @@ func newChannelTestEnv(t *testing.T, opts ...testcore.TestOption) *channelTestEn
 		testcore.WithDynamicConfig(callback.RetryPolicyInitialInterval, 10*time.Millisecond),
 		testcore.WithDynamicConfig(callback.RetryPolicyMaximumInterval, 50*time.Millisecond),
 	}, opts...)
-	return &channelTestEnv{wakeTestEnv: newWakeTestEnv(t, opts...)}
+	env := testcore.NewEnv(t, opts...)
+	return &channelTestEnv{t: t, env: env, ns: env.Namespace().String()}
+}
+
+func (c *channelTestEnv) ctx() context.Context {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	c.t.Cleanup(cancel)
+	return ctx
+}
+
+func (c *channelTestEnv) taskQueue(id string) *taskqueuepb.TaskQueue {
+	return &taskqueuepb.TaskQueue{Name: id + "-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+}
+
+func (c *channelTestEnv) start(id string) string {
+	c.t.Helper()
+	resp, err := c.env.FrontendClient().StartWorkflowExecution(c.ctx(),
+		&workflowservice.StartWorkflowExecutionRequest{
+			RequestId:           uuid.NewString(),
+			Namespace:           c.ns,
+			WorkflowId:          id,
+			WorkflowType:        &commonpb.WorkflowType{Name: "channel-listener"},
+			TaskQueue:           c.taskQueue(id),
+			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+			WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+			Identity:            "tester",
+		})
+	require.NoError(c.t, err)
+	return resp.GetRunId()
+}
+
+func (c *channelTestEnv) poll(id string) *workflowservice.PollWorkflowTaskQueueResponse {
+	c.t.Helper()
+	resp, err := c.env.FrontendClient().PollWorkflowTaskQueue(c.ctx(),
+		&workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: c.ns,
+			TaskQueue: c.taskQueue(id),
+			Identity:  "tester",
+		})
+	require.NoError(c.t, err)
+	require.NotEmpty(c.t, resp.GetTaskToken(), "expected a workflow task")
+	return resp
+}
+
+func (c *channelTestEnv) complete(
+	task *workflowservice.PollWorkflowTaskQueueResponse,
+	returnNewTask bool,
+	commands ...*commandpb.Command,
+) *workflowservice.RespondWorkflowTaskCompletedResponse {
+	c.t.Helper()
+	resp, err := c.env.FrontendClient().RespondWorkflowTaskCompleted(c.ctx(),
+		&workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace:             c.ns,
+			TaskToken:             task.GetTaskToken(),
+			Commands:              commands,
+			Identity:              "tester",
+			ReturnNewWorkflowTask: returnNewTask,
+		})
+	require.NoError(c.t, err)
+	return resp
+}
+
+func (c *channelTestEnv) continueAsNewCommand(id string) *commandpb.Command {
+	attrs := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+		WorkflowType:        &commonpb.WorkflowType{Name: "channel-listener"},
+		TaskQueue:           c.taskQueue(id),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+	}
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+		Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+			ContinueAsNewWorkflowExecutionCommandAttributes: attrs,
+		},
+	}
+}
+
+func (c *channelTestEnv) hasPendingTask(id string) bool {
+	c.t.Helper()
+	resp, err := c.env.FrontendClient().DescribeWorkflowExecution(c.ctx(),
+		&workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: c.ns,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+		})
+	require.NoError(c.t, err)
+	return resp.GetPendingWorkflowTask() != nil
+}
+
+func (c *channelTestEnv) persisted(id string) *adminservice.DescribeMutableStateResponse {
+	c.t.Helper()
+	resp, err := c.env.AdminClient().DescribeMutableState(c.ctx(),
+		&adminservice.DescribeMutableStateRequest{
+			Namespace: c.ns,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+			Archetype: chasm.WorkflowArchetype,
+		})
+	require.NoError(c.t, err)
+	return resp
+}
+
+func (c *channelTestEnv) stateTransitions(id string) int64 {
+	c.t.Helper()
+	return c.persisted(id).GetDatabaseMutableState().GetExecutionInfo().GetStateTransitionCount()
+}
+
+func requireNotFound(t *testing.T, err error) {
+	t.Helper()
+	var notFound *serviceerror.NotFound
+	require.ErrorAs(t, err, &notFound)
 }
 
 func subscribeChannelCommand(name string) *commandpb.Command {
@@ -220,7 +333,6 @@ func TestNotificationChannelSubscribeAndNotify(t *testing.T) {
 	require.Equal(t, int32(1), c.mustNotify(name, 1))
 	task := c.poll(id)
 	requireNotifications(t, c.scheduledNotifications(id, task), map[string]int64{name: 1})
-	require.Empty(t, task.GetWakes())
 	c.complete(task, false)
 	require.False(t, c.hasPendingTask(id), "History acknowledged it, so nothing is redelivered")
 
@@ -776,9 +888,8 @@ func (c *channelTestEnv) channelTransitions(name string) int64 {
 	return resp.GetDatabaseMutableState().GetExecutionInfo().GetStateTransitionCount()
 }
 
-// The stall the wake round fixed: a listener's task runs to completion, and a
-// watcher that later finds the same record with no task open notifies the
-// same counter again. That is a new reason to run, so it schedules a task
+// A listener's task runs to completion, and a watcher that later finds the
+// same record with no task open notifies the same counter again. That is a new reason to run, so it schedules a task
 // whose scheduled event carries the counter. It does not join the ring again.
 func TestNotificationChannelRepeatAfterTaskWakesAgain(t *testing.T) {
 	c := newChannelTestEnv(t)

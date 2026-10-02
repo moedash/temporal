@@ -1028,35 +1028,6 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 	return resp, nil
 }
 
-// WakeWorkflowExecution tells a running execution that a source it consumes
-// moved. It schedules a Workflow Task that carries the wake and writes nothing
-// to History.
-func (h *Handler) WakeWorkflowExecution(
-	ctx context.Context,
-	request *historyservice.WakeWorkflowExecutionRequest,
-) (*historyservice.WakeWorkflowExecutionResponse, error) {
-	namespaceID := namespace.ID(request.GetNamespaceId())
-	if namespaceID == "" {
-		return nil, h.convertError(errNamespaceNotSet)
-	}
-
-	workflowID := request.GetWakeRequest().GetWorkflowExecution().GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
-	resp, err := engine.WakeWorkflowExecution(ctx, request)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-	return resp, nil
-}
-
 // SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
 // If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
 // and a workflow task being created for the execution.

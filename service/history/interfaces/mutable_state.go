@@ -377,8 +377,7 @@ type (
 		ConsumesStreams() bool
 
 		// HasPendingStreamData reports whether a stream subscription still has
-		// offsets to deliver or a wake has arrived that no started workflow task
-		// carried, which are the only cases where stream traffic or a wake
+		// offsets to deliver, which is the only case where stream traffic
 		// schedules a workflow task.
 		HasPendingStreamData() bool
 		ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error)

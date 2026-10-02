@@ -1600,23 +1600,3 @@ func (c *clientImpl) VerifyFirstWorkflowTaskScheduled(
 	}
 	return response, nil
 }
-
-func (c *clientImpl) WakeWorkflowExecution(
-	ctx context.Context,
-	request *historyservice.WakeWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (*historyservice.WakeWorkflowExecutionResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetWakeRequest().GetWorkflowExecution().GetWorkflowId())
-	var response *historyservice.WakeWorkflowExecutionResponse
-	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
-		var err error
-		ctx, cancel := c.createContext(ctx)
-		defer cancel()
-		response, err = client.WakeWorkflowExecution(ctx, request, opts...)
-		return err
-	}
-	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
-		return nil, err
-	}
-	return response, nil
-}

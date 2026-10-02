@@ -1203,18 +1203,3 @@ func (mr *MockEngineMockRecorder) VerifyFirstWorkflowTaskScheduled(ctx, request 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyFirstWorkflowTaskScheduled", reflect.TypeOf((*MockEngine)(nil).VerifyFirstWorkflowTaskScheduled), ctx, request)
 }
-
-// WakeWorkflowExecution mocks base method.
-func (m *MockEngine) WakeWorkflowExecution(ctx context.Context, request *historyservice.WakeWorkflowExecutionRequest) (*historyservice.WakeWorkflowExecutionResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WakeWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(*historyservice.WakeWorkflowExecutionResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// WakeWorkflowExecution indicates an expected call of WakeWorkflowExecution.
-func (mr *MockEngineMockRecorder) WakeWorkflowExecution(ctx, request any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WakeWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).WakeWorkflowExecution), ctx, request)
-}

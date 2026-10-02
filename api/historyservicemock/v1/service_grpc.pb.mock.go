@@ -1623,26 +1623,6 @@ func (mr *MockHistoryServiceClientMockRecorder) VerifyFirstWorkflowTaskScheduled
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyFirstWorkflowTaskScheduled", reflect.TypeOf((*MockHistoryServiceClient)(nil).VerifyFirstWorkflowTaskScheduled), varargs...)
 }
 
-// WakeWorkflowExecution mocks base method.
-func (m *MockHistoryServiceClient) WakeWorkflowExecution(ctx context.Context, in *historyservice.WakeWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.WakeWorkflowExecutionResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "WakeWorkflowExecution", varargs...)
-	ret0, _ := ret[0].(*historyservice.WakeWorkflowExecutionResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// WakeWorkflowExecution indicates an expected call of WakeWorkflowExecution.
-func (mr *MockHistoryServiceClientMockRecorder) WakeWorkflowExecution(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WakeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).WakeWorkflowExecution), varargs...)
-}
-
 // MockHistoryService_StreamWorkflowReplicationMessagesClient is a mock of HistoryService_StreamWorkflowReplicationMessagesClient interface.
 type MockHistoryService_StreamWorkflowReplicationMessagesClient struct {
 	ctrl     *gomock.Controller
@@ -2987,21 +2967,6 @@ func (m *MockHistoryServiceServer) VerifyFirstWorkflowTaskScheduled(arg0 context
 func (mr *MockHistoryServiceServerMockRecorder) VerifyFirstWorkflowTaskScheduled(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyFirstWorkflowTaskScheduled", reflect.TypeOf((*MockHistoryServiceServer)(nil).VerifyFirstWorkflowTaskScheduled), arg0, arg1)
-}
-
-// WakeWorkflowExecution mocks base method.
-func (m *MockHistoryServiceServer) WakeWorkflowExecution(arg0 context.Context, arg1 *historyservice.WakeWorkflowExecutionRequest) (*historyservice.WakeWorkflowExecutionResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WakeWorkflowExecution", arg0, arg1)
-	ret0, _ := ret[0].(*historyservice.WakeWorkflowExecutionResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// WakeWorkflowExecution indicates an expected call of WakeWorkflowExecution.
-func (mr *MockHistoryServiceServerMockRecorder) WakeWorkflowExecution(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WakeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).WakeWorkflowExecution), arg0, arg1)
 }
 
 // mustEmbedUnimplementedHistoryServiceServer mocks base method.

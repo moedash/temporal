@@ -28,20 +28,6 @@ message IncomingSignalData {
   int64 event_id = 1;
 }
 
-// WakeEntry is a wake from one source that a completed Workflow Task has not
-// yet seen. It is deleted when one has.
-message WakeEntry {
-  // Opaque to the server: where the source stood when it sent the wake.
-  bytes position = 1;
-  // Counter of the wake that set position.
-  int64 counter = 2;
-  // Bumped when a wake arrives after a started task carried this entry, so
-  // the completion of that task leaves the newer wake pending.
-  int64 generation = 3;
-  // Generation handed to the last Workflow Task that started with this entry.
-  int64 delivered_generation = 4;
-}
-
 // ChannelSubscription is a notification channel this run subscribed to with a
 // command. It lives for the run.
 message ChannelSubscription {
