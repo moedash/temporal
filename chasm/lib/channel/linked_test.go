@@ -25,6 +25,54 @@ func newTestLinkedChannel(t *testing.T) (*Channel, *chasm.MockMutableContext) {
 	return NewLinkedChannel(mctx), mctx
 }
 
+// newTestActivityLinkedChannel is a channel held by a standalone activity.
+func newTestActivityLinkedChannel(t *testing.T) (*Channel, *chasm.MockMutableContext) {
+	t.Helper()
+	now := time.Unix(1_700_000_000, 0).UTC()
+	mctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
+		HandleNow: func(chasm.Component) time.Time { return now },
+		HandleExecutionKey: func() chasm.ExecutionKey {
+			return chasm.ExecutionKey{NamespaceID: "ns", BusinessID: "act", RunID: "run-1"}
+		},
+		HandleExecutionInfo: func() chasm.ExecutionInfo {
+			return chasm.ExecutionInfo{ExecutionType: enumspb.EXECUTION_TYPE_ACTIVITY}
+		},
+	}}
+	return NewLinkedChannel(mctx), mctx
+}
+
+// A channel linked to a standalone activity has no owner among its listeners:
+// a notify joins the ring and reaches the callbacks, nothing waits for the
+// owner, the count is the callbacks alone, and describe lists no owner.
+func TestLinkedActivityOwnerIsNotAListener(t *testing.T) {
+	c, mctx := newTestActivityLinkedChannel(t)
+	require.False(t, OwnerListens(mctx))
+
+	result, err := c.NotifyLinked(mctx, note(1), Limits{})
+	require.NoError(t, err)
+	require.False(t, result.OwnerListens)
+	require.Zero(t, result.ListenerCount)
+	require.True(t, result.Advanced)
+	require.False(t, c.HasOwnerPending(), "nothing waits for an owner that cannot be woken")
+	linkedTo := c.State.GetLatest().GetLinkedTo()
+	require.Equal(t, enumspb.EXECUTION_TYPE_ACTIVITY, linkedTo.GetType())
+	require.Equal(t, "act", linkedTo.GetBusinessId())
+	require.Equal(t, "run-1", linkedTo.GetRunId())
+	require.Nil(t, c.OwnerListenerInfo(mctx))
+
+	id, err := c.RegisterCallbackListener(mctx, CallbackRegistration{
+		RequestID: "r1", Callback: testCallback(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, c.LinkedListenerCount(mctx), "the callback alone")
+	result, err = c.NotifyLinked(mctx, note(2), Limits{})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.ListenerCount)
+	require.Equal(t, int64(2), c.Listeners[id].Get(mctx).GetPending().GetCounter(),
+		"handed the latest on registration, the next one waits behind it")
+	require.False(t, c.HasOwnerPending())
+}
+
 // A notify on a linked channel names the owner, joins the ring, and waits for
 // the owner's next scheduled event. No fan-out and no idle check: the owner
 // is reached in this write, and the channel dies with the run.
