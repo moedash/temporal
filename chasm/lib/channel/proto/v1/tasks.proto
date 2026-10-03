@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.channel.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpb";
+
+// Fires after a notify on a channel with listeners. One is outstanding at a
+// time, and it delivers the latest notification to every listener that has
+// not been handed it yet.
+message ChannelFanOutTask {}
+
+// Posts a callback listener's in-flight notification. Runs on the outbound
+// queue, keyed by the callback's destination.
+message ChannelCallbackTask {
+  string listener_id = 1;
+  // The listener's task sequence when this was scheduled.
+  int64 sequence = 2;
+}
+
+// Fires when a failed callback delivery has backed off long enough to try
+// again.
+message ChannelCallbackBackoffTask {
+  string listener_id = 1;
+  // The listener's task sequence when the failed attempt ran.
+  int64 sequence = 2;
+}
+
+// Fires a retention after the channel's last activity. A channel with no
+// listeners that nobody touched in that time is deleted.
+message ChannelIdleTask {}

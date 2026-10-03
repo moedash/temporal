@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.channel.proto.v1;
+
+import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpb";
+
+// Notification has the fields of temporal.api.notification.v1.Notification
+// under the same names, so the stored form and the JSON a callback listener
+// receives read the same as the public message.
+message Notification {
+  string channel = 1;
+  // Opaque to the server: where the writer stood when it notified.
+  bytes position = 2;
+  // Set by the writer and expected to grow. Folding keeps the highest.
+  int64 counter = 3;
+  map<string, temporal.api.common.v1.Payload> metadata = 4;
+}
+
+// Listener is one entry of the channel's listener table. The callback says
+// where a notification goes: a Nexus callback is an HTTP endpoint the channel
+// posts to, and an internal callback carries a WorkflowTarget and reaches the
+// run on its own shard through the routed delivery.
+message Listener {
+  string listener_id = 1;
+  temporal.api.common.v1.Callback callback = 2;
+  // Request id of a callback registration, so a retried registration finds
+  // this listener rather than adding another. Empty for a workflow.
+  string request_id = 3;
+  google.protobuf.Timestamp registered_time = 4;
+
+  // The fields below track an HTTP post. A workflow listener keeps none of
+  // them: its run folds what it is handed on its own shard.
+
+  // The notification being delivered, if any. One delivery is in flight at a
+  // time per listener.
+  Notification in_flight = 5;
+  // The latest notification that arrived while one was in flight. A newer one
+  // replaces it, and it is sent when the in-flight delivery is done.
+  Notification pending = 6;
+  // Highest counter handed to this listener, in flight or pending, so the
+  // fan-out hands each notification once.
+  int64 handed_counter = 7;
+  // Attempts made at the in-flight delivery.
+  int32 attempt = 8;
+  google.protobuf.Timestamp next_attempt_time = 9;
+  temporal.api.failure.v1.Failure last_attempt_failure = 10;
+  // Bumped for every delivery task scheduled, so a task names one attempt of
+  // one delivery and a stale one finds nothing to do.
+  int64 task_sequence = 11;
+}
+
+// WorkflowTarget is what an internal callback's data holds: the workflow run
+// a notification is routed to.
+message WorkflowTarget {
+  string namespace_id = 1;
+  string workflow_id = 2;
+  // The run that subscribed, or the one the subscription was re-keyed to.
+  string run_id = 3;
+  string first_execution_run_id = 4;
+}
