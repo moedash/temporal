@@ -280,6 +280,221 @@ func (c *ChannelServiceLayeredClient) DescribeChannel(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+func (c *ChannelServiceLayeredClient) callNotifyLinkedChannelNoRetry(
+	ctx context.Context,
+	request *NotifyChannelRequest,
+	opts ...grpc.CallOption,
+) (*NotifyChannelResponse, error) {
+	var response *NotifyChannelResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("ChannelService.NotifyLinkedChannel"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetExecution().GetBusinessId(), c.numShards)
+	op := func(ctx context.Context, client ChannelServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.NotifyLinkedChannel(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *ChannelServiceLayeredClient) NotifyLinkedChannel(
+	ctx context.Context,
+	request *NotifyChannelRequest,
+	opts ...grpc.CallOption,
+) (*NotifyChannelResponse, error) {
+	call := func(ctx context.Context) (*NotifyChannelResponse, error) {
+		return c.callNotifyLinkedChannelNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *ChannelServiceLayeredClient) callRegisterLinkedChannelListenerNoRetry(
+	ctx context.Context,
+	request *RegisterChannelListenerRequest,
+	opts ...grpc.CallOption,
+) (*RegisterChannelListenerResponse, error) {
+	var response *RegisterChannelListenerResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("ChannelService.RegisterLinkedChannelListener"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetExecution().GetBusinessId(), c.numShards)
+	op := func(ctx context.Context, client ChannelServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.RegisterLinkedChannelListener(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *ChannelServiceLayeredClient) RegisterLinkedChannelListener(
+	ctx context.Context,
+	request *RegisterChannelListenerRequest,
+	opts ...grpc.CallOption,
+) (*RegisterChannelListenerResponse, error) {
+	call := func(ctx context.Context) (*RegisterChannelListenerResponse, error) {
+		return c.callRegisterLinkedChannelListenerNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *ChannelServiceLayeredClient) callUnregisterLinkedChannelListenerNoRetry(
+	ctx context.Context,
+	request *UnregisterChannelListenerRequest,
+	opts ...grpc.CallOption,
+) (*UnregisterChannelListenerResponse, error) {
+	var response *UnregisterChannelListenerResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("ChannelService.UnregisterLinkedChannelListener"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetExecution().GetBusinessId(), c.numShards)
+	op := func(ctx context.Context, client ChannelServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.UnregisterLinkedChannelListener(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *ChannelServiceLayeredClient) UnregisterLinkedChannelListener(
+	ctx context.Context,
+	request *UnregisterChannelListenerRequest,
+	opts ...grpc.CallOption,
+) (*UnregisterChannelListenerResponse, error) {
+	call := func(ctx context.Context) (*UnregisterChannelListenerResponse, error) {
+		return c.callUnregisterLinkedChannelListenerNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *ChannelServiceLayeredClient) callPollLinkedChannelNoRetry(
+	ctx context.Context,
+	request *PollChannelRequest,
+	opts ...grpc.CallOption,
+) (*PollChannelResponse, error) {
+	var response *PollChannelResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("ChannelService.PollLinkedChannel"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetExecution().GetBusinessId(), c.numShards)
+	op := func(ctx context.Context, client ChannelServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.PollLinkedChannel(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *ChannelServiceLayeredClient) PollLinkedChannel(
+	ctx context.Context,
+	request *PollChannelRequest,
+	opts ...grpc.CallOption,
+) (*PollChannelResponse, error) {
+	call := func(ctx context.Context) (*PollChannelResponse, error) {
+		return c.callPollLinkedChannelNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *ChannelServiceLayeredClient) callDescribeLinkedChannelNoRetry(
+	ctx context.Context,
+	request *DescribeChannelRequest,
+	opts ...grpc.CallOption,
+) (*DescribeChannelResponse, error) {
+	var response *DescribeChannelResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("ChannelService.DescribeLinkedChannel"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetExecution().GetBusinessId(), c.numShards)
+	op := func(ctx context.Context, client ChannelServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.DescribeLinkedChannel(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *ChannelServiceLayeredClient) DescribeLinkedChannel(
+	ctx context.Context,
+	request *DescribeChannelRequest,
+	opts ...grpc.CallOption,
+) (*DescribeChannelResponse, error) {
+	call := func(ctx context.Context) (*DescribeChannelResponse, error) {
+		return c.callDescribeLinkedChannelNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
 func (c *ChannelServiceLayeredClient) callRegisterWorkflowListenerNoRetry(
 	ctx context.Context,
 	request *RegisterWorkflowListenerRequest,
