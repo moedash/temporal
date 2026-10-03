@@ -2272,6 +2272,8 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:                         true,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED:                            true,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED:                     true,
+		enumspb.EVENT_TYPE_WORKFLOW_STREAM_SUBSCRIBED:                           true,
+		enumspb.EVENT_TYPE_WORKFLOW_STREAM_RECORDS_APPENDED:                     true,
 		enumspb.EVENT_TYPE_WORKFLOW_NOTIFICATION_CHANNEL_SUBSCRIBED:             true,
 		enumspb.EVENT_TYPE_WORKFLOW_NOTIFICATION_CHANNEL_UNSUBSCRIBED:           true,
 	}
