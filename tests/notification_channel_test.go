@@ -490,7 +490,9 @@ type callbackRecorder struct {
 	bodies   []map[string]any
 	channels []string
 	hold     chan struct{}
-	arrived  chan struct{}
+	// How long each request takes to answer, for a slow endpoint.
+	delay   time.Duration
+	arrived chan struct{}
 }
 
 func newCallbackRecorder(t *testing.T) (*callbackRecorder, string) {
@@ -502,11 +504,17 @@ func newCallbackRecorder(t *testing.T) (*callbackRecorder, string) {
 		r.mu.Lock()
 		r.bodies = append(r.bodies, body)
 		r.channels = append(r.channels, req.Header.Get(channelservice.ChannelHeader))
-		hold := r.hold
+		hold, delay := r.hold, r.delay
 		r.mu.Unlock()
 		r.arrived <- struct{}{}
 		if hold != nil {
 			<-hold
+		}
+		if delay > 0 {
+			select {
+			case <-time.After(delay):
+			case <-req.Context().Done():
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -593,6 +601,84 @@ func TestNotificationChannelCallbackListener(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, c.describe(name).GetListeners())
 	require.Equal(t, int32(0), c.mustNotify(name, 5))
+}
+
+// Deliveries to a callback are in order: one post is in flight per listener,
+// and what arrives during it folds into the one post sent after it returns.
+// A slow endpoint under a burst of rising counters sees them rise and ends on
+// the last one.
+func TestNotificationChannelCallbackDeliveriesInOrder(t *testing.T) {
+	c := newChannelTestEnv(t)
+	name := "orders-" + uuid.NewString()
+	recorder, url := newCallbackRecorder(t)
+	recorder.mu.Lock()
+	recorder.delay = 150 * time.Millisecond
+	recorder.mu.Unlock()
+	_, err := c.env.FrontendClient().RegisterChannelListener(c.ctx(),
+		&workflowservice.RegisterChannelListenerRequest{
+			Namespace: c.ns,
+			Channel:   name,
+			Callback: &commonpb.Callback{Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{Url: url},
+			}},
+			RequestId: uuid.NewString(),
+			Identity:  "tester",
+		})
+	require.NoError(t, err)
+
+	const last = int64(12)
+	pace := time.NewTicker(40 * time.Millisecond)
+	defer pace.Stop()
+	for counter := int64(1); counter <= last; counter++ {
+		require.Equal(t, int32(1), c.mustNotify(name, counter))
+		<-pace.C
+	}
+	await.Require(c.ctx(), t, func(t *await.T) {
+		seen := recorder.counters()
+		require.NotEmpty(t, seen)
+		require.Equal(t, strconv.FormatInt(last, 10), seen[len(seen)-1])
+	}, 20*time.Second, 50*time.Millisecond)
+
+	seen := recorder.counters()
+	previous := int64(0)
+	for _, s := range seen {
+		counter, err := strconv.ParseInt(s, 10, 64)
+		require.NoError(t, err)
+		require.Greater(t, counter, previous, "deliveries out of order: %v", seen)
+		previous = counter
+	}
+	require.Equal(t, last, previous)
+}
+
+// A channel with no listeners is deleted a retention after its last activity,
+// ring included. A notify after that starts a fresh channel, and a poller
+// holding a counter from the old one sees only what the new one has.
+func TestNotificationChannelRecreatedAfterRetention(t *testing.T) {
+	c := newChannelTestEnv(t, testcore.WithDynamicConfig(channel.RetentionSetting, time.Second))
+	name := "orders-" + uuid.NewString()
+	for counter := int64(1); counter <= 3; counter++ {
+		require.Equal(t, int32(0), c.mustNotify(name, counter))
+	}
+	require.Equal(t, int32(3), c.describe(name).GetRetainedCount())
+
+	await.Require(c.ctx(), t, func(t *await.T) {
+		_, err := c.env.FrontendClient().DescribeChannel(c.ctx(), &workflowservice.DescribeChannelRequest{
+			Namespace: c.ns, Channel: name,
+		})
+		var notFound *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFound, "the idle channel is still there")
+	}, 20*time.Second, 100*time.Millisecond)
+
+	require.Equal(t, int32(0), c.mustNotify(name, 7))
+	resp, err := c.env.FrontendClient().PollChannel(c.ctx(), &workflowservice.PollChannelRequest{
+		Namespace: c.ns, Channel: name, AfterCounter: 2,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.GetNotifications(), 1, "the old ring is gone with the old channel")
+	require.Equal(t, int64(7), resp.GetNotifications()[0].GetCounter())
+	desc := c.describe(name)
+	require.Equal(t, int32(1), desc.GetRetainedCount())
+	require.Equal(t, int64(7), desc.GetLatest().GetCounter())
 }
 
 // A long poll returns a notification published while it waits.
