@@ -2407,20 +2407,22 @@ func (wh *WorkflowHandler) validateCallerFields(identity, requestID string) erro
 // the independent handlers see the call a client without the field would
 // make.
 func (wh *WorkflowHandler) linkedChannelOwner(
+	ctx context.Context,
 	namespaceName string,
 	owner *commonpb.Execution,
 ) (*commonpb.Execution, error) {
 	if owner == nil || !wh.config.LinkedChannelKindEnabled(namespaceName) {
 		return nil, nil
 	}
-	return resolveChannelExecution(owner, wh.config.MaxIDLengthLimit())
+	return resolveChannelExecution(owner, executionTypeHint(ctx), wh.config.MaxIDLengthLimit())
 }
 
 // NotifyChannel tells every listener of a channel that a source they consume
 // moved. The writer never learns who listens; the channel's shard wakes each
 // one. A channel with no listeners retains the notification for pollers.
-// With execution set the channel is the one linked to that workflow run,
-// which is the listener.
+// With execution set the channel is the one linked to that execution: a
+// workflow run, which is the listener, or a standalone activity, which is
+// not.
 func (wh *WorkflowHandler) NotifyChannel(
 	ctx context.Context,
 	request *workflowservice.NotifyChannelRequest,
@@ -2451,7 +2453,7 @@ func (wh *WorkflowHandler) NotifyChannel(
 		return nil, err
 	}
 
-	owner, err := wh.linkedChannelOwner(request.GetNamespace(), request.GetExecution())
+	owner, err := wh.linkedChannelOwner(ctx, request.GetNamespace(), request.GetExecution())
 	if err != nil {
 		return nil, err
 	}
@@ -2516,7 +2518,7 @@ func (wh *WorkflowHandler) RegisterChannelListener(
 		requestID = uuid.NewString()
 	}
 
-	owner, err := wh.linkedChannelOwner(request.GetNamespace(), request.GetExecution())
+	owner, err := wh.linkedChannelOwner(ctx, request.GetNamespace(), request.GetExecution())
 	if err != nil {
 		return nil, err
 	}
@@ -2573,7 +2575,7 @@ func (wh *WorkflowHandler) UnregisterChannelListener(
 		return nil, err
 	}
 
-	owner, err := wh.linkedChannelOwner(request.GetNamespace(), request.GetExecution())
+	owner, err := wh.linkedChannelOwner(ctx, request.GetNamespace(), request.GetExecution())
 	if err != nil {
 		return nil, err
 	}
@@ -2623,7 +2625,7 @@ func (wh *WorkflowHandler) PollChannel(
 		return nil, err
 	}
 
-	owner, err := wh.linkedChannelOwner(request.GetNamespace(), request.GetExecution())
+	owner, err := wh.linkedChannelOwner(ctx, request.GetNamespace(), request.GetExecution())
 	if err != nil {
 		return nil, err
 	}
@@ -2671,7 +2673,7 @@ func (wh *WorkflowHandler) DescribeChannel(
 		return nil, err
 	}
 
-	owner, err := wh.linkedChannelOwner(request.GetNamespace(), request.GetExecution())
+	owner, err := wh.linkedChannelOwner(ctx, request.GetNamespace(), request.GetExecution())
 	if err != nil {
 		return nil, err
 	}

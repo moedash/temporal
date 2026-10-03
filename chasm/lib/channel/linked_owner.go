@@ -9,7 +9,7 @@ import (
 )
 
 // LinkedOwner is an execution that holds linked channels in its own state: a
-// workflow run. The channel service reads and
+// workflow run, or a standalone activity. The channel service reads and
 // writes the owner through this, whatever its archetype.
 type LinkedOwner interface {
 	chasm.Component
@@ -35,7 +35,8 @@ func ExecutionOf(ctx chasm.Context) *commonpb.Execution {
 
 // OwnerListens reports whether the execution holding a linked channel is one
 // of its listeners. A workflow run is: a notification rides its next
-// scheduled Workflow Task.
+// scheduled Workflow Task. A standalone activity has no such event to carry
+// one, so it is not, and its channels reach callbacks and pollers only.
 func OwnerListens(ctx chasm.Context) bool {
 	return ctx.ExecutionInfo().ExecutionType != enumspb.EXECUTION_TYPE_ACTIVITY
 }

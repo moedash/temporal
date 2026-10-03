@@ -36,8 +36,9 @@ type Notification struct {
 	// Set by the writer and expected to grow. Folding keeps the highest.
 	Counter  int64                  `protobuf:"varint,3,opt,name=counter,proto3" json:"counter,omitempty"`
 	Metadata map[string]*v1.Payload `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// The execution a linked channel belongs to and the run that received the
-	// notification. Empty for an independent channel.
+	// The execution a linked channel belongs to, a workflow or a standalone
+	// activity, and the run that received the notification. Empty for an
+	// independent channel.
 	LinkedTo      *v1.Execution `protobuf:"bytes,5,opt,name=linked_to,json=linkedTo,proto3" json:"linked_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

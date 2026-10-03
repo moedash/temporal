@@ -7,11 +7,13 @@ import (
 	"go.temporal.io/server/common"
 )
 
-// A linked channel lives in the state of one execution, a workflow run. The
-// run is its listener by construction: no subscription, no event and no
-// registration race. A notification reaches the owner in the write that
-// accepts it and rides the owner's next scheduled event, with linked_to
-// naming the owner. Callback listeners and pollers attach to a linked channel as they do to an independent one. The
+// A linked channel lives in the state of one execution, a workflow run or a
+// standalone activity. A workflow run is its listener by construction: no
+// subscription, no event and no registration race. A notification reaches
+// the owner in the write that accepts it and rides the owner's next scheduled
+// event, with linked_to naming the owner. A standalone activity has no such
+// event, so it is not a listener of its own channels. Callback listeners and
+// pollers attach to a linked channel as they do to an independent one. The
 // channel dies with the execution and nothing of it reaches a successor: a
 // continue-as-new successor starts with no linked channels, so callbacks
 // register again and pollers start over on an empty ring.

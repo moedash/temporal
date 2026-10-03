@@ -141,6 +141,7 @@ func NewHTTPAPIServer(
 
 	opts = append(opts, runtime.WithMiddlewares(h.allowedHostsMiddleware))
 	opts = append(opts, runtime.WithIncomingHeaderMatcher(h.incomingHeaderMatcher))
+	opts = append(opts, runtime.WithMetadata(executionTypeHintAnnotator))
 
 	// Create inline client connection
 	clientConn := newInlineClientConn(

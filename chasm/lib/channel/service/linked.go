@@ -7,6 +7,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/channel"
 	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -14,16 +15,17 @@ import (
 )
 
 // The linked kind is served on the shard of the execution that holds the
-// channel, a workflow run. The requests are the independent kind's with
-// execution set. An empty run id means the chain's current run, as it does
-// for a Signal. An execution that has closed took its
+// channel, a workflow run or a standalone activity. The requests are the
+// independent kind's with execution set. An empty run id means the chain's
+// current run, as it does for a Signal. An execution that has closed took its
 // linked channels with it, so a call on one answers NotFound, and a name
 // nobody has notified yet on a running execution is a linked channel with
 // nothing in it rather than one that does not exist, which is how a client
 // probes for the linked kind.
 //
-// Each call is written once over the owner's component type, since the
-// engine reads a component by its archetype. An unset type is a workflow: the HTTP routes bind the business
+// Each call is written once over the owner's component type and dispatched
+// on the execution's type, since the engine reads a component by its
+// archetype. An unset type is a workflow: the HTTP routes bind the business
 // id alone, and the frontend fills the type in where the route says.
 
 var (
@@ -42,6 +44,10 @@ func ownerRef[O channel.LinkedOwner](
 	})
 }
 
+func isActivity(owner *commonpb.Execution) bool {
+	return owner.GetType() == enumspb.EXECUTION_TYPE_ACTIVITY
+}
+
 // checkOwner refuses an execution the linked kind cannot serve.
 func checkOwner(owner *commonpb.Execution) error {
 	if owner.GetBusinessId() == "" {
@@ -49,7 +55,8 @@ func checkOwner(owner *commonpb.Execution) error {
 	}
 	switch owner.GetType() {
 	case enumspb.EXECUTION_TYPE_UNSPECIFIED,
-		enumspb.EXECUTION_TYPE_WORKFLOW:
+		enumspb.EXECUTION_TYPE_WORKFLOW,
+		enumspb.EXECUTION_TYPE_ACTIVITY:
 		return nil
 	default:
 		return serviceerror.NewInvalidArgumentf(
@@ -57,9 +64,16 @@ func checkOwner(owner *commonpb.Execution) error {
 	}
 }
 
+func ownerKind(owner *commonpb.Execution) string {
+	if isActivity(owner) {
+		return "activity"
+	}
+	return "workflow"
+}
+
 func ownerClosedError(owner *commonpb.Execution) error {
-	return serviceerror.NewNotFoundf("workflow %q has closed and its linked channels are gone with it",
-		owner.GetBusinessId())
+	return serviceerror.NewNotFoundf("%s %q has closed and its linked channels are gone with it",
+		ownerKind(owner), owner.GetBusinessId())
 }
 
 func ownerClosed(ctx chasm.Context) bool {
@@ -113,7 +127,8 @@ func readOwner[O channel.LinkedOwner](
 // NotifyLinkedChannel accepts a notification on a channel linked to an
 // execution, creating the channel on the execution on first use. A workflow
 // owner is the listener: the notification waits on its run for the next
-// scheduled event, and the same write hands it to the callback listeners.
+// scheduled event, and the same write hands it to the callback listeners. An
+// activity owner is not, so the write reaches the callbacks and the ring.
 //
 // Read first, as the independent kind does. A notification the owner already
 // holds, pending or on a task that has not started, and that every callback
@@ -136,6 +151,9 @@ func (h *handler) NotifyLinkedChannel(
 	}
 	if err := h.limiters.allowNotify(ns, h.timeSource.Now()); err != nil {
 		return nil, err
+	}
+	if isActivity(owner) {
+		return notifyLinked[*activity.Activity](ctx, h, req.GetNamespaceId(), ns, owner, n, limits)
 	}
 	return notifyLinked[*chasmworkflow.Workflow](ctx, h, req.GetNamespaceId(), ns, owner, n, limits)
 }
@@ -221,8 +239,15 @@ func (h *handler) RegisterLinkedChannelListener(
 		Callback:  in.GetCallback(),
 		Limits:    limits,
 	}
-	listenerID, err := registerLinked[*chasmworkflow.Workflow](
-		ctx, req.GetNamespaceId(), owner, in.GetChannel(), reg)
+	var listenerID string
+	var err error
+	if isActivity(owner) {
+		listenerID, err = registerLinked[*activity.Activity](
+			ctx, req.GetNamespaceId(), owner, in.GetChannel(), reg)
+	} else {
+		listenerID, err = registerLinked[*chasmworkflow.Workflow](
+			ctx, req.GetNamespaceId(), owner, in.GetChannel(), reg)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -267,8 +292,14 @@ func (h *handler) UnregisterLinkedChannelListener(
 		return nil, err
 	}
 	limits := h.limitsFor(ns)
-	err := unregisterLinked[*chasmworkflow.Workflow](
-		ctx, req.GetNamespaceId(), owner, in.GetChannel(), in.GetListenerId(), limits)
+	var err error
+	if isActivity(owner) {
+		err = unregisterLinked[*activity.Activity](
+			ctx, req.GetNamespaceId(), owner, in.GetChannel(), in.GetListenerId(), limits)
+	} else {
+		err = unregisterLinked[*chasmworkflow.Workflow](
+			ctx, req.GetNamespaceId(), owner, in.GetChannel(), in.GetListenerId(), limits)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -324,6 +355,9 @@ func (h *handler) PollLinkedChannel(
 		return nil, err
 	}
 	metrics.ChannelPollers.With(h.metricsHandler).Record(1, metrics.NamespaceTag(ns), linkedKindTag)
+	if isActivity(owner) {
+		return pollLinked[*activity.Activity](ctx, req.GetNamespaceId(), owner, in)
+	}
 	return pollLinked[*chasmworkflow.Workflow](ctx, req.GetNamespaceId(), owner, in)
 }
 
@@ -389,8 +423,14 @@ func (h *handler) DescribeLinkedChannel(
 	if err := checkOwner(owner); err != nil {
 		return nil, err
 	}
-	out, err := describeLinked[*chasmworkflow.Workflow](
-		ctx, req.GetNamespaceId(), owner, in.GetChannel())
+	var out *channelpb.DescribeChannelOutput
+	var err error
+	if isActivity(owner) {
+		out, err = describeLinked[*activity.Activity](ctx, req.GetNamespaceId(), owner, in.GetChannel())
+	} else {
+		out, err = describeLinked[*chasmworkflow.Workflow](
+			ctx, req.GetNamespaceId(), owner, in.GetChannel())
+	}
 	if err != nil {
 		return nil, err
 	}

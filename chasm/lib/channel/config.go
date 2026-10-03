@@ -79,8 +79,9 @@ workflow's own state, so smaller than an independent channel's ring.`,
 	MaxLinkedChannelsPerWorkflowSetting = dynamicconfig.NewNamespaceIntSetting(
 		"channel.maxLinkedChannelsPerWorkflow",
 		DefaultMaxLinkedChannelsPerWorkflow,
-		`Most channels linked to one workflow run. A notify or a registration that would
-create one past it is refused with ResourceExhausted.`,
+		`Most channels linked to one execution, a workflow run or a standalone activity. A
+notify or a registration that would create one past it is refused with
+ResourceExhausted.`,
 	)
 	// LinkedKindEnabledSetting exists so the independent kind can be exercised
 	// live on a server that has the linked kind: a client that sends
@@ -90,8 +91,8 @@ create one past it is refused with ResourceExhausted.`,
 		"channel.linkedKindEnabled",
 		true,
 		`Whether the public channel calls honour execution and reach the channel linked to
-that workflow. Off, they ignore it and reach the independent channel of the name, so
-DescribeChannel on an untouched linked name answers NotFound.`,
+that workflow or activity. Off, they ignore it and reach the independent channel of
+the name, so DescribeChannel on an untouched linked name answers NotFound.`,
 	)
 )
 

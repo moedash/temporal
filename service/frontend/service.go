@@ -205,7 +205,7 @@ type Config struct {
 	EnableDeploymentVersions dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Whether the channel calls honour execution and reach the channel linked
-	// to that workflow.
+	// to that workflow or activity.
 	LinkedChannelKindEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Enable batcher RPCs

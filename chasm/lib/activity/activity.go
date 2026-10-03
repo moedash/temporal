@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/channel"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
@@ -74,6 +75,12 @@ type Activity struct {
 	// Callbacks holds completion callbacks to be invoked when this standalone activity reaches a terminal state. Nil
 	// for workflow-embedded activities as the workflow handles its own callbacks.
 	Callbacks chasm.Map[string, *callback.Callback]
+
+	// Channels linked to this activity, keyed by channel name. Standalone
+	// only. The activity is not a listener of its own channels, since
+	// nothing like a Workflow Task would carry a notification to it, so they
+	// serve callbacks and pollers.
+	LinkedChannels chasm.Map[string, *channel.Channel]
 }
 
 // WithToken wraps a request with its deserialized task token.
