@@ -22,6 +22,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/api/stream/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -672,6 +673,37 @@ func (ms *MutableStateImpl) mustInitHSM() {
 	ms.stateMachineNode = stateMachineNode
 }
 
+// commitStreamCursors folds each staged range into its cursor and returns the
+// ranges to record. Called as the completed event is built, so the advance and
+// the event carrying the range are in one transaction: split apart, a crash
+// between them would either redeliver a range or skip it with nothing in
+// History to say so.
+func (ms *MutableStateImpl) commitStreamCursors() ([]*streampb.StreamRange, error) {
+	if !ms.HasChasmWorkflowComponent() {
+		return nil, nil
+	}
+	// Reaching the component through a mutable context marks it dirty, which
+	// would add a node to the transaction of every workflow that has no
+	// subscription at all. Ask read-only first, and take the write path only
+	// when there is something to fold in.
+	//
+	// The background context matches EnsureChasmWorkflowComponent: it only
+	// reaches components already in memory.
+	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	if len(wf.StreamCursors) == 0 {
+		return nil, nil
+	}
+
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return wf.CommitStreamCursors(chasmCtx), nil
+}
+
 // carryStreamSubscriptionsTo hands this run's subscriptions to the run that
 // continues it.
 //
@@ -700,20 +732,32 @@ func (ms *MutableStateImpl) carryStreamSubscriptionsTo(newMutableState *MutableS
 	return newWorkflow.ImportStreamSubscriptions(newChasmCtx, subscriptions)
 }
 
+// HasPendingStreamData reports whether a subscription of this workflow has
+// offsets left to deliver, which is the one condition under which stream
+// traffic schedules a workflow task.
+func (ms *MutableStateImpl) HasPendingStreamData() bool {
+	wf, chasmCtx, ok := ms.chasmWorkflowView()
+	return ok && wf.StreamCursorsBehind(chasmCtx)
+}
+
 // hasPendingWorkflowTaskInput reports whether something waits for a workflow
 // task to carry it that writes no event of its own to schedule one: a
-// channel notification waiting for a scheduled event.
+// subscription of this workflow with offsets left to deliver, or a channel
+// notification waiting for a scheduled event.
 //
 // A notification does not cut short a first workflow task backoff: the task
 // that ends the backoff carries it.
 //
 // Called on every transaction close for every workflow, almost none of which
-// have a notification, so it resolves the root component once rather than
-// asking whether it exists and then asking for it.
+// have a subscription or a notification, so it resolves the root component
+// once rather than asking whether it exists and then asking for it.
 func (ms *MutableStateImpl) hasPendingWorkflowTaskInput() bool {
 	wf, chasmCtx, ok := ms.chasmWorkflowView()
 	if !ok {
 		return false
+	}
+	if wf.StreamCursorsBehind(chasmCtx) {
+		return true
 	}
 	if !wf.HasPendingChannelNotifications(chasmCtx) {
 		return false
@@ -8141,10 +8185,12 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 		}
 	}
 
-	// Input only a workflow task delivers: a channel notification waiting for
-	// a scheduled event. Handled here rather than at workflow task completion
-	// so it also covers the transaction that hands the workflow a
-	// notification, which completes no workflow task of its own.
+	// Input only a workflow task delivers: a stream subscription with offsets
+	// left to deliver, or a channel notification waiting for a scheduled
+	// event. Handled here rather than at workflow task completion so it also
+	// covers the transaction that registers a subscription against a stream
+	// that already has data, or that hands the workflow a notification,
+	// neither of which completes a workflow task of its own.
 	//
 	// The pending-task check comes first because it is cheap: a workflow that
 	// already owes a task needs no further reason to run, so the subscription

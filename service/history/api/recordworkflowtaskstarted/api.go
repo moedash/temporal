@@ -51,6 +51,10 @@ func Invoke(
 
 	var workflowKey definition.WorkflowKey
 	var resp *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory
+	// Set when a stream range the task depends on cannot be served. The task
+	// is failed inside the transaction, so the failure has to be persisted
+	// and reported to matching afterwards rather than returned as the error.
+	var streamFailure *rangeUnavailable
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -99,6 +103,19 @@ func Invoke(
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
 					resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
+					if err != nil {
+						return nil, err
+					}
+					// Redelivers whatever range is already staged, so a
+					// duplicate of the same request hands back the same slice.
+					resp.StreamSlices, _, err = deliverStreamSlices(
+						ctx, shardContext, mutableState, workflowTask)
+					if errors.As(err, &streamFailure) {
+						if err := failTaskForStreams(mutableState, workflowTask, streamFailure); err != nil {
+							return nil, err
+						}
+						return updateAction, nil
+					}
 					if err != nil {
 						return nil, err
 					}
@@ -238,6 +255,19 @@ func Invoke(
 				return nil, err
 			}
 
+			resp.StreamSlices, _, err = deliverStreamSlices(
+				ctx, shardContext, mutableState, workflowTask)
+			if errors.As(err, &streamFailure) {
+				if err := failTaskForStreams(mutableState, workflowTask, streamFailure); err != nil {
+					return nil, err
+				}
+				updateAction.Noop = false
+				return updateAction, nil
+			}
+			if err != nil {
+				return nil, err
+			}
+
 			return updateAction, nil
 		},
 		nil,
@@ -247,6 +277,11 @@ func Invoke(
 
 	if err != nil {
 		return nil, err
+	}
+	if streamFailure != nil {
+		// The failure is in History and the next attempt is scheduled, so this
+		// task is stale; matching drops it rather than retrying it.
+		return nil, serviceerrors.NewObsoleteMatchingTask(streamFailure.Error())
 	}
 
 	maxHistoryPageSize := int32(config.HistoryMaxPageSize(namespaceEntry.Name().String()))
@@ -261,6 +296,9 @@ func Invoke(
 		persistenceVisibilityMgr,
 		resp,
 	)
+	if err != nil {
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -400,6 +438,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 		Queries:                    rawResp.Queries,
 		Clock:                      rawResp.Clock,
 		Messages:                   rawResp.Messages,
+		StreamSlices:               rawResp.StreamSlices,
 		Version:                    rawResp.Version,
 		NextPageToken:              rawResp.NextPageToken,
 	}, nil
