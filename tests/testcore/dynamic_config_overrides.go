@@ -3,6 +3,7 @@ package testcore
 import (
 	"time"
 
+	"go.temporal.io/server/chasm/lib/stream"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
@@ -86,5 +87,9 @@ var (
 		// exercise the percent gate can override per-test.
 		dynamicconfig.CHASMSchedulerCreationRolloutPercent.Key():  100,
 		dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Key(): 100,
+
+		// Streams are off by default in a deployment. The functional suites
+		// exercise them, so they are on here.
+		stream.EnabledSetting.Key(): true,
 	}
 )

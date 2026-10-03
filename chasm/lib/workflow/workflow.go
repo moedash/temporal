@@ -7,11 +7,13 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/channel"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/stream"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -41,6 +43,20 @@ type Workflow struct {
 	// Updates indexed by update ID, used to store the update components.
 	Updates chasm.Map[string, *WorkflowUpdate]
 
+	// Streams the workflow owns, keyed by stream name. Co-located with the
+	// workflow so publishing rides its commit rather than crossing executions.
+	Streams chasm.Map[string, *stream.Stream]
+
+	// Positions in streams the workflow consumes, keyed by stream name. Held
+	// here rather than on the stream so that folding in a delivered range
+	// commits with the event that records it.
+	//
+	// One keyspace holds both origins: a stream this workflow owns is keyed by
+	// its name, and one in another execution by its id. A subscription that
+	// would collide with the other origin under the same key is refused rather
+	// than silently handed the wrong cursor.
+	StreamCursors chasm.Map[string, *stream.Cursor]
+
 	// Notification channels this run subscribed to, keyed by channel name.
 	// Not carried to a successor run, which subscribes again if it listens.
 	ChannelSubscriptions chasm.Map[string, *chasmworkflowpb.ChannelSubscription]
@@ -60,6 +76,139 @@ type Workflow struct {
 	// notification waits on the channel for the run's next scheduled event.
 	// Nothing of them reaches a successor run.
 	LinkedChannels chasm.Map[string, *channel.Channel]
+}
+
+// streamConsumerID names this workflow's pin on a stream it owns. An attached
+// stream has exactly one consumer, but the stream's map is keyed by consumer,
+// so the entry still needs a stable name.
+func streamConsumerID(streamName string) string {
+	return "workflow:" + streamName
+}
+
+// SubscribeToOwnedStream registers this workflow as a consumer of a stream it
+// owns, returning the offset the subscription actually starts from.
+//
+// The start position is resolved here and the offset stored, so the first
+// recorded range begins at a fact rather than at a reading that would land
+// somewhere else on replay.
+func (w *Workflow) SubscribeToOwnedStream(
+	mctx chasm.MutableContext,
+	name string,
+	start *streampb.StreamStartPosition,
+	limits stream.Limits,
+) (int64, error) {
+	// Created here as well as on first write, so a workflow can start reading a
+	// topic before anything has been published to it. An outside producer that
+	// arrives later appends to the same stream.
+	owned, err := w.streamNamed(mctx, name, limits)
+	if err != nil {
+		return 0, err
+	}
+
+	if w.StreamCursors == nil {
+		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
+	}
+	if existing, ok := w.StreamCursors[name]; ok {
+		cursor := existing.Get(mctx)
+		if cursor.IsExternal() {
+			return 0, serviceerror.NewFailedPreconditionf(
+				"this workflow already consumes a stream with id %q in another execution, so "+
+					"it cannot also consume a stream of its own by that name", name)
+		}
+		// Resubscribing must not rewind a cursor: ranges below it are already
+		// recorded in History, and moving back would replay them as new.
+		return cursor.Offset(), nil
+	}
+
+	// Pin the stream's floor in the same transaction as the cursor. Registered
+	// separately it could be lost while the cursor survived, and truncation
+	// would then be free to take a range the cursor still points at.
+	key := mctx.ExecutionKey()
+	startOffset, err := owned.RegisterConsumer(mctx, stream.ConsumerRegistration{
+		ConsumerID:   streamConsumerID(name),
+		WorkflowID:   key.BusinessID,
+		RunID:        key.RunID,
+		Start:        start,
+		MaxConsumers: limits.MaxConsumersPerStream,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
+		StreamID:    name,
+		StartOffset: startOffset,
+	})
+	if err != nil {
+		return 0, err
+	}
+	w.StreamCursors[name] = chasm.NewComponentField(mctx, cursor)
+	return startOffset, nil
+}
+
+// ExternalStreamSubscription describes a stream in another execution, with the
+// start offset already resolved and the frontier as it was when the consumer
+// was registered there.
+type ExternalStreamSubscription struct {
+	StreamID    string
+	StartOffset int64
+	KnownHead   int64
+}
+
+// SubscribeToExternalStream registers this workflow as a consumer of a stream
+// it does not own, returning the offset the subscription starts from.
+func (w *Workflow) SubscribeToExternalStream(
+	mctx chasm.MutableContext,
+	req ExternalStreamSubscription,
+) (int64, error) {
+	if w.StreamCursors == nil {
+		w.StreamCursors = make(chasm.Map[string, *stream.Cursor])
+	}
+	if existing, ok := w.StreamCursors[req.StreamID]; ok {
+		cursor := existing.Get(mctx)
+		// Refused rather than answered with the owned cursor. Handing that one
+		// back reports a subscription that never delivers, and the pin taken on
+		// the standalone stream is then held by nothing.
+		if !cursor.IsExternal() {
+			return 0, serviceerror.NewFailedPreconditionf(
+				"this workflow already owns a stream named %q, so it cannot also consume a "+
+					"stream with that id in another execution", req.StreamID)
+		}
+		// Resubscribing must not rewind: ranges below the cursor are already
+		// recorded in History, and moving back would replay them as new.
+		return cursor.Offset(), nil
+	}
+
+	cursor, err := stream.NewCursor(mctx, stream.NewCursorRequest{
+		StreamID:    req.StreamID,
+		External:    true,
+		StartOffset: req.StartOffset,
+	})
+	if err != nil {
+		return 0, err
+	}
+	cursor.AdvanceKnownHead(mctx, req.KnownHead)
+	w.StreamCursors[req.StreamID] = chasm.NewComponentField(mctx, cursor)
+	return req.StartOffset, nil
+}
+
+// AdvanceKnownHead records how far a stream in another execution has moved.
+//
+// A workflow cannot read that frontier itself while closing its own
+// transaction, so the stream pushes it here. Writing it dirties this execution,
+// and the transaction close then sees the cursor is behind and schedules a
+// workflow task, which is the same path an owned stream takes.
+func (w *Workflow) AdvanceKnownHead(mctx chasm.MutableContext, streamID string, head int64) error {
+	field, ok := w.StreamCursors[streamID]
+	// Only an external cursor takes a push. A cursor of the same key on a
+	// stream this workflow owns belongs to a different stream that happens to
+	// share the name, and moving its frontier would answer for data it is not
+	// reading.
+	if !ok || !field.Get(mctx).IsExternal() {
+		return serviceerror.NewNotFoundf("workflow does not consume stream %q", streamID)
+	}
+	field.Get(mctx).AdvanceKnownHead(mctx, head)
+	return nil
 }
 
 func NewWorkflow(
@@ -329,4 +478,41 @@ func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter
 
 func (w *Workflow) WorkflowTypeName() string {
 	return w.GetWorkflowTypeName()
+}
+
+var _ stream.Owner = (*Workflow)(nil)
+
+// OwnedStream returns the attached stream under key, or nil when nothing has
+// created it yet. Reads that need the payload and not just the frontier go
+// through here, so both come from one view of the component.
+func (w *Workflow) OwnedStream(
+	ctx chasm.Context,
+	key string,
+) *stream.Stream {
+	return w.ownedStreams().Get(ctx, key)
+}
+
+// OwnedStreamEnded reports that the workflow is closed. A closed execution can
+// take no more publishes, from its own Workflow Task or from anywhere else, so
+// every stream it holds is finished whether or not a producer said so.
+func (w *Workflow) OwnedStreamEnded(ctx chasm.Context, _ string) bool {
+	return !ctx.ExecutionInfo().CloseTime.IsZero()
+}
+
+// AppendToOwnedStream appends under key on behalf of a writer outside the
+// execution.
+//
+// The workflow's own publishes go through the command handler, which advances
+// the frontier inside the Workflow Task's commit. This is the other producer:
+// it advances the same frontier in a transition of its own, so the two are
+// serialized by the execution rather than by anything the stream does.
+//
+// The key is already resolved, and checked, by the caller: it is either a
+// name the workflow may use or the reserved key of one of its activities.
+func (w *Workflow) AppendToOwnedStream(
+	mctx chasm.MutableContext,
+	key string,
+	req stream.AddMessagesRequest,
+) (stream.AddMessagesResult, error) {
+	return w.ownedStreams().Append(mctx, key, req)
 }
