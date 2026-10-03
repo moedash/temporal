@@ -25,3 +25,11 @@ func (x *PollChannelRequest) GetNamespace() string {
 func (x *DescribeChannelRequest) GetNamespace() string {
 	return x.GetFrontendRequest().GetNamespace()
 }
+
+func (x *RegisterWorkflowListenerRequest) GetNamespace() string {
+	return x.GetFrontendRequest().GetNamespace()
+}
+
+func (x *DeliverChannelNotificationRequest) GetNamespace() string {
+	return x.GetFrontendRequest().GetNamespace()
+}

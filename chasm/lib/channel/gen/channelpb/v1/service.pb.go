@@ -27,42 +27,52 @@ var File_temporal_server_chasm_lib_channel_proto_v1_service_proto protoreflect.F
 
 const file_temporal_server_chasm_lib_channel_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"8temporal/server/chasm/lib/channel/proto/v1/service.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1aAtemporal/server/chasm/lib/channel/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\x90\b\n" +
+	"8temporal/server/chasm/lib/channel/proto/v1/service.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1aAtemporal/server/chasm/lib/channel/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xd6\v\n" +
 	"\x0eChannelService\x12\xc7\x01\n" +
 	"\rNotifyChannel\x12@.temporal.server.chasm.lib.channel.proto.v1.NotifyChannelRequest\x1aA.temporal.server.chasm.lib.channel.proto.v1.NotifyChannelResponse\"1\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18'\x1a%frontend_request.notification.channel\x12\xd8\x01\n" +
 	"\x17RegisterChannelListener\x12J.temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerRequest\x1aK.temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerResponse\"$\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1a\x1a\x18frontend_request.channel\x12\xde\x01\n" +
 	"\x19UnregisterChannelListener\x12L.temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerRequest\x1aM.temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerResponse\"$\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1a\x1a\x18frontend_request.channel\x12\xb4\x01\n" +
 	"\vPollChannel\x12>.temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest\x1a?.temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse\"$\x8a\xb5\x18\x02\b\x02\xd2\xc3\x18\x1a\x1a\x18frontend_request.channel\x12\xc0\x01\n" +
-	"\x0fDescribeChannel\x12B.temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest\x1aC.temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse\"$\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1a\x1a\x18frontend_request.channelBAZ?go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpbb\x06proto3"
+	"\x0fDescribeChannel\x12B.temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest\x1aC.temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse\"$\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1a\x1a\x18frontend_request.channel\x12\xdb\x01\n" +
+	"\x18RegisterWorkflowListener\x12K.temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerRequest\x1aL.temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerResponse\"$\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1a\x1a\x18frontend_request.channel\x12\xe5\x01\n" +
+	"\x1aDeliverChannelNotification\x12M.temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationRequest\x1aN.temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse\"(\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1e\x1a\x1cfrontend_request.workflow_idBAZ?go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpbb\x06proto3"
 
 var file_temporal_server_chasm_lib_channel_proto_v1_service_proto_goTypes = []any{
-	(*NotifyChannelRequest)(nil),              // 0: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelRequest
-	(*RegisterChannelListenerRequest)(nil),    // 1: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerRequest
-	(*UnregisterChannelListenerRequest)(nil),  // 2: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerRequest
-	(*PollChannelRequest)(nil),                // 3: temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest
-	(*DescribeChannelRequest)(nil),            // 4: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest
-	(*NotifyChannelResponse)(nil),             // 5: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelResponse
-	(*RegisterChannelListenerResponse)(nil),   // 6: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerResponse
-	(*UnregisterChannelListenerResponse)(nil), // 7: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerResponse
-	(*PollChannelResponse)(nil),               // 8: temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse
-	(*DescribeChannelResponse)(nil),           // 9: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse
+	(*NotifyChannelRequest)(nil),               // 0: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelRequest
+	(*RegisterChannelListenerRequest)(nil),     // 1: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerRequest
+	(*UnregisterChannelListenerRequest)(nil),   // 2: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerRequest
+	(*PollChannelRequest)(nil),                 // 3: temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest
+	(*DescribeChannelRequest)(nil),             // 4: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest
+	(*RegisterWorkflowListenerRequest)(nil),    // 5: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerRequest
+	(*DeliverChannelNotificationRequest)(nil),  // 6: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationRequest
+	(*NotifyChannelResponse)(nil),              // 7: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelResponse
+	(*RegisterChannelListenerResponse)(nil),    // 8: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerResponse
+	(*UnregisterChannelListenerResponse)(nil),  // 9: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerResponse
+	(*PollChannelResponse)(nil),                // 10: temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse
+	(*DescribeChannelResponse)(nil),            // 11: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse
+	(*RegisterWorkflowListenerResponse)(nil),   // 12: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerResponse
+	(*DeliverChannelNotificationResponse)(nil), // 13: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse
 }
 var file_temporal_server_chasm_lib_channel_proto_v1_service_proto_depIdxs = []int32{
-	0, // 0: temporal.server.chasm.lib.channel.proto.v1.ChannelService.NotifyChannel:input_type -> temporal.server.chasm.lib.channel.proto.v1.NotifyChannelRequest
-	1, // 1: temporal.server.chasm.lib.channel.proto.v1.ChannelService.RegisterChannelListener:input_type -> temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerRequest
-	2, // 2: temporal.server.chasm.lib.channel.proto.v1.ChannelService.UnregisterChannelListener:input_type -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerRequest
-	3, // 3: temporal.server.chasm.lib.channel.proto.v1.ChannelService.PollChannel:input_type -> temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest
-	4, // 4: temporal.server.chasm.lib.channel.proto.v1.ChannelService.DescribeChannel:input_type -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest
-	5, // 5: temporal.server.chasm.lib.channel.proto.v1.ChannelService.NotifyChannel:output_type -> temporal.server.chasm.lib.channel.proto.v1.NotifyChannelResponse
-	6, // 6: temporal.server.chasm.lib.channel.proto.v1.ChannelService.RegisterChannelListener:output_type -> temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerResponse
-	7, // 7: temporal.server.chasm.lib.channel.proto.v1.ChannelService.UnregisterChannelListener:output_type -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerResponse
-	8, // 8: temporal.server.chasm.lib.channel.proto.v1.ChannelService.PollChannel:output_type -> temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse
-	9, // 9: temporal.server.chasm.lib.channel.proto.v1.ChannelService.DescribeChannel:output_type -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse
-	5, // [5:10] is the sub-list for method output_type
-	0, // [0:5] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0,  // 0: temporal.server.chasm.lib.channel.proto.v1.ChannelService.NotifyChannel:input_type -> temporal.server.chasm.lib.channel.proto.v1.NotifyChannelRequest
+	1,  // 1: temporal.server.chasm.lib.channel.proto.v1.ChannelService.RegisterChannelListener:input_type -> temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerRequest
+	2,  // 2: temporal.server.chasm.lib.channel.proto.v1.ChannelService.UnregisterChannelListener:input_type -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerRequest
+	3,  // 3: temporal.server.chasm.lib.channel.proto.v1.ChannelService.PollChannel:input_type -> temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest
+	4,  // 4: temporal.server.chasm.lib.channel.proto.v1.ChannelService.DescribeChannel:input_type -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest
+	5,  // 5: temporal.server.chasm.lib.channel.proto.v1.ChannelService.RegisterWorkflowListener:input_type -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerRequest
+	6,  // 6: temporal.server.chasm.lib.channel.proto.v1.ChannelService.DeliverChannelNotification:input_type -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationRequest
+	7,  // 7: temporal.server.chasm.lib.channel.proto.v1.ChannelService.NotifyChannel:output_type -> temporal.server.chasm.lib.channel.proto.v1.NotifyChannelResponse
+	8,  // 8: temporal.server.chasm.lib.channel.proto.v1.ChannelService.RegisterChannelListener:output_type -> temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerResponse
+	9,  // 9: temporal.server.chasm.lib.channel.proto.v1.ChannelService.UnregisterChannelListener:output_type -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerResponse
+	10, // 10: temporal.server.chasm.lib.channel.proto.v1.ChannelService.PollChannel:output_type -> temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse
+	11, // 11: temporal.server.chasm.lib.channel.proto.v1.ChannelService.DescribeChannel:output_type -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse
+	12, // 12: temporal.server.chasm.lib.channel.proto.v1.ChannelService.RegisterWorkflowListener:output_type -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerResponse
+	13, // 13: temporal.server.chasm.lib.channel.proto.v1.ChannelService.DeliverChannelNotification:output_type -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse
+	7,  // [7:14] is the sub-list for method output_type
+	0,  // [0:7] is the sub-list for method input_type
+	0,  // [0:0] is the sub-list for extension type_name
+	0,  // [0:0] is the sub-list for extension extendee
+	0,  // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_channel_proto_v1_service_proto_init() }

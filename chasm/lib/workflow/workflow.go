@@ -39,6 +39,18 @@ type Workflow struct {
 
 	// Updates indexed by update ID, used to store the update components.
 	Updates chasm.Map[string, *WorkflowUpdate]
+
+	// Notification channels this run subscribed to, keyed by channel name.
+	// Not carried to a successor run, which subscribes again if it listens.
+	ChannelSubscriptions chasm.Map[string, *chasmworkflowpb.ChannelSubscription]
+
+	// The latest notification per channel that no WorkflowTaskScheduled event
+	// has carried. The event that carries one is its acknowledgment.
+	ChannelNotifications chasm.Map[string, *chasmworkflowpb.ChannelNotificationEntry]
+
+	// Channels a subscribe command in the open Workflow Task has to register
+	// this run on. In memory only, drained before commit.
+	pendingChannelRegistrations []string
 }
 
 func NewWorkflow(

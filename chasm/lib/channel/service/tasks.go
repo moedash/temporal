@@ -27,6 +27,11 @@ import (
 // several channels can route without parsing the body.
 const ChannelHeader = "Temporal-Notification-Channel"
 
+// fanOutConcurrency bounds how many workflow listeners one fan-out tells at
+// once. A channel holds up to a thousand, and telling them one at a time makes
+// the task's runtime grow with that count.
+const fanOutConcurrency = 16
+
 // backgroundCallerContext tags a task's context with the namespace, since the
 // task runs outside any request. The name comes back too: a routed call the
 // task makes carries it on the request, which is what the interceptors resolve
@@ -43,22 +48,26 @@ func backgroundCallerContext(
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundLowCallerInfo(name.String())), name.String()
 }
 
-// fanOutTaskHandler hands the channel's latest notification to its callback
-// listeners, inside the channel's own transition.
+// fanOutTaskHandler hands the channel's latest notification to its listeners.
+// Callback listeners are handed it inside the channel's own transition; each
+// workflow listener is reached on its own shard through the routed service.
 type fanOutTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*channelpb.ChannelFanOutTask]
 
 	namespaceRegistry namespace.Registry
 	metricsHandler    metrics.Handler
+	deliverer         *workflowDeliverer
 }
 
 func newFanOutTaskHandler(
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
+	deliverer *workflowDeliverer,
 ) *fanOutTaskHandler {
 	return &fanOutTaskHandler{
 		namespaceRegistry: namespaceRegistry,
 		metricsHandler:    metricsHandler,
+		deliverer:         deliverer,
 	}
 }
 
@@ -74,7 +83,9 @@ func (h *fanOutTaskHandler) Validate(
 	return true, nil
 }
 
-// Execute hands the latest notification to the callback listeners.
+// Execute delivers the latest notification. The first error comes back so the
+// task retries and tells the whole set again; a run that already has the
+// counter takes the retry as a duplicate and changes nothing.
 func (h *fanOutTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -90,7 +101,11 @@ func (h *fanOutTaskHandler) Execute(
 		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
 			int64(fanOut.CallbackFolded), metrics.NamespaceTag(ns), callbackKindTag)
 	}
-	return nil
+	if fanOut.Latest == nil {
+		return nil
+	}
+
+	return h.deliverer.deliverAll(ctx, ref, ns, fanOut.Workflows, fanOut.Latest)
 }
 
 // Discard lowers the coalescing flag the scheduling notify raised. Left up, no

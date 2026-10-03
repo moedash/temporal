@@ -6,11 +6,15 @@ import (
 	"go.uber.org/fx"
 )
 
-// HistoryModule serves ChannelService on History. The channel config comes
-// from the workflow library module, which every service running this one has.
+// HistoryModule serves ChannelService on History. The routed client is here
+// too: the fan-out runs on the channel's shard and has to reach each
+// listener's, which this host may not own. The channel config comes from the
+// workflow library module, which every service running this one has.
 var HistoryModule = fx.Module(
 	"channel-history",
 	fx.Provide(
+		channelpb.NewChannelServiceLayeredClient,
+		newWorkflowDeliverer,
 		newHandler,
 		newFanOutTaskHandler,
 		newCallbackTaskHandler,
@@ -21,6 +25,7 @@ var HistoryModule = fx.Module(
 	fx.Invoke(func(l *library, registry *chasm.Registry) error {
 		return registry.Register(l)
 	}),
+	fx.Invoke(RegisterEventDefinitions),
 )
 
 // FrontendModule gives the frontend the routed client its channel handlers

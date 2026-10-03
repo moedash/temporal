@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.workflow.proto.v1;
 
+import "temporal/api/common/v1/message.proto";
+
 option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpb";
 
 // NexusOperationParentData contains workflow-specific data stored in a nexus operation's
@@ -24,4 +26,26 @@ message NexusCancellationParentData {
 // DescribeWorkflow to resolve RequestIDRef signal backlinks.
 message IncomingSignalData {
   int64 event_id = 1;
+}
+
+// ChannelSubscription is a notification channel this run subscribed to with a
+// command. It lives for the run.
+message ChannelSubscription {
+  // The WorkflowNotificationChannelSubscribed event that recorded it.
+  int64 event_id = 1;
+  // Highest counter this run accepted from the channel. Kept for describing
+  // the subscription; folding compares against the pending entry instead.
+  int64 last_counter = 2;
+  // Counter the scheduled event of the run's current task carried, while that
+  // task has not started. A repeat at or below it folds into that task, which
+  // has not read anything yet. Zero once the task starts, fails or times out.
+  int64 scheduled_counter = 3;
+}
+
+// ChannelNotificationEntry is the latest notification from one channel that
+// no WorkflowTaskScheduled event has carried yet. Deleted when one does.
+message ChannelNotificationEntry {
+  bytes position = 1;
+  int64 counter = 2;
+  map<string, temporal.api.common.v1.Payload> metadata = 3;
 }

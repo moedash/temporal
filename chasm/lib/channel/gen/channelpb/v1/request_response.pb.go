@@ -1177,6 +1177,466 @@ func (x *DescribeChannelResponse) GetFrontendResponse() *DescribeChannelOutput {
 	return nil
 }
 
+type RegisterWorkflowListenerInput struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Namespace           string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Channel             string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
+	WorkflowId          string                 `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	RunId               string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	FirstExecutionRunId string                 `protobuf:"bytes,5,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *RegisterWorkflowListenerInput) Reset() {
+	*x = RegisterWorkflowListenerInput{}
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterWorkflowListenerInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterWorkflowListenerInput) ProtoMessage() {}
+
+func (x *RegisterWorkflowListenerInput) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterWorkflowListenerInput.ProtoReflect.Descriptor instead.
+func (*RegisterWorkflowListenerInput) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *RegisterWorkflowListenerInput) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *RegisterWorkflowListenerInput) GetChannel() string {
+	if x != nil {
+		return x.Channel
+	}
+	return ""
+}
+
+func (x *RegisterWorkflowListenerInput) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *RegisterWorkflowListenerInput) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *RegisterWorkflowListenerInput) GetFirstExecutionRunId() string {
+	if x != nil {
+		return x.FirstExecutionRunId
+	}
+	return ""
+}
+
+type RegisterWorkflowListenerOutput struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The channel's latest notification, when the run is new to the channel.
+	// The run takes it as pending, so a write that landed before the run was
+	// registered still wakes it.
+	Latest        *Notification `protobuf:"bytes,1,opt,name=latest,proto3" json:"latest,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterWorkflowListenerOutput) Reset() {
+	*x = RegisterWorkflowListenerOutput{}
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterWorkflowListenerOutput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterWorkflowListenerOutput) ProtoMessage() {}
+
+func (x *RegisterWorkflowListenerOutput) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterWorkflowListenerOutput.ProtoReflect.Descriptor instead.
+func (*RegisterWorkflowListenerOutput) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *RegisterWorkflowListenerOutput) GetLatest() *Notification {
+	if x != nil {
+		return x.Latest
+	}
+	return nil
+}
+
+type RegisterWorkflowListenerRequest struct {
+	state           protoimpl.MessageState         `protogen:"open.v1"`
+	NamespaceId     string                         `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *RegisterWorkflowListenerInput `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RegisterWorkflowListenerRequest) Reset() {
+	*x = RegisterWorkflowListenerRequest{}
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterWorkflowListenerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterWorkflowListenerRequest) ProtoMessage() {}
+
+func (x *RegisterWorkflowListenerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterWorkflowListenerRequest.ProtoReflect.Descriptor instead.
+func (*RegisterWorkflowListenerRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *RegisterWorkflowListenerRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *RegisterWorkflowListenerRequest) GetFrontendRequest() *RegisterWorkflowListenerInput {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
+type RegisterWorkflowListenerResponse struct {
+	state            protoimpl.MessageState          `protogen:"open.v1"`
+	FrontendResponse *RegisterWorkflowListenerOutput `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RegisterWorkflowListenerResponse) Reset() {
+	*x = RegisterWorkflowListenerResponse{}
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterWorkflowListenerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterWorkflowListenerResponse) ProtoMessage() {}
+
+func (x *RegisterWorkflowListenerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterWorkflowListenerResponse.ProtoReflect.Descriptor instead.
+func (*RegisterWorkflowListenerResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RegisterWorkflowListenerResponse) GetFrontendResponse() *RegisterWorkflowListenerOutput {
+	if x != nil {
+		return x.FrontendResponse
+	}
+	return nil
+}
+
+type DeliverChannelNotificationInput struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	WorkflowId string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	// The run the channel has on record. If it is closed, the current run is
+	// asked instead.
+	RunId         string        `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Notification  *Notification `protobuf:"bytes,4,opt,name=notification,proto3" json:"notification,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeliverChannelNotificationInput) Reset() {
+	*x = DeliverChannelNotificationInput{}
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliverChannelNotificationInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliverChannelNotificationInput) ProtoMessage() {}
+
+func (x *DeliverChannelNotificationInput) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliverChannelNotificationInput.ProtoReflect.Descriptor instead.
+func (*DeliverChannelNotificationInput) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *DeliverChannelNotificationInput) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *DeliverChannelNotificationInput) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+func (x *DeliverChannelNotificationInput) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *DeliverChannelNotificationInput) GetNotification() *Notification {
+	if x != nil {
+		return x.Notification
+	}
+	return nil
+}
+
+type DeliverChannelNotificationOutput struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// No run of the workflow listens to the channel any more, so the channel
+	// drops the listener.
+	ListenerClosed bool `protobuf:"varint,1,opt,name=listener_closed,json=listenerClosed,proto3" json:"listener_closed,omitempty"`
+	// The run on record is closed and the current run listens, so the channel
+	// re-keys the listener to it.
+	SuccessorRunId string `protobuf:"bytes,2,opt,name=successor_run_id,json=successorRunId,proto3" json:"successor_run_id,omitempty"`
+	// The notification joined one the run had not seen yet.
+	Folded bool `protobuf:"varint,3,opt,name=folded,proto3" json:"folded,omitempty"`
+	// The run holds a pending notification at this counter or above, so
+	// nothing changed.
+	Duplicate     bool `protobuf:"varint,4,opt,name=duplicate,proto3" json:"duplicate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeliverChannelNotificationOutput) Reset() {
+	*x = DeliverChannelNotificationOutput{}
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliverChannelNotificationOutput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliverChannelNotificationOutput) ProtoMessage() {}
+
+func (x *DeliverChannelNotificationOutput) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliverChannelNotificationOutput.ProtoReflect.Descriptor instead.
+func (*DeliverChannelNotificationOutput) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *DeliverChannelNotificationOutput) GetListenerClosed() bool {
+	if x != nil {
+		return x.ListenerClosed
+	}
+	return false
+}
+
+func (x *DeliverChannelNotificationOutput) GetSuccessorRunId() string {
+	if x != nil {
+		return x.SuccessorRunId
+	}
+	return ""
+}
+
+func (x *DeliverChannelNotificationOutput) GetFolded() bool {
+	if x != nil {
+		return x.Folded
+	}
+	return false
+}
+
+func (x *DeliverChannelNotificationOutput) GetDuplicate() bool {
+	if x != nil {
+		return x.Duplicate
+	}
+	return false
+}
+
+type DeliverChannelNotificationRequest struct {
+	state           protoimpl.MessageState           `protogen:"open.v1"`
+	NamespaceId     string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *DeliverChannelNotificationInput `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DeliverChannelNotificationRequest) Reset() {
+	*x = DeliverChannelNotificationRequest{}
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliverChannelNotificationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliverChannelNotificationRequest) ProtoMessage() {}
+
+func (x *DeliverChannelNotificationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliverChannelNotificationRequest.ProtoReflect.Descriptor instead.
+func (*DeliverChannelNotificationRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *DeliverChannelNotificationRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *DeliverChannelNotificationRequest) GetFrontendRequest() *DeliverChannelNotificationInput {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
+type DeliverChannelNotificationResponse struct {
+	state            protoimpl.MessageState            `protogen:"open.v1"`
+	FrontendResponse *DeliverChannelNotificationOutput `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *DeliverChannelNotificationResponse) Reset() {
+	*x = DeliverChannelNotificationResponse{}
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeliverChannelNotificationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeliverChannelNotificationResponse) ProtoMessage() {}
+
+func (x *DeliverChannelNotificationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeliverChannelNotificationResponse.ProtoReflect.Descriptor instead.
+func (*DeliverChannelNotificationResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *DeliverChannelNotificationResponse) GetFrontendResponse() *DeliverChannelNotificationOutput {
+	if x != nil {
+		return x.FrontendResponse
+	}
+	return nil
+}
+
 type ChannelListenerInfo_Workflow struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	WorkflowId    string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
@@ -1187,7 +1647,7 @@ type ChannelListenerInfo_Workflow struct {
 
 func (x *ChannelListenerInfo_Workflow) Reset() {
 	*x = ChannelListenerInfo_Workflow{}
-	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[21]
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1199,7 +1659,7 @@ func (x *ChannelListenerInfo_Workflow) String() string {
 func (*ChannelListenerInfo_Workflow) ProtoMessage() {}
 
 func (x *ChannelListenerInfo_Workflow) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[21]
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1309,7 +1769,37 @@ const file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_raw
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12k\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2@.temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInputR\x0ffrontendRequest\"\x89\x01\n" +
 	"\x17DescribeChannelResponse\x12n\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2A.temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutputR\x10frontendResponseBAZ?go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpbb\x06proto3"
+	"\x11frontend_response\x18\x01 \x01(\v2A.temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutputR\x10frontendResponse\"\xc4\x01\n" +
+	"\x1dRegisterWorkflowListenerInput\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x18\n" +
+	"\achannel\x18\x02 \x01(\tR\achannel\x12\x1f\n" +
+	"\vworkflow_id\x18\x03 \x01(\tR\n" +
+	"workflowId\x12\x15\n" +
+	"\x06run_id\x18\x04 \x01(\tR\x05runId\x123\n" +
+	"\x16first_execution_run_id\x18\x05 \x01(\tR\x13firstExecutionRunId\"r\n" +
+	"\x1eRegisterWorkflowListenerOutput\x12P\n" +
+	"\x06latest\x18\x01 \x01(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\x06latest\"\xba\x01\n" +
+	"\x1fRegisterWorkflowListenerRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12t\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2I.temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerInputR\x0ffrontendRequest\"\x9b\x01\n" +
+	" RegisterWorkflowListenerResponse\x12w\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2J.temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutputR\x10frontendResponse\"\xd5\x01\n" +
+	"\x1fDeliverChannelNotificationInput\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1f\n" +
+	"\vworkflow_id\x18\x02 \x01(\tR\n" +
+	"workflowId\x12\x15\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12\\\n" +
+	"\fnotification\x18\x04 \x01(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\fnotification\"\xab\x01\n" +
+	" DeliverChannelNotificationOutput\x12'\n" +
+	"\x0flistener_closed\x18\x01 \x01(\bR\x0elistenerClosed\x12(\n" +
+	"\x10successor_run_id\x18\x02 \x01(\tR\x0esuccessorRunId\x12\x16\n" +
+	"\x06folded\x18\x03 \x01(\bR\x06folded\x12\x1c\n" +
+	"\tduplicate\x18\x04 \x01(\bR\tduplicate\"\xbe\x01\n" +
+	"!DeliverChannelNotificationRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12v\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2K.temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInputR\x0ffrontendRequest\"\x9f\x01\n" +
+	"\"DeliverChannelNotificationResponse\x12y\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2L.temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationOutputR\x10frontendResponseBAZ?go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDescOnce sync.Once
@@ -1323,60 +1813,74 @@ func file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawD
 	return file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_goTypes = []any{
-	(*NotifyChannelInput)(nil),                // 0: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInput
-	(*NotifyChannelOutput)(nil),               // 1: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelOutput
-	(*NotifyChannelRequest)(nil),              // 2: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelRequest
-	(*NotifyChannelResponse)(nil),             // 3: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelResponse
-	(*RegisterChannelListenerInput)(nil),      // 4: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInput
-	(*RegisterChannelListenerOutput)(nil),     // 5: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerOutput
-	(*RegisterChannelListenerRequest)(nil),    // 6: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerRequest
-	(*RegisterChannelListenerResponse)(nil),   // 7: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerResponse
-	(*UnregisterChannelListenerInput)(nil),    // 8: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerInput
-	(*UnregisterChannelListenerOutput)(nil),   // 9: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutput
-	(*UnregisterChannelListenerRequest)(nil),  // 10: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerRequest
-	(*UnregisterChannelListenerResponse)(nil), // 11: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerResponse
-	(*PollChannelInput)(nil),                  // 12: temporal.server.chasm.lib.channel.proto.v1.PollChannelInput
-	(*PollChannelOutput)(nil),                 // 13: temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput
-	(*PollChannelRequest)(nil),                // 14: temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest
-	(*PollChannelResponse)(nil),               // 15: temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse
-	(*DescribeChannelInput)(nil),              // 16: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInput
-	(*ChannelListenerInfo)(nil),               // 17: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo
-	(*DescribeChannelOutput)(nil),             // 18: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput
-	(*DescribeChannelRequest)(nil),            // 19: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest
-	(*DescribeChannelResponse)(nil),           // 20: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse
-	(*ChannelListenerInfo_Workflow)(nil),      // 21: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.Workflow
-	(*Notification)(nil),                      // 22: temporal.server.chasm.lib.channel.proto.v1.Notification
-	(*v1.Callback)(nil),                       // 23: temporal.api.common.v1.Callback
-	(*durationpb.Duration)(nil),               // 24: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),             // 25: google.protobuf.Timestamp
+	(*NotifyChannelInput)(nil),                 // 0: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInput
+	(*NotifyChannelOutput)(nil),                // 1: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelOutput
+	(*NotifyChannelRequest)(nil),               // 2: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelRequest
+	(*NotifyChannelResponse)(nil),              // 3: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelResponse
+	(*RegisterChannelListenerInput)(nil),       // 4: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInput
+	(*RegisterChannelListenerOutput)(nil),      // 5: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerOutput
+	(*RegisterChannelListenerRequest)(nil),     // 6: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerRequest
+	(*RegisterChannelListenerResponse)(nil),    // 7: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerResponse
+	(*UnregisterChannelListenerInput)(nil),     // 8: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerInput
+	(*UnregisterChannelListenerOutput)(nil),    // 9: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutput
+	(*UnregisterChannelListenerRequest)(nil),   // 10: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerRequest
+	(*UnregisterChannelListenerResponse)(nil),  // 11: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerResponse
+	(*PollChannelInput)(nil),                   // 12: temporal.server.chasm.lib.channel.proto.v1.PollChannelInput
+	(*PollChannelOutput)(nil),                  // 13: temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput
+	(*PollChannelRequest)(nil),                 // 14: temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest
+	(*PollChannelResponse)(nil),                // 15: temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse
+	(*DescribeChannelInput)(nil),               // 16: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInput
+	(*ChannelListenerInfo)(nil),                // 17: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo
+	(*DescribeChannelOutput)(nil),              // 18: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput
+	(*DescribeChannelRequest)(nil),             // 19: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest
+	(*DescribeChannelResponse)(nil),            // 20: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse
+	(*RegisterWorkflowListenerInput)(nil),      // 21: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerInput
+	(*RegisterWorkflowListenerOutput)(nil),     // 22: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput
+	(*RegisterWorkflowListenerRequest)(nil),    // 23: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerRequest
+	(*RegisterWorkflowListenerResponse)(nil),   // 24: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerResponse
+	(*DeliverChannelNotificationInput)(nil),    // 25: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput
+	(*DeliverChannelNotificationOutput)(nil),   // 26: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationOutput
+	(*DeliverChannelNotificationRequest)(nil),  // 27: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationRequest
+	(*DeliverChannelNotificationResponse)(nil), // 28: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse
+	(*ChannelListenerInfo_Workflow)(nil),       // 29: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.Workflow
+	(*Notification)(nil),                       // 30: temporal.server.chasm.lib.channel.proto.v1.Notification
+	(*v1.Callback)(nil),                        // 31: temporal.api.common.v1.Callback
+	(*durationpb.Duration)(nil),                // 32: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),              // 33: google.protobuf.Timestamp
 }
 var file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_depIdxs = []int32{
-	22, // 0: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInput.notification:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	30, // 0: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInput.notification:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
 	0,  // 1: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInput
 	1,  // 2: temporal.server.chasm.lib.channel.proto.v1.NotifyChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.NotifyChannelOutput
-	23, // 3: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInput.callback:type_name -> temporal.api.common.v1.Callback
+	31, // 3: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInput.callback:type_name -> temporal.api.common.v1.Callback
 	4,  // 4: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInput
 	5,  // 5: temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerOutput
 	8,  // 6: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerInput
 	9,  // 7: temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutput
-	24, // 8: temporal.server.chasm.lib.channel.proto.v1.PollChannelInput.wait:type_name -> google.protobuf.Duration
-	22, // 9: temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput.notifications:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	32, // 8: temporal.server.chasm.lib.channel.proto.v1.PollChannelInput.wait:type_name -> google.protobuf.Duration
+	30, // 9: temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput.notifications:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
 	12, // 10: temporal.server.chasm.lib.channel.proto.v1.PollChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.PollChannelInput
 	13, // 11: temporal.server.chasm.lib.channel.proto.v1.PollChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.PollChannelOutput
-	21, // 12: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.workflow:type_name -> temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.Workflow
-	23, // 13: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.callback:type_name -> temporal.api.common.v1.Callback
-	25, // 14: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.registered_time:type_name -> google.protobuf.Timestamp
+	29, // 12: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.workflow:type_name -> temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.Workflow
+	31, // 13: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.callback:type_name -> temporal.api.common.v1.Callback
+	33, // 14: temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo.registered_time:type_name -> google.protobuf.Timestamp
 	17, // 15: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.listeners:type_name -> temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfo
-	22, // 16: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	30, // 16: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
 	16, // 17: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInput
 	18, // 18: temporal.server.chasm.lib.channel.proto.v1.DescribeChannelResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DescribeChannelOutput
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	30, // 19: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput.latest:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	21, // 20: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerInput
+	22, // 21: temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.RegisterWorkflowListenerOutput
+	30, // 22: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput.notification:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	25, // 23: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationRequest.frontend_request:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationInput
+	26, // 24: temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationResponse.frontend_response:type_name -> temporal.server.chasm.lib.channel.proto.v1.DeliverChannelNotificationOutput
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_init() }
@@ -1395,7 +1899,7 @@ func file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_init
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

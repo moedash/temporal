@@ -14,6 +14,8 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/channel"
+	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -106,6 +108,7 @@ import (
 type (
 	engineOptions struct {
 		workflowResendScheduler workflowresend.Scheduler
+		channelClient           channelpb.ChannelServiceClient
 	}
 
 	// EngineOption adds optional history engine dependencies without adding required parameters.
@@ -147,6 +150,7 @@ type (
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		workflowResendScheduler    workflowresend.Scheduler
 		chasmEngine                chasm.Engine
+		channelClient              channelpb.ChannelServiceClient
 		versionChecker             headers.VersionChecker
 		versionCache               worker_versioning.VersionMembershipAndReactivationStatusCache
 		workerDeploymentClient     workerdeployment.Client
@@ -167,6 +171,14 @@ type (
 func WithWorkflowResendScheduler(scheduler workflowresend.Scheduler) EngineOption {
 	return func(options *engineOptions) {
 		options.workflowResendScheduler = scheduler
+	}
+}
+
+// WithChannelClient routes notification channel calls to the shard owning the
+// channel.
+func WithChannelClient(channelClient channelpb.ChannelServiceClient) EngineOption {
+	return func(options *engineOptions) {
+		options.channelClient = channelClient
 	}
 }
 
@@ -264,6 +276,7 @@ func NewEngineWithShardContext(
 		outboundQueueCBPool:        outboundQueueCBPool,
 		testHooks:                  testHooks,
 		chasmEngine:                chasmEngine,
+		channelClient:              engineOptions.channelClient,
 		versionCache:               versionCache,
 		workerDeploymentClient:     workerDeploymentClient,
 		routingInfoCache:           routingInfoCache,
@@ -629,6 +642,7 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 		e.matchingClient,
 		e.versionCache,
 	)
+	ctx = channel.WithClient(ctx, e.channelClient)
 	return h.Invoke(ctx, req)
 }
 
