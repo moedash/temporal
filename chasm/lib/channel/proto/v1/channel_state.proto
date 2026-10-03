@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.channel.proto.v1;
+
+import "chasm/lib/channel/proto/v1/message.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpb";
+
+// ChannelState is the part of a channel written on every notify. The retained
+// notifications and the listeners are nodes of their own, so a notify writes
+// this, one retained notification, and nothing per listener.
+message ChannelState {
+  // The notification with the highest counter accepted so far.
+  Notification latest = 1;
+  // Sequence of the oldest retained notification and the next one to be
+  // written. The retained notifications are keyed by sequence.
+  int64 retained_first = 2;
+  int64 retained_next = 3;
+
+  // A fan-out task is outstanding. Notifies that land while it is up schedule
+  // none of their own; the task reads the latest when it runs.
+  bool fan_out_pending = 4;
+
+  // Last notify, registration or poll. The idle task deletes a channel with no
+  // listeners once this is older than the retention.
+  google.protobuf.Timestamp last_activity_time = 5;
+  bool idle_check_pending = 6;
+
+  // Total notifications accepted, for describe.
+  int64 accepted_count = 7;
+
+  // Set by the idle task just before it deletes the channel, so a notify or a
+  // registration that arrives in between starts a new channel rather than
+  // landing on the one being deleted.
+  bool closed = 8;
+}

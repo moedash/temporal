@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.channel.proto.v1;
+
+import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpb";
+
+// ChannelListenerInfo has the fields of temporal.api.notification.v1.ChannelListener.
+message ChannelListenerInfo {
+  message Workflow {
+    string workflow_id = 1;
+    string run_id = 2;
+  }
+  string listener_id = 1;
+  oneof variant {
+    Workflow workflow = 2;
+    temporal.api.common.v1.Callback callback = 3;
+  }
+  google.protobuf.Timestamp registered_time = 4;
+}
