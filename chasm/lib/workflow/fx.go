@@ -3,6 +3,7 @@ package workflow
 import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/channel"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.uber.org/fx"
 )
@@ -12,6 +13,7 @@ var Module = fx.Module(
 	fx.Provide(NewConfig),
 	fx.Provide(NewRegistry),
 	fx.Provide(newLibrary),
+	fx.Provide(channel.NewConfig),
 	fx.Invoke(func(
 		chasmRegistry *chasm.Registry,
 		library *library,
