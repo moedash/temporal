@@ -164,6 +164,50 @@ func TestSubscriptionsPerWorkflowAreBounded(t *testing.T) {
 	require.NoError(t, subscribe("a"))
 }
 
+// A reset run's stream continues the base run's offset space, so it is born
+// with a head offset well above zero while holding nothing. Measuring the
+// budget against that head would put it over the moment it exists, and every
+// publish on the reset run would be refused.
+func TestAnInheritedStreamIsNotBornOverItsItemBudget(t *testing.T) {
+	ctx := newStreamBudgetTestContext()
+	w := &Workflow{}
+	limits := stream.Limits{
+		MaxOwnedStreamsPerWorkflow: 10,
+		MaxConsumersPerStream:      10,
+		OwnedStreamMaxItems:        3,
+		OwnedStreamMaxBytes:        1 << 20,
+	}
+
+	// The inherited cursor stands far past the item budget.
+	created, createErr := w.ownStreamFrom(ctx, DefaultStreamName, 100, limits)
+	require.NoError(t, createErr)
+	require.True(t, created)
+
+	_, err := w.AppendToOwnedStream(ctx, DefaultStreamName, stream.AddMessagesRequest{
+		Records: budgetTestRecords(8),
+		Limits:  limits,
+	})
+	require.NoError(t, err, "the stream holds nothing, so its whole budget is free")
+
+	owned := w.Streams[DefaultStreamName].Get(ctx)
+	require.Equal(t, int64(101), owned.State.GetHeadOffset())
+
+	// Still bounded against what it holds.
+	for range 2 {
+		_, err = w.AppendToOwnedStream(ctx, DefaultStreamName, stream.AddMessagesRequest{
+			Records: budgetTestRecords(8),
+			Limits:  limits,
+		})
+		require.NoError(t, err)
+	}
+	_, err = w.AppendToOwnedStream(ctx, DefaultStreamName, stream.AddMessagesRequest{
+		Records: budgetTestRecords(8),
+		Limits:  limits,
+	})
+	var exhausted *serviceerror.ResourceExhausted
+	require.ErrorAs(t, err, &exhausted)
+}
+
 // An activity id may contain a slash, so the reserved key escapes it. Without
 // that two different (activity, name) pairs would land on one stream.
 func TestActivityStreamKeysDoNotCollide(t *testing.T) {

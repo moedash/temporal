@@ -86,4 +86,13 @@
 // re-supply the budget cuts short is refused as a whole rather than marked:
 // paging it needs a short flag on the poll response, or on the last
 // StreamSlice, that this package does not have on the wire yet.
+//
+// # Reset
+//
+// A reset run keeps its subscriptions. A range recorded before the reset
+// point is re-supplied from the run reset from; the range the reset-point task
+// had been given is delivered again to the reset run's first task, from a
+// stream of its own that begins with a copy of that input (see [Stream.Seed]).
+// Outside consumers are not told that a reset happened: reporting it as a
+// record needs a record shape on the wire, which this package does not have.
 package stream
