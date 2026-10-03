@@ -19,8 +19,9 @@ message NotifyChannelInput {
   Notification notification = 2;
   string identity = 3;
   string request_id = 4;
-  // Set for a linked channel: the execution that holds it, whose run id may
-  // be empty for the current run. Unset for an independent channel.
+  // Set for a linked channel: the execution that holds it, a workflow or a
+  // standalone activity, whose run id may be empty for the current run. Unset
+  // for an independent channel.
   temporal.api.common.v1.Execution execution = 5;
 }
 
@@ -44,8 +45,9 @@ message RegisterChannelListenerInput {
   temporal.api.common.v1.Callback callback = 3;
   string request_id = 4;
   string identity = 5;
-  // Set for a linked channel: the execution that holds it, whose run id may
-  // be empty for the current run. Unset for an independent channel.
+  // Set for a linked channel: the execution that holds it, a workflow or a
+  // standalone activity, whose run id may be empty for the current run. Unset
+  // for an independent channel.
   temporal.api.common.v1.Execution execution = 6;
 }
 
@@ -67,8 +69,9 @@ message UnregisterChannelListenerInput {
   string channel = 2;
   string listener_id = 3;
   string identity = 4;
-  // Set for a linked channel: the execution that holds it, whose run id may
-  // be empty for the current run. Unset for an independent channel.
+  // Set for a linked channel: the execution that holds it, a workflow or a
+  // standalone activity, whose run id may be empty for the current run. Unset
+  // for an independent channel.
   temporal.api.common.v1.Execution execution = 5;
 }
 
@@ -93,8 +96,9 @@ message PollChannelInput {
   google.protobuf.Duration wait = 4;
   // Zero means the server's page size.
   int32 max_notifications = 5;
-  // Set for a linked channel: the execution that holds it, whose run id may
-  // be empty for the current run. Unset for an independent channel.
+  // Set for a linked channel: the execution that holds it, a workflow or a
+  // standalone activity, whose run id may be empty for the current run. Unset
+  // for an independent channel.
   temporal.api.common.v1.Execution execution = 6;
 }
 
@@ -114,8 +118,9 @@ message PollChannelResponse {
 message DescribeChannelInput {
   string namespace = 1;
   string channel = 2;
-  // Set for a linked channel: the execution that holds it, whose run id may
-  // be empty for the current run. Unset for an independent channel.
+  // Set for a linked channel: the execution that holds it, a workflow or a
+  // standalone activity, whose run id may be empty for the current run. Unset
+  // for an independent channel.
   temporal.api.common.v1.Execution execution = 3;
 }
 

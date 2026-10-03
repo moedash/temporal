@@ -31,8 +31,9 @@ type NotifyChannelInput struct {
 	Notification *Notification          `protobuf:"bytes,2,opt,name=notification,proto3" json:"notification,omitempty"`
 	Identity     string                 `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
 	RequestId    string                 `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	// Set for a linked channel: the execution that holds it, whose run id may
-	// be empty for the current run. Unset for an independent channel.
+	// Set for a linked channel: the execution that holds it, a workflow or a
+	// standalone activity, whose run id may be empty for the current run. Unset
+	// for an independent channel.
 	Execution     *v1.Execution `protobuf:"bytes,5,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -251,8 +252,9 @@ type RegisterChannelListenerInput struct {
 	Callback  *v1.Callback           `protobuf:"bytes,3,opt,name=callback,proto3" json:"callback,omitempty"`
 	RequestId string                 `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	Identity  string                 `protobuf:"bytes,5,opt,name=identity,proto3" json:"identity,omitempty"`
-	// Set for a linked channel: the execution that holds it, whose run id may
-	// be empty for the current run. Unset for an independent channel.
+	// Set for a linked channel: the execution that holds it, a workflow or a
+	// standalone activity, whose run id may be empty for the current run. Unset
+	// for an independent channel.
 	Execution     *v1.Execution `protobuf:"bytes,6,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -476,8 +478,9 @@ type UnregisterChannelListenerInput struct {
 	Channel    string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
 	ListenerId string                 `protobuf:"bytes,3,opt,name=listener_id,json=listenerId,proto3" json:"listener_id,omitempty"`
 	Identity   string                 `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
-	// Set for a linked channel: the execution that holds it, whose run id may
-	// be empty for the current run. Unset for an independent channel.
+	// Set for a linked channel: the execution that holds it, a workflow or a
+	// standalone activity, whose run id may be empty for the current run. Unset
+	// for an independent channel.
 	Execution     *v1.Execution `protobuf:"bytes,5,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -691,8 +694,9 @@ type PollChannelInput struct {
 	Wait *durationpb.Duration `protobuf:"bytes,4,opt,name=wait,proto3" json:"wait,omitempty"`
 	// Zero means the server's page size.
 	MaxNotifications int32 `protobuf:"varint,5,opt,name=max_notifications,json=maxNotifications,proto3" json:"max_notifications,omitempty"`
-	// Set for a linked channel: the execution that holds it, whose run id may
-	// be empty for the current run. Unset for an independent channel.
+	// Set for a linked channel: the execution that holds it, a workflow or a
+	// standalone activity, whose run id may be empty for the current run. Unset
+	// for an independent channel.
 	Execution     *v1.Execution `protobuf:"bytes,6,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -914,8 +918,9 @@ type DescribeChannelInput struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	Channel   string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
-	// Set for a linked channel: the execution that holds it, whose run id may
-	// be empty for the current run. Unset for an independent channel.
+	// Set for a linked channel: the execution that holds it, a workflow or a
+	// standalone activity, whose run id may be empty for the current run. Unset
+	// for an independent channel.
 	Execution     *v1.Execution `protobuf:"bytes,3,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
