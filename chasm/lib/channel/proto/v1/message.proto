@@ -23,23 +23,20 @@ message Notification {
   temporal.api.common.v1.WorkflowExecution linked_to = 5;
 }
 
-// WorkflowListener is a workflow run that subscribed to the channel.
-message WorkflowListener {
-  string workflow_id = 1;
-  // The run that subscribed, or the one the subscription was re-keyed to.
-  string run_id = 2;
-  string first_execution_run_id = 3;
-  google.protobuf.Timestamp registered_time = 4;
-}
-
-// CallbackListener is an HTTP endpoint the channel posts its notifications to.
-message CallbackListener {
+// Listener is one entry of the channel's listener table. The callback says
+// where a notification goes: a Nexus callback is an HTTP endpoint the channel
+// posts to, and an internal callback carries a WorkflowTarget and reaches the
+// run on its own shard through the routed delivery.
+message Listener {
   string listener_id = 1;
   temporal.api.common.v1.Callback callback = 2;
-  // Request id of the registration, so a retried registration finds this
-  // listener rather than adding another.
+  // Request id of a callback registration, so a retried registration finds
+  // this listener rather than adding another. Empty for a workflow.
   string request_id = 3;
   google.protobuf.Timestamp registered_time = 4;
+
+  // The fields below track an HTTP post. A workflow listener keeps none of
+  // them: its run folds what it is handed on its own shard.
 
   // The notification being delivered, if any. One delivery is in flight at a
   // time per listener.
@@ -57,4 +54,14 @@ message CallbackListener {
   // Bumped for every delivery task scheduled, so a task names one attempt of
   // one delivery and a stale one finds nothing to do.
   int64 task_sequence = 11;
+}
+
+// WorkflowTarget is what an internal callback's data holds: the workflow run
+// a notification is routed to.
+message WorkflowTarget {
+  string namespace_id = 1;
+  string workflow_id = 2;
+  // The run that subscribed, or the one the subscription was re-keyed to.
+  string run_id = 3;
+  string first_execution_run_id = 4;
 }

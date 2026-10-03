@@ -14,6 +14,7 @@ import (
 	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -32,12 +33,12 @@ type Channel struct {
 	// one of them rather than rewriting the whole ring.
 	Retained chasm.Map[int64, *channelpb.Notification]
 
-	// Keyed by workflow id. One workflow id has one open run, so a later run
-	// that subscribes replaces the entry of the run before it.
-	WorkflowListeners chasm.Map[string, *channelpb.WorkflowListener]
-
-	// Keyed by listener id.
-	CallbackListeners chasm.Map[string, *channelpb.CallbackListener]
+	// Keyed by listener id. A workflow listens under its workflow id: one
+	// workflow id has one open run, so a later run that subscribes takes the
+	// entry of the run before it. A callback listens under its request id.
+	// One key space, so a callback whose request id is the id of a workflow
+	// listening here is refused.
+	Listeners chasm.Map[string, *channelpb.Listener]
 }
 
 // readOnly hides the mutable half of a context. Reaching a data node through a
@@ -51,10 +52,9 @@ func readOnly(ctx chasm.Context) chasm.Context {
 // a notify or a registration, which stamps the first activity.
 func NewChannel(_ chasm.MutableContext) *Channel {
 	return &Channel{
-		State:             &channelpb.ChannelState{},
-		Retained:          make(chasm.Map[int64, *channelpb.Notification]),
-		WorkflowListeners: make(chasm.Map[string, *channelpb.WorkflowListener]),
-		CallbackListeners: make(chasm.Map[string, *channelpb.CallbackListener]),
+		State:     &channelpb.ChannelState{},
+		Retained:  make(chasm.Map[int64, *channelpb.Notification]),
+		Listeners: make(chasm.Map[string, *channelpb.Listener]),
 	}
 }
 
@@ -70,11 +70,8 @@ func (c *Channel) Terminate(
 	mctx chasm.MutableContext,
 	_ chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
-	for id := range c.WorkflowListeners {
-		delete(c.WorkflowListeners, id)
-	}
-	for id := range c.CallbackListeners {
-		delete(c.CallbackListeners, id)
+	for id := range c.Listeners {
+		delete(c.Listeners, id)
 	}
 	c.scheduleIdleCheck(mctx, DefaultLimits())
 	return chasm.TerminateComponentResponse{}, nil
@@ -91,7 +88,55 @@ func (c *Channel) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 
 // ListenerCount is how many listeners the channel holds, of both kinds.
 func (c *Channel) ListenerCount() int {
-	return len(c.WorkflowListeners) + len(c.CallbackListeners)
+	return len(c.Listeners)
+}
+
+// The listener_kind metrics tag, derived from the callback variant.
+const (
+	ListenerKindWorkflow = "workflow"
+	ListenerKindCallback = "callback"
+)
+
+// ListenerKind names what a callback reaches: a workflow run for an internal
+// callback, an HTTP endpoint for a Nexus one.
+func ListenerKind(cb *commonpb.Callback) string {
+	if cb.GetInternal() != nil {
+		return ListenerKindWorkflow
+	}
+	return ListenerKindCallback
+}
+
+// IsWorkflowListener reports whether the listener is a workflow run, reached
+// through the routed delivery rather than an HTTP post.
+func IsWorkflowListener(l *channelpb.Listener) bool {
+	return l.GetCallback().GetInternal() != nil
+}
+
+// WorkflowTargetOf decodes the run an internal callback reaches. It reports
+// false for an HTTP callback, and for data that does not parse, which the
+// delivery then has no way to reach.
+func WorkflowTargetOf(l *channelpb.Listener) (*channelpb.WorkflowTarget, bool) {
+	internal := l.GetCallback().GetInternal()
+	if internal == nil {
+		return nil, false
+	}
+	target := &channelpb.WorkflowTarget{}
+	if err := proto.Unmarshal(internal.GetData(), target); err != nil {
+		return nil, false
+	}
+	return target, true
+}
+
+// setWorkflowTarget stores the run under the listener's internal callback.
+func setWorkflowTarget(l *channelpb.Listener, target *channelpb.WorkflowTarget) error {
+	data, err := proto.Marshal(target)
+	if err != nil {
+		return err
+	}
+	l.Callback = &commonpb.Callback{Variant: &commonpb.Callback_Internal_{
+		Internal: &commonpb.Callback_Internal{Data: data},
+	}}
+	return nil
 }
 
 // CheckNotification refuses a notification the channel cannot accept. The
@@ -207,8 +252,9 @@ func (c *Channel) touch(mctx chasm.MutableContext) {
 
 // FanOut is what the fan-out task delivers and to whom.
 type FanOut struct {
-	Latest            *channelpb.Notification
-	WorkflowListeners []*channelpb.WorkflowListener
+	Latest *channelpb.Notification
+	// The workflow listeners, for the task to reach on their own shards.
+	Workflows []*channelpb.WorkflowTarget
 	// Callback listeners that already held the notification, in flight or
 	// pending, or whose pending one it replaced.
 	CallbackFolded int
@@ -238,19 +284,14 @@ func (c *Channel) TakeFanOut(mctx chasm.MutableContext, _ struct{}) (FanOut, err
 		return FanOut{}, err
 	}
 	out.CallbackStarted, out.CallbackFolded = started, folded
-
-	view := readOnly(mctx)
-	for _, id := range slices.Sorted(maps.Keys(c.WorkflowListeners)) {
-		out.WorkflowListeners = append(out.WorkflowListeners,
-			common.CloneProto(c.WorkflowListeners[id].Get(view)))
-	}
+	out.Workflows = c.WorkflowTargets(mctx)
 	return out, nil
 }
 
 // callbackHolds reports whether a callback listener already holds a
 // notification at this counter or above, in flight or pending. Only what it
 // holds counts: once a post is done, the same counter is news again.
-func callbackHolds(listener *channelpb.CallbackListener, counter int64) bool {
+func callbackHolds(listener *channelpb.Listener, counter int64) bool {
 	return (listener.GetInFlight() != nil && listener.GetInFlight().GetCounter() >= counter) ||
 		(listener.GetPending() != nil && listener.GetPending().GetCounter() >= counter)
 }
@@ -259,8 +300,9 @@ func callbackHolds(listener *channelpb.CallbackListener, counter int64) bool {
 // notification, which is when handing it over writes the channel.
 func (c *Channel) CallbacksNeed(ctx chasm.Context, counter int64) bool {
 	view := readOnly(ctx)
-	for _, field := range c.CallbackListeners {
-		if !callbackHolds(field.Get(view), counter) {
+	for _, field := range c.Listeners {
+		listener := field.Get(view)
+		if !IsWorkflowListener(listener) && !callbackHolds(listener, counter) {
 			return true
 		}
 	}
@@ -277,12 +319,16 @@ func (c *Channel) HandToCallbacks(
 	n *channelpb.Notification,
 ) (started int, folded int, err error) {
 	view := readOnly(mctx)
-	for _, id := range slices.Sorted(maps.Keys(c.CallbackListeners)) {
-		if callbackHolds(c.CallbackListeners[id].Get(view), n.GetCounter()) {
+	for _, id := range slices.Sorted(maps.Keys(c.Listeners)) {
+		current := c.Listeners[id].Get(view)
+		if IsWorkflowListener(current) {
+			continue
+		}
+		if callbackHolds(current, n.GetCounter()) {
 			folded++
 			continue
 		}
-		listener := c.CallbackListeners[id].Get(mctx)
+		listener := c.Listeners[id].Get(mctx)
 		listener.HandedCounter = max(listener.GetHandedCounter(), n.GetCounter())
 		if listener.GetInFlight() != nil {
 			if listener.GetPending() != nil {
@@ -301,12 +347,14 @@ func (c *Channel) HandToCallbacks(
 	return started, folded, nil
 }
 
-// WorkflowListenerList returns the workflow listeners in workflow id order.
-func (c *Channel) WorkflowListenerList(ctx chasm.Context) []*channelpb.WorkflowListener {
+// WorkflowTargets returns the workflow listeners in workflow id order.
+func (c *Channel) WorkflowTargets(ctx chasm.Context) []*channelpb.WorkflowTarget {
 	view := readOnly(ctx)
-	out := make([]*channelpb.WorkflowListener, 0, len(c.WorkflowListeners))
-	for _, id := range slices.Sorted(maps.Keys(c.WorkflowListeners)) {
-		out = append(out, common.CloneProto(c.WorkflowListeners[id].Get(view)))
+	var out []*channelpb.WorkflowTarget
+	for _, id := range slices.Sorted(maps.Keys(c.Listeners)) {
+		if target, ok := WorkflowTargetOf(c.Listeners[id].Get(view)); ok {
+			out = append(out, target)
+		}
 	}
 	return out
 }
@@ -327,7 +375,7 @@ func CallbackDestination(cb *commonpb.Callback) (string, error) {
 
 func (c *Channel) scheduleCallback(
 	mctx chasm.MutableContext,
-	listener *channelpb.CallbackListener,
+	listener *channelpb.Listener,
 ) error {
 	destination, err := CallbackDestination(listener.GetCallback())
 	if err != nil {
@@ -343,6 +391,7 @@ func (c *Channel) scheduleCallback(
 
 // WorkflowRegistration describes a workflow run that subscribed.
 type WorkflowRegistration struct {
+	NamespaceID         string
 	WorkflowID          string
 	RunID               string
 	FirstExecutionRunID string
@@ -367,28 +416,44 @@ func (c *Channel) RegisterWorkflowListener(
 	limits := reg.Limits.withDefaults()
 	c.touch(mctx)
 	latest := common.CloneProto(c.State.GetLatest())
-	if field, ok := c.WorkflowListeners[reg.WorkflowID]; ok {
-		if field.Get(readOnly(mctx)).GetRunId() == reg.RunID {
+	if field, ok := c.Listeners[reg.WorkflowID]; ok {
+		target, isWorkflow := WorkflowTargetOf(field.Get(readOnly(mctx)))
+		if !isWorkflow {
+			return nil, serviceerror.NewInvalidArgumentf(
+				"listener id %q belongs to a callback on this channel", reg.WorkflowID)
+		}
+		if target.GetRunId() == reg.RunID {
 			return nil, nil
 		}
+		target.RunId = reg.RunID
+		target.FirstExecutionRunId = reg.FirstExecutionRunID
 		listener := field.Get(mctx)
-		listener.RunId = reg.RunID
-		listener.FirstExecutionRunId = reg.FirstExecutionRunID
+		if err := setWorkflowTarget(listener, target); err != nil {
+			return nil, err
+		}
 		listener.RegisteredTime = timestamppb.New(mctx.Now(c))
 		return latest, nil
 	}
 	if err := c.checkListenerRoom(limits.MaxListeners); err != nil {
 		return nil, err
 	}
-	if c.WorkflowListeners == nil {
-		c.WorkflowListeners = make(chasm.Map[string, *channelpb.WorkflowListener])
+	listener := &channelpb.Listener{
+		ListenerId:     reg.WorkflowID,
+		RegisteredTime: timestamppb.New(mctx.Now(c)),
 	}
-	c.WorkflowListeners[reg.WorkflowID] = chasm.NewDataField(mctx, &channelpb.WorkflowListener{
+	err := setWorkflowTarget(listener, &channelpb.WorkflowTarget{
+		NamespaceId:         reg.NamespaceID,
 		WorkflowId:          reg.WorkflowID,
 		RunId:               reg.RunID,
 		FirstExecutionRunId: reg.FirstExecutionRunID,
-		RegisteredTime:      timestamppb.New(mctx.Now(c)),
 	})
+	if err != nil {
+		return nil, err
+	}
+	if c.Listeners == nil {
+		c.Listeners = make(chasm.Map[string, *channelpb.Listener])
+	}
+	c.Listeners[reg.WorkflowID] = chasm.NewDataField(mctx, listener)
 	return latest, nil
 }
 
@@ -407,12 +472,17 @@ func (c *Channel) checkListenerRoom(maxListeners int) error {
 func (c *Channel) RekeyWorkflowListener(
 	mctx chasm.MutableContext,
 	workflowID, fromRunID, toRunID string,
-) {
-	field, ok := c.WorkflowListeners[workflowID]
-	if !ok || field.Get(readOnly(mctx)).GetRunId() != fromRunID {
-		return
+) error {
+	field, ok := c.Listeners[workflowID]
+	if !ok {
+		return nil
 	}
-	field.Get(mctx).RunId = toRunID
+	target, isWorkflow := WorkflowTargetOf(field.Get(readOnly(mctx)))
+	if !isWorkflow || target.GetRunId() != fromRunID {
+		return nil
+	}
+	target.RunId = toRunID
+	return setWorkflowTarget(field.Get(mctx), target)
 }
 
 // ForgetWorkflowListener drops a listener no run of its workflow answers for
@@ -422,11 +492,15 @@ func (c *Channel) ForgetWorkflowListener(
 	workflowID, runID string,
 	limits Limits,
 ) {
-	field, ok := c.WorkflowListeners[workflowID]
-	if !ok || field.Get(readOnly(mctx)).GetRunId() != runID {
+	field, ok := c.Listeners[workflowID]
+	if !ok {
 		return
 	}
-	delete(c.WorkflowListeners, workflowID)
+	target, isWorkflow := WorkflowTargetOf(field.Get(readOnly(mctx)))
+	if !isWorkflow || target.GetRunId() != runID {
+		return
+	}
+	delete(c.Listeners, workflowID)
 	c.scheduleIdleCheck(mctx, limits.withDefaults())
 }
 
@@ -437,9 +511,9 @@ type CallbackRegistration struct {
 	Limits    Limits
 }
 
-// RegisterCallbackListener adds a callback listener and returns its id. A
-// registration whose request id the channel has seen returns the listener
-// that request made, so a retry adds nothing.
+// RegisterCallbackListener adds a callback listener and returns its id, which
+// is the request id. A registration whose request id the channel has seen
+// returns the listener that request made, so a retry adds nothing.
 //
 // A new listener is posted the latest notification the channel holds, once,
 // for the same reason a new workflow listener is handed it.
@@ -456,20 +530,21 @@ func (c *Channel) RegisterCallbackListener(
 	limits := reg.Limits.withDefaults()
 	c.touch(mctx)
 
-	view := readOnly(mctx)
-	for id, field := range c.CallbackListeners {
-		if field.Get(view).GetRequestId() == reg.RequestID {
-			return id, nil
+	id := reg.RequestID
+	if field, ok := c.Listeners[id]; ok {
+		if IsWorkflowListener(field.Get(readOnly(mctx))) {
+			return "", serviceerror.NewInvalidArgumentf(
+				"request id %q is the id of a workflow listening on this channel", id)
 		}
+		return id, nil
 	}
 	if err := c.checkListenerRoom(limits.MaxListeners); err != nil {
 		return "", err
 	}
-	if c.CallbackListeners == nil {
-		c.CallbackListeners = make(chasm.Map[string, *channelpb.CallbackListener])
+	if c.Listeners == nil {
+		c.Listeners = make(chasm.Map[string, *channelpb.Listener])
 	}
-	id := reg.RequestID
-	listener := &channelpb.CallbackListener{
+	listener := &channelpb.Listener{
 		ListenerId:     id,
 		Callback:       common.CloneProto(reg.Callback),
 		RequestId:      reg.RequestID,
@@ -482,7 +557,7 @@ func (c *Channel) RegisterCallbackListener(
 			return "", err
 		}
 	}
-	c.CallbackListeners[id] = chasm.NewDataField(mctx, listener)
+	c.Listeners[id] = chasm.NewDataField(mctx, listener)
 	return id, nil
 }
 
@@ -498,14 +573,12 @@ func (c *Channel) UnregisterListener(
 	if listenerID == "" {
 		return serviceerror.NewInvalidArgument("listener id is required")
 	}
-	if _, ok := c.WorkflowListeners[listenerID]; ok {
-		if _, isCallback := c.CallbackListeners[listenerID]; !isCallback {
-			return serviceerror.NewInvalidArgumentf(
-				"listener %q is a workflow; it stops listening when its run ends", listenerID)
-		}
+	if field, ok := c.Listeners[listenerID]; ok && IsWorkflowListener(field.Get(readOnly(mctx))) {
+		return serviceerror.NewInvalidArgumentf(
+			"listener %q is a workflow, which stops listening when its run ends", listenerID)
 	}
 	c.touch(mctx)
-	delete(c.CallbackListeners, listenerID)
+	delete(c.Listeners, listenerID)
 	c.scheduleIdleCheck(mctx, limits.withDefaults())
 	return nil
 }
@@ -527,13 +600,13 @@ func (c *Channel) CallbackDeliveryFor(
 	ctx chasm.Context,
 	task *channelpb.ChannelCallbackTask,
 ) (CallbackDelivery, bool) {
-	field, ok := c.CallbackListeners[task.GetListenerId()]
+	field, ok := c.Listeners[task.GetListenerId()]
 	if !ok {
 		return CallbackDelivery{}, false
 	}
 	listener := field.Get(readOnly(ctx))
-	if listener.GetInFlight() == nil || listener.GetTaskSequence() != task.GetSequence() ||
-		listener.GetNextAttemptTime() != nil {
+	if IsWorkflowListener(listener) || listener.GetInFlight() == nil ||
+		listener.GetTaskSequence() != task.GetSequence() || listener.GetNextAttemptTime() != nil {
 		return CallbackDelivery{}, false
 	}
 	return CallbackDelivery{
@@ -566,7 +639,7 @@ func (c *Channel) CompleteCallbackDelivery(
 	mctx chasm.MutableContext,
 	outcome CallbackOutcome,
 ) (bool, error) {
-	field, ok := c.CallbackListeners[outcome.ListenerID]
+	field, ok := c.Listeners[outcome.ListenerID]
 	if !ok {
 		return false, nil
 	}
@@ -619,7 +692,7 @@ func attemptFailure(err error, nonRetryable bool) *failurepb.Failure {
 
 // BackoffDone reports whether a backoff task still has an attempt to resume.
 func (c *Channel) BackoffDone(ctx chasm.Context, task *channelpb.ChannelCallbackBackoffTask) bool {
-	field, ok := c.CallbackListeners[task.GetListenerId()]
+	field, ok := c.Listeners[task.GetListenerId()]
 	if !ok {
 		return false
 	}
@@ -636,7 +709,7 @@ func (c *Channel) ResumeCallback(
 	if !c.BackoffDone(mctx, task) {
 		return nil
 	}
-	listener := c.CallbackListeners[task.GetListenerId()].Get(mctx)
+	listener := c.Listeners[task.GetListenerId()].Get(mctx)
 	listener.NextAttemptTime = nil
 	return c.scheduleCallback(mctx, listener)
 }
@@ -696,29 +769,29 @@ func (c *Channel) Describe(ctx chasm.Context, _ struct{}) (Snapshot, error) {
 		RetainedCount:    c.RetainedCount(),
 		LastActivityTime: c.State.GetLastActivityTime().AsTime(),
 	}
-	for _, id := range slices.Sorted(maps.Keys(c.WorkflowListeners)) {
-		listener := c.WorkflowListeners[id].Get(view)
-		out.Listeners = append(out.Listeners, &channelpb.ChannelListenerInfo{
-			ListenerId: id,
-			Variant: &channelpb.ChannelListenerInfo_Workflow_{
+	var workflows, callbacks []*channelpb.ChannelListenerInfo
+	for _, id := range slices.Sorted(maps.Keys(c.Listeners)) {
+		listener := c.Listeners[id].Get(view)
+		info := &channelpb.ChannelListenerInfo{
+			ListenerId:     id,
+			RegisteredTime: common.CloneProto(listener.GetRegisteredTime()),
+		}
+		if target, ok := WorkflowTargetOf(listener); ok {
+			info.Variant = &channelpb.ChannelListenerInfo_Workflow_{
 				Workflow: &channelpb.ChannelListenerInfo_Workflow{
-					WorkflowId: listener.GetWorkflowId(),
-					RunId:      listener.GetRunId(),
+					WorkflowId: target.GetWorkflowId(),
+					RunId:      target.GetRunId(),
 				},
-			},
-			RegisteredTime: common.CloneProto(listener.GetRegisteredTime()),
-		})
+			}
+			workflows = append(workflows, info)
+			continue
+		}
+		info.Variant = &channelpb.ChannelListenerInfo_Callback{
+			Callback: common.CloneProto(listener.GetCallback()),
+		}
+		callbacks = append(callbacks, info)
 	}
-	for _, id := range slices.Sorted(maps.Keys(c.CallbackListeners)) {
-		listener := c.CallbackListeners[id].Get(view)
-		out.Listeners = append(out.Listeners, &channelpb.ChannelListenerInfo{
-			ListenerId: id,
-			Variant: &channelpb.ChannelListenerInfo_Callback{
-				Callback: common.CloneProto(listener.GetCallback()),
-			},
-			RegisteredTime: common.CloneProto(listener.GetRegisteredTime()),
-		})
-	}
+	out.Listeners = append(workflows, callbacks...)
 	return out, nil
 }
 

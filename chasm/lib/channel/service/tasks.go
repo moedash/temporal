@@ -105,7 +105,7 @@ func (h *fanOutTaskHandler) Execute(
 		return nil
 	}
 
-	return h.deliverer.deliverAll(ctx, ref, ns, fanOut.WorkflowListeners, fanOut.Latest)
+	return h.deliverer.deliverAll(ctx, ref, ns, fanOut.Workflows, fanOut.Latest)
 }
 
 // Discard lowers the coalescing flag the scheduling notify raised. Left up, no
@@ -217,7 +217,7 @@ func (h *callbackTaskHandler) Execute(
 			kind = linkedKindTag
 		}
 		metrics.ChannelNotificationsDelivered.With(h.metricsHandler).Record(
-			1, metrics.NamespaceTag(ns), kind, callbackKindTag)
+			1, metrics.NamespaceTag(ns), kind, listenerKindTag(delivery.Callback))
 	}
 	if postErr != nil && retryable {
 		// Reported to the queue as the destination being down, which feeds its

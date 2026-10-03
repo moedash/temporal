@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/channel"
@@ -206,7 +207,7 @@ type repeatRead struct {
 	// it is.
 	repeat    bool
 	listeners int
-	workflows []*channelpb.WorkflowListener
+	workflows []*channelpb.WorkflowTarget
 	// Some callback listener does not hold the notification.
 	callbacksNeed bool
 }
@@ -227,7 +228,7 @@ func (h *handler) readRepeat(
 			return repeatRead{
 				repeat:        true,
 				listeners:     c.ListenerCount(),
-				workflows:     c.WorkflowListenerList(cctx),
+				workflows:     c.WorkflowTargets(cctx),
 				callbacksNeed: c.CallbacksNeed(cctx, counter),
 			}, nil
 		}, n.GetCounter())
@@ -516,6 +517,7 @@ func (h *handler) RegisterWorkflowListener(
 		return nil, err
 	}
 	reg := channel.WorkflowRegistration{
+		NamespaceID:         req.GetNamespaceId(),
 		WorkflowID:          in.GetWorkflowId(),
 		RunID:               in.GetRunId(),
 		FirstExecutionRunID: in.GetFirstExecutionRunId(),
@@ -670,6 +672,11 @@ func (h *handler) DeliverChannelNotification(
 }
 
 var (
-	workflowKindTag = metrics.StringTag("listener_kind", "workflow")
-	callbackKindTag = metrics.StringTag("listener_kind", "callback")
+	workflowKindTag = metrics.StringTag("listener_kind", channel.ListenerKindWorkflow)
+	callbackKindTag = metrics.StringTag("listener_kind", channel.ListenerKindCallback)
 )
+
+// listenerKindTag derives the kind tag from the listener's callback variant.
+func listenerKindTag(cb *commonpb.Callback) metrics.Tag {
+	return metrics.StringTag("listener_kind", channel.ListenerKind(cb))
+}

@@ -123,7 +123,7 @@ func TestBurstCoalescesIntoOneFanOut(t *testing.T) {
 	fanOut, err := c.TakeFanOut(mctx, struct{}{})
 	require.NoError(t, err)
 	require.Equal(t, int64(3), fanOut.Latest.GetCounter())
-	require.Len(t, fanOut.WorkflowListeners, 1)
+	require.Len(t, fanOut.Workflows, 1)
 	require.False(t, c.State.GetFanOutPending())
 
 	_, err = c.Notify(mctx, note(4), Limits{})
@@ -186,7 +186,7 @@ func TestCallbackFoldsWhileBusy(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, delivered)
-	require.Nil(t, c.CallbackListeners[id].Get(mctx).GetInFlight())
+	require.Nil(t, c.Listeners[id].Get(mctx).GetInFlight())
 }
 
 // A retryable failure backs off and tries the same notification again; a
@@ -228,7 +228,7 @@ func TestCallbackRetryBacksOff(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, delivered)
-	listener := c.CallbackListeners[id].Get(mctx)
+	listener := c.Listeners[id].Get(mctx)
 	require.Nil(t, listener.GetInFlight())
 	require.True(t, listener.GetLastAttemptFailure().GetApplicationFailureInfo().GetNonRetryable())
 }
@@ -250,7 +250,7 @@ func TestListenerTable(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, first, again)
-	listener := c.CallbackListeners[first].Get(mctx)
+	listener := c.Listeners[first].Get(mctx)
 	require.Equal(t, int64(5), listener.GetInFlight().GetCounter(), "a new listener is posted the latest")
 	require.Equal(t, int64(5), listener.GetHandedCounter())
 	require.Len(t, tasksOf[*channelpb.ChannelCallbackTask](mctx), 1, "once, not per retry")
@@ -266,7 +266,7 @@ func TestListenerTable(t *testing.T) {
 	require.NoError(t, registerWorkflow(c, mctx, WorkflowRegistration{
 		WorkflowID: "wf", RunID: "run-2", Limits: limits,
 	}), "a later run of a known workflow takes its entry, not a new one")
-	require.Equal(t, "run-2", c.WorkflowListeners["wf"].Get(mctx).GetRunId())
+	require.Equal(t, "run-2", workflowRun(t, c, mctx, "wf"))
 
 	_, err = c.RegisterCallbackListener(mctx, CallbackRegistration{
 		RequestID: "req-3", Callback: &commonpb.Callback{},
@@ -294,10 +294,10 @@ func TestWorkflowListenerRekeyAndForget(t *testing.T) {
 		WorkflowID: "wf", RunID: "run-1",
 	}))
 
-	c.RekeyWorkflowListener(mctx, "wf", "run-1", "run-2")
-	require.Equal(t, "run-2", c.WorkflowListeners["wf"].Get(mctx).GetRunId())
-	c.RekeyWorkflowListener(mctx, "wf", "run-1", "run-3")
-	require.Equal(t, "run-2", c.WorkflowListeners["wf"].Get(mctx).GetRunId(), "stale re-key")
+	require.NoError(t, c.RekeyWorkflowListener(mctx, "wf", "run-1", "run-2"))
+	require.Equal(t, "run-2", workflowRun(t, c, mctx, "wf"))
+	require.NoError(t, c.RekeyWorkflowListener(mctx, "wf", "run-1", "run-3"))
+	require.Equal(t, "run-2", workflowRun(t, c, mctx, "wf"), "stale re-key")
 
 	c.ForgetWorkflowListener(mctx, "wf", "run-1", Limits{})
 	require.Equal(t, 1, c.ListenerCount(), "stale forget")
@@ -361,6 +361,66 @@ func registerWorkflow(c *Channel, mctx chasm.MutableContext, reg WorkflowRegistr
 	return err
 }
 
+// workflowRun is the run the channel has on record for a workflow id.
+func workflowRun(t *testing.T, c *Channel, ctx chasm.Context, workflowID string) string {
+	t.Helper()
+	field, ok := c.Listeners[workflowID]
+	require.True(t, ok, "no listener %q", workflowID)
+	target, ok := WorkflowTargetOf(field.Get(ctx))
+	require.True(t, ok, "listener %q is not a workflow", workflowID)
+	return target.GetRunId()
+}
+
+// A workflow listener is an internal callback whose data names the run, held
+// in the one table next to the HTTP callbacks. The two kinds share the id
+// space, so neither can take an id the other holds.
+func TestWorkflowListenerIsAnInternalCallback(t *testing.T) {
+	c, mctx, _ := newTestChannel(t)
+	_, err := c.RegisterWorkflowListener(mctx, WorkflowRegistration{
+		NamespaceID: "ns", WorkflowID: "wf", RunID: "run-1", FirstExecutionRunID: "run-0",
+	})
+	require.NoError(t, err)
+	listener := c.Listeners["wf"].Get(mctx)
+	require.True(t, IsWorkflowListener(listener))
+	require.Equal(t, ListenerKindWorkflow, ListenerKind(listener.GetCallback()))
+	require.NotEmpty(t, listener.GetCallback().GetInternal().GetData())
+	require.Nil(t, listener.GetInFlight(), "a run folds on its own shard, not here")
+	target, ok := WorkflowTargetOf(listener)
+	require.True(t, ok)
+	require.Equal(t, "ns", target.GetNamespaceId())
+	require.Equal(t, "wf", target.GetWorkflowId())
+	require.Equal(t, "run-1", target.GetRunId())
+	require.Equal(t, "run-0", target.GetFirstExecutionRunId())
+
+	var invalid *serviceerror.InvalidArgument
+	_, err = c.RegisterCallbackListener(mctx, CallbackRegistration{
+		RequestID: "wf", Callback: testCallback(),
+	})
+	require.ErrorAs(t, err, &invalid, "a callback cannot take a workflow's id")
+	id, err := c.RegisterCallbackListener(mctx, CallbackRegistration{
+		RequestID: "cb", Callback: testCallback(),
+	})
+	require.NoError(t, err)
+	callback := c.Listeners[id].Get(mctx)
+	require.False(t, IsWorkflowListener(callback))
+	require.Equal(t, ListenerKindCallback, ListenerKind(callback.GetCallback()))
+	_, ok = WorkflowTargetOf(callback)
+	require.False(t, ok)
+	_, err = c.RegisterWorkflowListener(mctx, WorkflowRegistration{WorkflowID: "cb", RunID: "run-1"})
+	require.ErrorAs(t, err, &invalid, "a workflow cannot take a callback's id")
+
+	require.Equal(t, 2, c.ListenerCount())
+	targets := c.WorkflowTargets(mctx)
+	require.Len(t, targets, 1)
+	require.Equal(t, "run-1", targets[0].GetRunId())
+	snapshot, err := c.Describe(mctx, struct{}{})
+	require.NoError(t, err)
+	require.Len(t, snapshot.Listeners, 2)
+	require.Equal(t, "run-1", snapshot.Listeners[0].GetWorkflow().GetRunId(), "workflows first")
+	require.Equal(t, testCallback().GetNexus().GetUrl(),
+		snapshot.Listeners[1].GetCallback().GetNexus().GetUrl())
+}
+
 // A run new to the channel is handed the latest notification, so a write that
 // landed before it subscribed still wakes it; a repeat registration and an
 // empty channel hand nothing.
@@ -411,5 +471,5 @@ func TestRepeatHandsOnlyToCallbacksThatLackIt(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, started)
 	require.Len(t, tasksOf[*channelpb.ChannelCallbackTask](mctx), 2)
-	require.Empty(t, c.WorkflowListenerList(mctx))
+	require.Empty(t, c.WorkflowTargets(mctx))
 }

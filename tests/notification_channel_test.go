@@ -282,9 +282,9 @@ func (c *channelTestEnv) awaitCallbackPending(name, listenerID string, counter i
 				Archetype: channelservice.Archetype,
 			})
 		require.NoError(t, err)
-		node, ok := resp.GetDatabaseMutableState().GetChasmNodes()["CallbackListeners#"+listenerID]
+		node, ok := resp.GetDatabaseMutableState().GetChasmNodes()["Listeners#"+listenerID]
 		require.True(t, ok)
-		var listener channelpb.CallbackListener
+		var listener channelpb.Listener
 		require.NoError(t, proto.Unmarshal(node.GetData().GetData(), &listener))
 		require.Equal(t, counter, listener.GetPending().GetCounter())
 	}, 20*time.Second, 50*time.Millisecond)

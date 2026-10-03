@@ -150,11 +150,11 @@ func TestLinkedCallbackListeners(t *testing.T) {
 	result, err = c.NotifyLinked(mctx, note(2), Limits{})
 	require.NoError(t, err)
 	require.Equal(t, 0, result.CallbackStarted, "busy, so it folds into pending")
-	require.Equal(t, int64(2), c.CallbackListeners[id].Get(mctx).GetPending().GetCounter())
+	require.Equal(t, int64(2), c.Listeners[id].Get(mctx).GetPending().GetCounter())
 
 	late, err := c.RegisterCallbackListener(mctx, CallbackRegistration{RequestID: "r2", Callback: testCallback()})
 	require.NoError(t, err)
-	require.Equal(t, int64(2), c.CallbackListeners[late].Get(mctx).GetInFlight().GetCounter(),
+	require.Equal(t, int64(2), c.Listeners[late].Get(mctx).GetInFlight().GetCounter(),
 		"handed the latest on registration")
 	require.Equal(t, 3, c.LinkedListenerCount())
 

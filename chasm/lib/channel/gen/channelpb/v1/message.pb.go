@@ -108,83 +108,16 @@ func (x *Notification) GetLinkedTo() *v1.WorkflowExecution {
 	return nil
 }
 
-// WorkflowListener is a workflow run that subscribed to the channel.
-type WorkflowListener struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	WorkflowId string                 `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	// The run that subscribed, or the one the subscription was re-keyed to.
-	RunId               string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	FirstExecutionRunId string                 `protobuf:"bytes,3,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
-	RegisteredTime      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=registered_time,json=registeredTime,proto3" json:"registered_time,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
-}
-
-func (x *WorkflowListener) Reset() {
-	*x = WorkflowListener{}
-	mi := &file_temporal_server_chasm_lib_channel_proto_v1_message_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WorkflowListener) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WorkflowListener) ProtoMessage() {}
-
-func (x *WorkflowListener) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_channel_proto_v1_message_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WorkflowListener.ProtoReflect.Descriptor instead.
-func (*WorkflowListener) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_channel_proto_v1_message_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *WorkflowListener) GetWorkflowId() string {
-	if x != nil {
-		return x.WorkflowId
-	}
-	return ""
-}
-
-func (x *WorkflowListener) GetRunId() string {
-	if x != nil {
-		return x.RunId
-	}
-	return ""
-}
-
-func (x *WorkflowListener) GetFirstExecutionRunId() string {
-	if x != nil {
-		return x.FirstExecutionRunId
-	}
-	return ""
-}
-
-func (x *WorkflowListener) GetRegisteredTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.RegisteredTime
-	}
-	return nil
-}
-
-// CallbackListener is an HTTP endpoint the channel posts its notifications to.
-type CallbackListener struct {
+// Listener is one entry of the channel's listener table. The callback says
+// where a notification goes: a Nexus callback is an HTTP endpoint the channel
+// posts to, and an internal callback carries a WorkflowTarget and reaches the
+// run on its own shard through the routed delivery.
+type Listener struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	ListenerId string                 `protobuf:"bytes,1,opt,name=listener_id,json=listenerId,proto3" json:"listener_id,omitempty"`
 	Callback   *v1.Callback           `protobuf:"bytes,2,opt,name=callback,proto3" json:"callback,omitempty"`
-	// Request id of the registration, so a retried registration finds this
-	// listener rather than adding another.
+	// Request id of a callback registration, so a retried registration finds
+	// this listener rather than adding another. Empty for a workflow.
 	RequestId      string                 `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	RegisteredTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=registered_time,json=registeredTime,proto3" json:"registered_time,omitempty"`
 	// The notification being delivered, if any. One delivery is in flight at a
@@ -207,20 +140,140 @@ type CallbackListener struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CallbackListener) Reset() {
-	*x = CallbackListener{}
+func (x *Listener) Reset() {
+	*x = Listener{}
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_message_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Listener) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Listener) ProtoMessage() {}
+
+func (x *Listener) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_channel_proto_v1_message_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Listener.ProtoReflect.Descriptor instead.
+func (*Listener) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_channel_proto_v1_message_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Listener) GetListenerId() string {
+	if x != nil {
+		return x.ListenerId
+	}
+	return ""
+}
+
+func (x *Listener) GetCallback() *v1.Callback {
+	if x != nil {
+		return x.Callback
+	}
+	return nil
+}
+
+func (x *Listener) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *Listener) GetRegisteredTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RegisteredTime
+	}
+	return nil
+}
+
+func (x *Listener) GetInFlight() *Notification {
+	if x != nil {
+		return x.InFlight
+	}
+	return nil
+}
+
+func (x *Listener) GetPending() *Notification {
+	if x != nil {
+		return x.Pending
+	}
+	return nil
+}
+
+func (x *Listener) GetHandedCounter() int64 {
+	if x != nil {
+		return x.HandedCounter
+	}
+	return 0
+}
+
+func (x *Listener) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *Listener) GetNextAttemptTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NextAttemptTime
+	}
+	return nil
+}
+
+func (x *Listener) GetLastAttemptFailure() *v11.Failure {
+	if x != nil {
+		return x.LastAttemptFailure
+	}
+	return nil
+}
+
+func (x *Listener) GetTaskSequence() int64 {
+	if x != nil {
+		return x.TaskSequence
+	}
+	return 0
+}
+
+// WorkflowTarget is what an internal callback's data holds: the workflow run
+// a notification is routed to.
+type WorkflowTarget struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	WorkflowId  string                 `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	// The run that subscribed, or the one the subscription was re-keyed to.
+	RunId               string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	FirstExecutionRunId string `protobuf:"bytes,4,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *WorkflowTarget) Reset() {
+	*x = WorkflowTarget{}
 	mi := &file_temporal_server_chasm_lib_channel_proto_v1_message_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CallbackListener) String() string {
+func (x *WorkflowTarget) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CallbackListener) ProtoMessage() {}
+func (*WorkflowTarget) ProtoMessage() {}
 
-func (x *CallbackListener) ProtoReflect() protoreflect.Message {
+func (x *WorkflowTarget) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_channel_proto_v1_message_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -232,86 +285,37 @@ func (x *CallbackListener) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CallbackListener.ProtoReflect.Descriptor instead.
-func (*CallbackListener) Descriptor() ([]byte, []int) {
+// Deprecated: Use WorkflowTarget.ProtoReflect.Descriptor instead.
+func (*WorkflowTarget) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_channel_proto_v1_message_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *CallbackListener) GetListenerId() string {
+func (x *WorkflowTarget) GetNamespaceId() string {
 	if x != nil {
-		return x.ListenerId
+		return x.NamespaceId
 	}
 	return ""
 }
 
-func (x *CallbackListener) GetCallback() *v1.Callback {
+func (x *WorkflowTarget) GetWorkflowId() string {
 	if x != nil {
-		return x.Callback
-	}
-	return nil
-}
-
-func (x *CallbackListener) GetRequestId() string {
-	if x != nil {
-		return x.RequestId
+		return x.WorkflowId
 	}
 	return ""
 }
 
-func (x *CallbackListener) GetRegisteredTime() *timestamppb.Timestamp {
+func (x *WorkflowTarget) GetRunId() string {
 	if x != nil {
-		return x.RegisteredTime
+		return x.RunId
 	}
-	return nil
+	return ""
 }
 
-func (x *CallbackListener) GetInFlight() *Notification {
+func (x *WorkflowTarget) GetFirstExecutionRunId() string {
 	if x != nil {
-		return x.InFlight
+		return x.FirstExecutionRunId
 	}
-	return nil
-}
-
-func (x *CallbackListener) GetPending() *Notification {
-	if x != nil {
-		return x.Pending
-	}
-	return nil
-}
-
-func (x *CallbackListener) GetHandedCounter() int64 {
-	if x != nil {
-		return x.HandedCounter
-	}
-	return 0
-}
-
-func (x *CallbackListener) GetAttempt() int32 {
-	if x != nil {
-		return x.Attempt
-	}
-	return 0
-}
-
-func (x *CallbackListener) GetNextAttemptTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.NextAttemptTime
-	}
-	return nil
-}
-
-func (x *CallbackListener) GetLastAttemptFailure() *v11.Failure {
-	if x != nil {
-		return x.LastAttemptFailure
-	}
-	return nil
-}
-
-func (x *CallbackListener) GetTaskSequence() int64 {
-	if x != nil {
-		return x.TaskSequence
-	}
-	return 0
+	return ""
 }
 
 var File_temporal_server_chasm_lib_channel_proto_v1_message_proto protoreflect.FileDescriptor
@@ -327,14 +331,8 @@ const file_temporal_server_chasm_lib_channel_proto_v1_message_proto_rawDesc = ""
 	"\tlinked_to\x18\x05 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\blinkedTo\x1a\\\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
-	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\"\xc4\x01\n" +
-	"\x10WorkflowListener\x12\x1f\n" +
-	"\vworkflow_id\x18\x01 \x01(\tR\n" +
-	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\x02 \x01(\tR\x05runId\x123\n" +
-	"\x16first_execution_run_id\x18\x03 \x01(\tR\x13firstExecutionRunId\x12C\n" +
-	"\x0fregistered_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x0eregisteredTime\"\x82\x05\n" +
-	"\x10CallbackListener\x12\x1f\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\"\xfa\x04\n" +
+	"\bListener\x12\x1f\n" +
 	"\vlistener_id\x18\x01 \x01(\tR\n" +
 	"listenerId\x12<\n" +
 	"\bcallback\x18\x02 \x01(\v2 .temporal.api.common.v1.CallbackR\bcallback\x12\x1d\n" +
@@ -348,7 +346,13 @@ const file_temporal_server_chasm_lib_channel_proto_v1_message_proto_rawDesc = ""
 	"\x11next_attempt_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x0fnextAttemptTime\x12R\n" +
 	"\x14last_attempt_failure\x18\n" +
 	" \x01(\v2 .temporal.api.failure.v1.FailureR\x12lastAttemptFailure\x12#\n" +
-	"\rtask_sequence\x18\v \x01(\x03R\ftaskSequenceBAZ?go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpbb\x06proto3"
+	"\rtask_sequence\x18\v \x01(\x03R\ftaskSequence\"\xa0\x01\n" +
+	"\x0eWorkflowTarget\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
+	"\vworkflow_id\x18\x02 \x01(\tR\n" +
+	"workflowId\x12\x15\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\x123\n" +
+	"\x16first_execution_run_id\x18\x04 \x01(\tR\x13firstExecutionRunIdBAZ?go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_channel_proto_v1_message_proto_rawDescOnce sync.Once
@@ -365,31 +369,30 @@ func file_temporal_server_chasm_lib_channel_proto_v1_message_proto_rawDescGZIP()
 var file_temporal_server_chasm_lib_channel_proto_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_temporal_server_chasm_lib_channel_proto_v1_message_proto_goTypes = []any{
 	(*Notification)(nil),          // 0: temporal.server.chasm.lib.channel.proto.v1.Notification
-	(*WorkflowListener)(nil),      // 1: temporal.server.chasm.lib.channel.proto.v1.WorkflowListener
-	(*CallbackListener)(nil),      // 2: temporal.server.chasm.lib.channel.proto.v1.CallbackListener
+	(*Listener)(nil),              // 1: temporal.server.chasm.lib.channel.proto.v1.Listener
+	(*WorkflowTarget)(nil),        // 2: temporal.server.chasm.lib.channel.proto.v1.WorkflowTarget
 	nil,                           // 3: temporal.server.chasm.lib.channel.proto.v1.Notification.MetadataEntry
 	(*v1.WorkflowExecution)(nil),  // 4: temporal.api.common.v1.WorkflowExecution
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
-	(*v1.Callback)(nil),           // 6: temporal.api.common.v1.Callback
+	(*v1.Callback)(nil),           // 5: temporal.api.common.v1.Callback
+	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
 	(*v11.Failure)(nil),           // 7: temporal.api.failure.v1.Failure
 	(*v1.Payload)(nil),            // 8: temporal.api.common.v1.Payload
 }
 var file_temporal_server_chasm_lib_channel_proto_v1_message_proto_depIdxs = []int32{
-	3,  // 0: temporal.server.chasm.lib.channel.proto.v1.Notification.metadata:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification.MetadataEntry
-	4,  // 1: temporal.server.chasm.lib.channel.proto.v1.Notification.linked_to:type_name -> temporal.api.common.v1.WorkflowExecution
-	5,  // 2: temporal.server.chasm.lib.channel.proto.v1.WorkflowListener.registered_time:type_name -> google.protobuf.Timestamp
-	6,  // 3: temporal.server.chasm.lib.channel.proto.v1.CallbackListener.callback:type_name -> temporal.api.common.v1.Callback
-	5,  // 4: temporal.server.chasm.lib.channel.proto.v1.CallbackListener.registered_time:type_name -> google.protobuf.Timestamp
-	0,  // 5: temporal.server.chasm.lib.channel.proto.v1.CallbackListener.in_flight:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
-	0,  // 6: temporal.server.chasm.lib.channel.proto.v1.CallbackListener.pending:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
-	5,  // 7: temporal.server.chasm.lib.channel.proto.v1.CallbackListener.next_attempt_time:type_name -> google.protobuf.Timestamp
-	7,  // 8: temporal.server.chasm.lib.channel.proto.v1.CallbackListener.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
-	8,  // 9: temporal.server.chasm.lib.channel.proto.v1.Notification.MetadataEntry.value:type_name -> temporal.api.common.v1.Payload
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	3, // 0: temporal.server.chasm.lib.channel.proto.v1.Notification.metadata:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification.MetadataEntry
+	4, // 1: temporal.server.chasm.lib.channel.proto.v1.Notification.linked_to:type_name -> temporal.api.common.v1.WorkflowExecution
+	5, // 2: temporal.server.chasm.lib.channel.proto.v1.Listener.callback:type_name -> temporal.api.common.v1.Callback
+	6, // 3: temporal.server.chasm.lib.channel.proto.v1.Listener.registered_time:type_name -> google.protobuf.Timestamp
+	0, // 4: temporal.server.chasm.lib.channel.proto.v1.Listener.in_flight:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	0, // 5: temporal.server.chasm.lib.channel.proto.v1.Listener.pending:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification
+	6, // 6: temporal.server.chasm.lib.channel.proto.v1.Listener.next_attempt_time:type_name -> google.protobuf.Timestamp
+	7, // 7: temporal.server.chasm.lib.channel.proto.v1.Listener.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
+	8, // 8: temporal.server.chasm.lib.channel.proto.v1.Notification.MetadataEntry.value:type_name -> temporal.api.common.v1.Payload
+	9, // [9:9] is the sub-list for method output_type
+	9, // [9:9] is the sub-list for method input_type
+	9, // [9:9] is the sub-list for extension type_name
+	9, // [9:9] is the sub-list for extension extendee
+	0, // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_channel_proto_v1_message_proto_init() }

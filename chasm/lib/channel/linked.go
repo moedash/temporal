@@ -114,9 +114,11 @@ func (c *Channel) LinkedTo(ctx chasm.Context) *commonpb.WorkflowExecution {
 	return &commonpb.WorkflowExecution{WorkflowId: key.BusinessID, RunId: key.RunID}
 }
 
-// LinkedListenerCount counts the owner and the callback listeners.
+// LinkedListenerCount counts the owner and the callback listeners. The owner
+// is the one workflow listening and is not in the table, so the table holds
+// callbacks only.
 func (c *Channel) LinkedListenerCount() int {
-	return 1 + len(c.CallbackListeners)
+	return 1 + len(c.Listeners)
 }
 
 // OwnerHolds reports whether the owner already has a notification at this
@@ -185,7 +187,7 @@ func (c *Channel) OwnerStanding() OwnerStanding {
 		LastCounter:      c.LatestCounter(),
 		Pending:          common.CloneProto(c.State.GetOwnerPending()),
 		ScheduledCounter: c.State.GetOwnerScheduledCounter(),
-		ListenerCount:    len(c.CallbackListeners),
+		ListenerCount:    len(c.Listeners),
 		RetainedCount:    c.RetainedCount(),
 		AcceptedCount:    c.State.GetAcceptedCount(),
 	}

@@ -42,35 +42,35 @@ func (this *Notification) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type WorkflowListener to the protobuf v3 wire format
-func (val *WorkflowListener) Marshal() ([]byte, error) {
+// Marshal an object of type Listener to the protobuf v3 wire format
+func (val *Listener) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type WorkflowListener from the protobuf v3 wire format
-func (val *WorkflowListener) Unmarshal(buf []byte) error {
+// Unmarshal an object of type Listener from the protobuf v3 wire format
+func (val *Listener) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *WorkflowListener) Size() int {
+func (val *Listener) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two WorkflowListener values are equivalent by recursively
+// Equal returns whether two Listener values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *WorkflowListener) Equal(that interface{}) bool {
+func (this *Listener) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *WorkflowListener
+	var that1 *Listener
 	switch t := that.(type) {
-	case *WorkflowListener:
+	case *Listener:
 		that1 = t
-	case WorkflowListener:
+	case Listener:
 		that1 = &t
 	default:
 		return false
@@ -79,35 +79,35 @@ func (this *WorkflowListener) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type CallbackListener to the protobuf v3 wire format
-func (val *CallbackListener) Marshal() ([]byte, error) {
+// Marshal an object of type WorkflowTarget to the protobuf v3 wire format
+func (val *WorkflowTarget) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type CallbackListener from the protobuf v3 wire format
-func (val *CallbackListener) Unmarshal(buf []byte) error {
+// Unmarshal an object of type WorkflowTarget from the protobuf v3 wire format
+func (val *WorkflowTarget) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *CallbackListener) Size() int {
+func (val *WorkflowTarget) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two CallbackListener values are equivalent by recursively
+// Equal returns whether two WorkflowTarget values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *CallbackListener) Equal(that interface{}) bool {
+func (this *WorkflowTarget) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *CallbackListener
+	var that1 *WorkflowTarget
 	switch t := that.(type) {
-	case *CallbackListener:
+	case *WorkflowTarget:
 		that1 = t
-	case CallbackListener:
+	case WorkflowTarget:
 		that1 = &t
 	default:
 		return false

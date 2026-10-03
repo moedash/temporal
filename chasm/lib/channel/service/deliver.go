@@ -38,14 +38,14 @@ func (h *workflowDeliverer) deliverAll(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	ns string,
-	listeners []*channelpb.WorkflowListener,
+	targets []*channelpb.WorkflowTarget,
 	n *channelpb.Notification,
 ) error {
 	var group errgroup.Group
 	group.SetLimit(fanOutConcurrency)
-	for _, listener := range listeners {
+	for _, target := range targets {
 		group.Go(func() error {
-			return h.deliverOne(ctx, ref, ns, listener, n)
+			return h.deliverOne(ctx, ref, ns, target, n)
 		})
 	}
 	return group.Wait()
@@ -58,17 +58,17 @@ func (h *workflowDeliverer) deliverOne(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	ns string,
-	listener *channelpb.WorkflowListener,
+	target *channelpb.WorkflowTarget,
 	n *channelpb.Notification,
 ) error {
 	callCtx, cancel := context.WithTimeout(ctx, channel.RoutedCallTimeout)
 	defer cancel()
 	response, err := h.routed.DeliverChannelNotification(callCtx, &channelpb.DeliverChannelNotificationRequest{
-		NamespaceId: ref.NamespaceID,
+		NamespaceId: target.GetNamespaceId(),
 		FrontendRequest: &channelpb.DeliverChannelNotificationInput{
 			Namespace:    ns,
-			WorkflowId:   listener.GetWorkflowId(),
-			RunId:        listener.GetRunId(),
+			WorkflowId:   target.GetWorkflowId(),
+			RunId:        target.GetRunId(),
 			Notification: n,
 		},
 	})
@@ -78,7 +78,7 @@ func (h *workflowDeliverer) deliverOne(
 		// the transport's, and dropping a listener on that would be a guess.
 		h.logger.Warn("failed to deliver a channel notification to a workflow",
 			tag.NewStringTag("channel", ref.BusinessID),
-			tag.WorkflowID(listener.GetWorkflowId()),
+			tag.WorkflowID(target.GetWorkflowId()),
 			tag.Error(err))
 		return err
 	}
@@ -87,16 +87,16 @@ func (h *workflowDeliverer) deliverOne(
 	switch {
 	case out.GetListenerClosed():
 		_, _, err = chasm.UpdateComponent(ctx, ref,
-			func(c *channel.Channel, mctx chasm.MutableContext, l *channelpb.WorkflowListener) (struct{}, error) {
-				c.ForgetWorkflowListener(mctx, l.GetWorkflowId(), l.GetRunId(), limits)
+			func(c *channel.Channel, mctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+				c.ForgetWorkflowListener(mctx, target.GetWorkflowId(), target.GetRunId(), limits)
 				return struct{}{}, nil
-			}, listener)
+			}, struct{}{})
 	case out.GetSuccessorRunId() != "":
 		_, _, err = chasm.UpdateComponent(ctx, ref,
-			func(c *channel.Channel, mctx chasm.MutableContext, l *channelpb.WorkflowListener) (struct{}, error) {
-				c.RekeyWorkflowListener(mctx, l.GetWorkflowId(), l.GetRunId(), out.GetSuccessorRunId())
-				return struct{}{}, nil
-			}, listener)
+			func(c *channel.Channel, mctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+				return struct{}{}, c.RekeyWorkflowListener(
+					mctx, target.GetWorkflowId(), target.GetRunId(), out.GetSuccessorRunId())
+			}, struct{}{})
 	default:
 		// Delivered, or a duplicate. The listener stays as it is.
 	}
