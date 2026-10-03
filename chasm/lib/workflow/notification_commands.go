@@ -108,8 +108,90 @@ func (channelSubscribedEvent) CherryPick(
 	return ErrEventNotCherryPickable
 }
 
-// notificationLibrary registers the subscribe command with the workflow
-// registry.
+// handleUnsubscribeNotificationChannelCommand ends this run's subscription to
+// a notification channel. The event is written here, with the command, and
+// the record and its pending notification go with it. Dropping the run from
+// the channel's listeners is staged for the completion path, as the
+// registration was. A notification a scheduled event already carries stays in
+// History, and a delivery that reaches the run afterwards finds no
+// subscription and is dropped.
+func handleUnsubscribeNotificationChannelCommand(
+	chasmCtx chasm.MutableContext,
+	wf *Workflow,
+	command *commandpb.Command,
+	opts CommandHandlerOptions,
+	maxIDLength int,
+) error {
+	badAttributes := enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UNSUBSCRIBE_NOTIFICATION_CHANNEL_ATTRIBUTES
+	attrs := command.GetUnsubscribeNotificationChannelCommandAttributes()
+	if attrs == nil {
+		return FailWorkflowTaskError{
+			Cause:   badAttributes,
+			Message: "UnsubscribeNotificationChannelCommandAttributes is not set",
+		}
+	}
+	name := attrs.GetChannel()
+	if err := channel.CheckChannelName(name, maxIDLength); err != nil {
+		return FailWorkflowTaskError{Cause: badAttributes, Message: err.Error()}
+	}
+
+	// A run that does not listen still gets the event, for the reason a
+	// duplicate subscribe does: every SDK matches the commands it issued
+	// against the events they produced, in order. The linked kind has no
+	// subscription, so a command naming a linked channel is this case.
+	subscribedEventID, subscribed := wf.RemoveChannelSubscription(chasmCtx, name)
+	wf.AddHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_NOTIFICATION_CHANNEL_UNSUBSCRIBED,
+		func(e *historypb.HistoryEvent) {
+			e.Attributes = &historypb.HistoryEvent_WorkflowNotificationChannelUnsubscribedEventAttributes{
+				WorkflowNotificationChannelUnsubscribedEventAttributes: &historypb.
+					WorkflowNotificationChannelUnsubscribedEventAttributes{
+					WorkflowTaskCompletedEventId: opts.WorkflowTaskCompletedEventID,
+					Channel:                      name,
+					SubscribedEventId:            subscribedEventID,
+				},
+			}
+		})
+	if subscribed {
+		wf.StageChannelDeregistration(name)
+	}
+	return nil
+}
+
+// channelUnsubscribedEvent is the event an unsubscribe command writes. On a
+// run rebuilt from History it takes the subscription off again, so a reset
+// run ends with the subscriptions the source had at the reset point.
+type channelUnsubscribedEvent struct{}
+
+func (channelUnsubscribedEvent) Type() enumspb.EventType {
+	return enumspb.EVENT_TYPE_WORKFLOW_NOTIFICATION_CHANNEL_UNSUBSCRIBED
+}
+
+func (channelUnsubscribedEvent) IsWorkflowTaskTrigger() bool { return false }
+
+// Apply removes the subscription. One the run does not hold is nothing to
+// remove, as for the command.
+func (channelUnsubscribedEvent) Apply(
+	mctx chasm.MutableContext,
+	wf *Workflow,
+	event *historypb.HistoryEvent,
+) error {
+	attrs := event.GetWorkflowNotificationChannelUnsubscribedEventAttributes()
+	wf.RemoveChannelSubscription(mctx, attrs.GetChannel())
+	return nil
+}
+
+// A command event, so it is never cherry-picked.
+func (channelUnsubscribedEvent) CherryPick(
+	chasm.MutableContext,
+	*Workflow,
+	*historypb.HistoryEvent,
+	map[enumspb.ResetReapplyExcludeType]struct{},
+) error {
+	return ErrEventNotCherryPickable
+}
+
+// notificationLibrary registers the subscribe and unsubscribe commands with
+// the workflow registry.
 type notificationLibrary struct {
 	workflowConfig Config
 	channelConfig  *channel.Config
@@ -135,9 +217,19 @@ func (l *notificationLibrary) CommandHandlers() map[enumspb.CommandType]CommandH
 				l.channelConfig.MaxSubscriptionsPerWorkflow(namespaceName),
 			)
 		},
+		enumspb.COMMAND_TYPE_UNSUBSCRIBE_NOTIFICATION_CHANNEL: func(
+			chasmCtx chasm.MutableContext,
+			wf *Workflow,
+			_ Validator,
+			command *commandpb.Command,
+			opts CommandHandlerOptions,
+		) error {
+			return handleUnsubscribeNotificationChannelCommand(
+				chasmCtx, wf, command, opts, l.workflowConfig.maxIDLengthLimit())
+		},
 	}
 }
 
 func (l *notificationLibrary) EventDefinitions() []EventDefinition {
-	return []EventDefinition{channelSubscribedEvent{}}
+	return []EventDefinition{channelSubscribedEvent{}, channelUnsubscribedEvent{}}
 }

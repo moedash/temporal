@@ -662,9 +662,11 @@ func (v *CommandAttrValidator) ValidateCommandSequence(
 			enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 			enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
 			enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
-			// Listening on a notification channel. Not closing either: it
-			// records a subscription for the run.
-			enumspb.COMMAND_TYPE_SUBSCRIBE_NOTIFICATION_CHANNEL:
+			// Listening on a notification channel, and ending that. Not
+			// closing either: they record and remove a subscription for the
+			// run.
+			enumspb.COMMAND_TYPE_SUBSCRIBE_NOTIFICATION_CHANNEL,
+			enumspb.COMMAND_TYPE_UNSUBSCRIBE_NOTIFICATION_CHANNEL:
 			// noop
 		case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,

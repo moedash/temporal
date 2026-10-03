@@ -50,8 +50,10 @@ type Workflow struct {
 	ChannelNotifications chasm.Map[string, *chasmworkflowpb.ChannelNotificationEntry]
 
 	// Channels a subscribe command in the open Workflow Task has to register
-	// this run on. In memory only, drained before commit.
-	pendingChannelRegistrations []string
+	// this run on, and channels an unsubscribe command has to drop it from.
+	// In memory only, drained before commit.
+	pendingChannelRegistrations   []string
+	pendingChannelDeregistrations []string
 
 	// Channels linked to this run, keyed by channel name. The run is their
 	// listener by construction, so there is no subscription and no event: a
