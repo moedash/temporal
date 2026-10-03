@@ -51,6 +51,7 @@ func Invoke(
 
 	var workflowKey definition.WorkflowKey
 	var resp *historyservice.RecordWorkflowTaskStartedResponseWithRawHistory
+	var streamAddresses map[string]streamOrigin
 	// Set when a stream range the task depends on cannot be served. The task
 	// is failed inside the transaction, so the failure has to be persisted
 	// and reported to matching afterwards rather than returned as the error.
@@ -108,7 +109,7 @@ func Invoke(
 					}
 					// Redelivers whatever range is already staged, so a
 					// duplicate of the same request hands back the same slice.
-					resp.StreamSlices, _, err = deliverStreamSlices(
+					resp.StreamSlices, streamAddresses, err = deliverStreamSlices(
 						ctx, shardContext, mutableState, workflowTask)
 					if errors.As(err, &streamFailure) {
 						if err := failTaskForStreams(mutableState, workflowTask, streamFailure); err != nil {
@@ -255,7 +256,7 @@ func Invoke(
 				return nil, err
 			}
 
-			resp.StreamSlices, _, err = deliverStreamSlices(
+			resp.StreamSlices, streamAddresses, err = deliverStreamSlices(
 				ctx, shardContext, mutableState, workflowTask)
 			if errors.As(err, &streamFailure) {
 				if err := failTaskForStreams(mutableState, workflowTask, streamFailure); err != nil {
@@ -299,10 +300,63 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+
+	// After the history is attached, because the ranges to re-supply are read
+	// out of the events being sent.
+	err = attachReplaySlices(ctx, shardContext, workflowKey, namespaceEntry.Name().String(),
+		streamAddresses, maxHistoryPageSize, resp)
+	if errors.As(err, &streamFailure) {
+		// The task is already started and its lock released, so failing it is
+		// a transaction of its own.
+		if err := failStartedTaskForStreams(
+			ctx, shardContext, workflowConsistencyChecker, workflowKey,
+			scheduledEventID, requestID, streamFailure,
+		); err != nil {
+			return nil, err
+		}
+		return nil, serviceerrors.NewObsoleteMatchingTask(streamFailure.Error())
+	}
 	if err != nil {
 		return nil, err
 	}
 	return resp, nil
+}
+
+// failStartedTaskForStreams fails a task that started but cannot be replayed,
+// provided it is still the task this request started.
+func failStartedTaskForStreams(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	workflowKey definition.WorkflowKey,
+	scheduledEventID int64,
+	requestID string,
+	cause *rangeUnavailable,
+) error {
+	return api.GetAndUpdateWorkflowWithNew(
+		ctx,
+		nil,
+		workflowKey,
+		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowLease.GetMutableState()
+			if !mutableState.IsWorkflowExecutionRunning() {
+				return nil, consts.ErrWorkflowCompleted
+			}
+			workflowTask := mutableState.GetWorkflowTaskByID(scheduledEventID)
+			if workflowTask == nil || workflowTask.RequestID != requestID ||
+				workflowTask.StartedEventID == common.EmptyEventID {
+				// Something else already resolved the task.
+				return &api.UpdateWorkflowAction{Noop: true}, nil
+			}
+			if err := failTaskForStreams(mutableState, workflowTask, cause); err != nil {
+				return nil, err
+			}
+			return &api.UpdateWorkflowAction{}, nil
+		},
+		nil,
+		shardContext,
+		workflowConsistencyChecker,
+	)
 }
 
 func setHistoryForRecordWfTaskStartedResp(
