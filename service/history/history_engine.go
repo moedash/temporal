@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/channel"
 	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
+	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -108,6 +109,7 @@ import (
 type (
 	engineOptions struct {
 		workflowResendScheduler workflowresend.Scheduler
+		streamClient            streampb.StreamServiceClient
 		channelClient           channelpb.ChannelServiceClient
 	}
 
@@ -150,6 +152,7 @@ type (
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		workflowResendScheduler    workflowresend.Scheduler
 		chasmEngine                chasm.Engine
+		streamClient               streampb.StreamServiceClient
 		channelClient              channelpb.ChannelServiceClient
 		versionChecker             headers.VersionChecker
 		versionCache               worker_versioning.VersionMembershipAndReactivationStatusCache
@@ -171,6 +174,13 @@ type (
 func WithWorkflowResendScheduler(scheduler workflowresend.Scheduler) EngineOption {
 	return func(options *engineOptions) {
 		options.workflowResendScheduler = scheduler
+	}
+}
+
+// WithStreamClient routes standalone stream reads to their history shard owner.
+func WithStreamClient(streamClient streampb.StreamServiceClient) EngineOption {
+	return func(options *engineOptions) {
+		options.streamClient = streamClient
 	}
 }
 
@@ -276,6 +286,7 @@ func NewEngineWithShardContext(
 		outboundQueueCBPool:        outboundQueueCBPool,
 		testHooks:                  testHooks,
 		chasmEngine:                chasmEngine,
+		streamClient:               engineOptions.streamClient,
 		channelClient:              engineOptions.channelClient,
 		versionCache:               versionCache,
 		workerDeploymentClient:     workerDeploymentClient,
@@ -615,7 +626,7 @@ func (e *historyEngineImpl) RecordWorkflowTaskStarted(
 	request *historyservice.RecordWorkflowTaskStartedRequest,
 ) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 	return recordworkflowtaskstarted.Invoke(
-		ctx,
+		recordworkflowtaskstarted.WithStreamClient(ctx, e.streamClient),
 		request,
 		e.shardContext,
 		e.config,
@@ -643,7 +654,7 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 		e.versionCache,
 	)
 	ctx = channel.WithClient(ctx, e.channelClient)
-	return h.Invoke(ctx, req)
+	return h.Invoke(recordworkflowtaskstarted.WithStreamClient(ctx, e.streamClient), req)
 }
 
 // RespondWorkflowTaskFailed fails a workflow task
