@@ -4,7 +4,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/server/chasm"
@@ -116,6 +119,51 @@ func TestKnownHeadIsOnlyPushedIntoAnExternalCursor(t *testing.T) {
 	require.ErrorAs(t, err, &notFound)
 }
 
+// Each subscription costs a routed call on the completion path that made it,
+// with this execution's lock held, and another on every task start. Nothing
+// else bounds how many a workflow may hold or how many one task may carry.
+func TestSubscriptionsPerWorkflowAreBounded(t *testing.T) {
+	ctx := newStreamBudgetTestContext()
+	backend := &chasm.MockNodeBackend{
+		HandleAddHistoryEvent: func(
+			eventType enumspb.EventType, set func(*historypb.HistoryEvent),
+		) *historypb.HistoryEvent {
+			e := &historypb.HistoryEvent{EventType: eventType}
+			set(e)
+			return e
+		},
+	}
+	w := &Workflow{MSPointer: chasm.NewMSPointer(backend)}
+	opts := CommandHandlerOptions{WorkflowTaskCompletedEventID: 10}
+	limits := stream.Limits{MaxSubscriptionsPerWorkflow: 2}
+
+	subscribe := func(id string) error {
+		return handleSubscribeStreamCommand(ctx, w, nil, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM,
+			Attributes: &commandpb.Command_SubscribeStreamCommandAttributes{
+				SubscribeStreamCommandAttributes: &commandpb.SubscribeStreamCommandAttributes{
+					StreamNameOrId: id,
+				},
+			},
+		}, opts, limits)
+	}
+
+	require.NoError(t, subscribe("a"))
+	require.NoError(t, subscribe("b"))
+
+	// Counted against what this task has already staged, so one task cannot
+	// carry an unbounded set of them either.
+	err := subscribe("c")
+	var failTask FailWorkflowTaskError
+	require.ErrorAs(t, err, &failTask)
+	require.Equal(t,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES, failTask.Cause)
+
+	// Subscribing again to one already staged registers nothing new, so it is
+	// not refused for room.
+	require.NoError(t, subscribe("a"))
+}
+
 // An activity id may contain a slash, so the reserved key escapes it. Without
 // that two different (activity, name) pairs would land on one stream.
 func TestActivityStreamKeysDoNotCollide(t *testing.T) {
@@ -146,4 +194,39 @@ func TestWorkflowCannotNameAnActivityStream(t *testing.T) {
 	require.Positive(t, w.siblingStreamBytes(ctx, DefaultStreamName)+
 		w.OwnedStream(ctx, key).State.GetAppendedBytes())
 	require.Len(t, w.Streams, 1)
+}
+
+// An activity's streams end when it reaches a terminal status, while the
+// workflow's own streams and another activity's stay open.
+func TestCloseActivityStreamsEndsOnlyThatActivity(t *testing.T) {
+	ctx := newStreamBudgetTestContext()
+	w := &Workflow{}
+	limits := stream.Limits{MaxOwnedStreamsPerWorkflow: 10}
+	for _, key := range []string{
+		DefaultStreamName,
+		ActivityStreamKey("act", DefaultStreamName),
+		ActivityStreamKey("act", "reasoning"),
+		ActivityStreamKey("act-2", DefaultStreamName),
+	} {
+		_, err := w.AppendToOwnedStream(ctx, key, stream.AddMessagesRequest{
+			Records: budgetTestRecords(1), Limits: limits,
+		})
+		require.NoError(t, err)
+	}
+
+	require.True(t, w.HasOpenActivityStreams(ctx, "act"))
+	require.False(t, w.HasOpenActivityStreams(ctx, "never-wrote"))
+	require.NoError(t, w.CloseActivityStreams(ctx, "act"))
+	require.False(t, w.HasOpenActivityStreams(ctx, "act"))
+
+	closed := func(key string) bool { return w.OwnedStream(ctx, key).State.GetClosed() }
+	require.True(t, closed(ActivityStreamKey("act", DefaultStreamName)))
+	require.True(t, closed(ActivityStreamKey("act", "reasoning")))
+	require.False(t, closed(ActivityStreamKey("act-2", DefaultStreamName)))
+	require.False(t, closed(DefaultStreamName))
+
+	_, err := w.AppendToOwnedStream(ctx, ActivityStreamKey("act", DefaultStreamName),
+		stream.AddMessagesRequest{Records: budgetTestRecords(1), Limits: limits})
+	var precondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &precondition, "an ended activity's stream takes no more records")
 }
