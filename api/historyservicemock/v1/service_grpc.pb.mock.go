@@ -503,6 +503,26 @@ func (mr *MockHistoryServiceClientMockRecorder) GetShard(ctx, in any, opts ...an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetShard), varargs...)
 }
 
+// GetStreamReplaySlices mocks base method.
+func (m *MockHistoryServiceClient) GetStreamReplaySlices(ctx context.Context, in *historyservice.GetStreamReplaySlicesRequest, opts ...grpc.CallOption) (*historyservice.GetStreamReplaySlicesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetStreamReplaySlices", varargs...)
+	ret0, _ := ret[0].(*historyservice.GetStreamReplaySlicesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetStreamReplaySlices indicates an expected call of GetStreamReplaySlices.
+func (mr *MockHistoryServiceClientMockRecorder) GetStreamReplaySlices(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStreamReplaySlices", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetStreamReplaySlices), varargs...)
+}
+
 // GetWorkflowExecutionHistory mocks base method.
 func (m *MockHistoryServiceClient) GetWorkflowExecutionHistory(ctx context.Context, in *historyservice.GetWorkflowExecutionHistoryRequest, opts ...grpc.CallOption) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
 	m.ctrl.T.Helper()
@@ -2108,6 +2128,21 @@ func (m *MockHistoryServiceServer) GetShard(arg0 context.Context, arg1 *historys
 func (mr *MockHistoryServiceServerMockRecorder) GetShard(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetShard), arg0, arg1)
+}
+
+// GetStreamReplaySlices mocks base method.
+func (m *MockHistoryServiceServer) GetStreamReplaySlices(arg0 context.Context, arg1 *historyservice.GetStreamReplaySlicesRequest) (*historyservice.GetStreamReplaySlicesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStreamReplaySlices", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GetStreamReplaySlicesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetStreamReplaySlices indicates an expected call of GetStreamReplaySlices.
+func (mr *MockHistoryServiceServerMockRecorder) GetStreamReplaySlices(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStreamReplaySlices", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetStreamReplaySlices), arg0, arg1)
 }
 
 // GetWorkflowExecutionHistory mocks base method.

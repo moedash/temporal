@@ -317,6 +317,20 @@ func (c *metricClient) GetShard(
 	return c.client.GetShard(ctx, request, opts...)
 }
 
+func (c *metricClient) GetStreamReplaySlices(
+	ctx context.Context,
+	request *historyservice.GetStreamReplaySlicesRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.GetStreamReplaySlicesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientGetStreamReplaySlices")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetStreamReplaySlices(ctx, request, opts...)
+}
+
 func (c *metricClient) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *historyservice.GetWorkflowExecutionHistoryRequest,
