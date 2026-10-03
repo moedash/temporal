@@ -71,6 +71,13 @@ service ChannelService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  // Internal. The completion of a Workflow Task that unsubscribed calls this
+  // on the channel's shard. A channel that is absent has no listener to drop.
+  rpc UnregisterWorkflowListener(UnregisterWorkflowListenerRequest) returns (UnregisterWorkflowListenerResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.channel";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   // Internal. The channel's fan-out calls this on the listener's shard.
   rpc DeliverChannelNotification(DeliverChannelNotificationRequest) returns (DeliverChannelNotificationResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";

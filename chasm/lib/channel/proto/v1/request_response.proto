@@ -180,6 +180,25 @@ message RegisterWorkflowListenerResponse {
   RegisterWorkflowListenerOutput frontend_response = 1;
 }
 
+message UnregisterWorkflowListenerInput {
+  string namespace = 1;
+  string channel = 2;
+  string workflow_id = 3;
+  // The run that unsubscribed. An entry naming another run is left alone.
+  string run_id = 4;
+}
+
+message UnregisterWorkflowListenerOutput {}
+
+message UnregisterWorkflowListenerRequest {
+  string namespace_id = 1;
+  UnregisterWorkflowListenerInput frontend_request = 2;
+}
+
+message UnregisterWorkflowListenerResponse {
+  UnregisterWorkflowListenerOutput frontend_response = 1;
+}
+
 message DeliverChannelNotificationInput {
   string namespace = 1;
   string workflow_id = 2;

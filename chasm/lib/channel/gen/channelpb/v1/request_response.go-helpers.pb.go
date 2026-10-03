@@ -930,6 +930,154 @@ func (this *RegisterWorkflowListenerResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type UnregisterWorkflowListenerInput to the protobuf v3 wire format
+func (val *UnregisterWorkflowListenerInput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UnregisterWorkflowListenerInput from the protobuf v3 wire format
+func (val *UnregisterWorkflowListenerInput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UnregisterWorkflowListenerInput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UnregisterWorkflowListenerInput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UnregisterWorkflowListenerInput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UnregisterWorkflowListenerInput
+	switch t := that.(type) {
+	case *UnregisterWorkflowListenerInput:
+		that1 = t
+	case UnregisterWorkflowListenerInput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type UnregisterWorkflowListenerOutput to the protobuf v3 wire format
+func (val *UnregisterWorkflowListenerOutput) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UnregisterWorkflowListenerOutput from the protobuf v3 wire format
+func (val *UnregisterWorkflowListenerOutput) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UnregisterWorkflowListenerOutput) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UnregisterWorkflowListenerOutput values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UnregisterWorkflowListenerOutput) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UnregisterWorkflowListenerOutput
+	switch t := that.(type) {
+	case *UnregisterWorkflowListenerOutput:
+		that1 = t
+	case UnregisterWorkflowListenerOutput:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type UnregisterWorkflowListenerRequest to the protobuf v3 wire format
+func (val *UnregisterWorkflowListenerRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UnregisterWorkflowListenerRequest from the protobuf v3 wire format
+func (val *UnregisterWorkflowListenerRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UnregisterWorkflowListenerRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UnregisterWorkflowListenerRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UnregisterWorkflowListenerRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UnregisterWorkflowListenerRequest
+	switch t := that.(type) {
+	case *UnregisterWorkflowListenerRequest:
+		that1 = t
+	case UnregisterWorkflowListenerRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type UnregisterWorkflowListenerResponse to the protobuf v3 wire format
+func (val *UnregisterWorkflowListenerResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UnregisterWorkflowListenerResponse from the protobuf v3 wire format
+func (val *UnregisterWorkflowListenerResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UnregisterWorkflowListenerResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UnregisterWorkflowListenerResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UnregisterWorkflowListenerResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UnregisterWorkflowListenerResponse
+	switch t := that.(type) {
+	case *UnregisterWorkflowListenerResponse:
+		that1 = t
+	case UnregisterWorkflowListenerResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type DeliverChannelNotificationInput to the protobuf v3 wire format
 func (val *DeliverChannelNotificationInput) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
