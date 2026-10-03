@@ -17,6 +17,10 @@ const LongPollTimeout = 20 * time.Second
 // LongPollBuffer leaves room to answer before the caller's own deadline.
 const LongPollBuffer = 3 * time.Second
 
+// RoutedCallTimeout bounds one call to another shard, so a slow listener does
+// not take the whole budget of the task that is telling the others.
+const RoutedCallTimeout = 5 * time.Second
+
 // The defaults below are also what component code falls back on when it is
 // driven without a config, as the unit tests do.
 const (

@@ -453,6 +453,24 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			return nil, err
 		}
 
+		// Notification channel subscriptions, registered on each channel's
+		// shard before the commit. Skipped once the task has failed, since the
+		// subscription and its event are about to be rolled back.
+		if workflowTaskHandler.workflowTaskFailedCause == nil && !workflowTaskHandler.stopProcessing {
+			err = registerStagedChannelListeners(
+				ctx,
+				ms,
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_NOTIFICATION_CHANNEL_ATTRIBUTES,
+				workflowTaskHandler.stagedChannelRegistrations,
+			)
+			if failWFTErr, ok := errors.AsType[chasmworkflow.FailWorkflowTaskError](err); ok {
+				err = workflowTaskHandler.failWorkflowTask(failWFTErr.Cause, failWFTErr)
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		// Worker must respond with Update Accepted or Update Rejected message on every Update Requested
 		// message that were delivered on specific WT, when completing this WT.
 		// If worker ignored the update request (old SDK or SDK bug), then server rejects this update.

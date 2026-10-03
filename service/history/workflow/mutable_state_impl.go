@@ -36,6 +36,8 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/channel"
+	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -668,6 +670,111 @@ func (ms *MutableStateImpl) mustInitHSM() {
 		panic(err)
 	}
 	ms.stateMachineNode = stateMachineNode
+}
+
+// hasPendingWorkflowTaskInput reports whether something waits for a workflow
+// task to carry it that writes no event of its own to schedule one: a
+// channel notification waiting for a scheduled event.
+//
+// A notification does not cut short a first workflow task backoff: the task
+// that ends the backoff carries it.
+//
+// Called on every transaction close for every workflow, almost none of which
+// have a notification, so it resolves the root component once rather than
+// asking whether it exists and then asking for it.
+func (ms *MutableStateImpl) hasPendingWorkflowTaskInput() bool {
+	wf, chasmCtx, ok := ms.chasmWorkflowView()
+	if !ok {
+		return false
+	}
+	if !wf.HasPendingChannelNotifications(chasmCtx) {
+		return false
+	}
+	return !ms.IsWorkflowPendingOnWorkflowTaskBackoff()
+}
+
+// chasmWorkflowView resolves the Workflow component through a read-only
+// context, for checks that must leave the tree untouched.
+func (ms *MutableStateImpl) chasmWorkflowView() (*chasmworkflow.Workflow, chasm.Context, bool) {
+	node, ok := ms.chasmTree.(*chasm.Node)
+	if !ok {
+		return nil, nil, false
+	}
+	chasmCtx := chasm.NewContext(context.Background(), node)
+	rootComponent, err := node.ComponentByPath(chasmCtx, nil)
+	if err != nil {
+		return nil, nil, false
+	}
+	wf, ok := rootComponent.(*chasmworkflow.Workflow)
+	if !ok {
+		return nil, nil, false
+	}
+	return wf, chasmCtx, true
+}
+
+// attachChannelNotifications puts the pending channel notifications on a
+// WorkflowTaskScheduled event being written for a task no worker has seen.
+// Scheduled events written after the fact, for a transient or speculative
+// task a worker already ran, carry none: History has to match what that
+// worker saw, and the notifications wait for the next scheduled event.
+func (ms *MutableStateImpl) attachChannelNotifications(event *historypb.HistoryEvent) {
+	notifications := ms.takeChannelNotifications()
+	if len(notifications) == 0 {
+		return
+	}
+	event.GetWorkflowTaskScheduledEventAttributes().Notifications =
+		channel.ToAPINotifications(notifications)
+}
+
+// clearScheduledChannelCounters forgets the counters the scheduled task
+// carries, once that task starts, fails or times out. Checked through a
+// read-only view first, since almost no workflow has any.
+func (ms *MutableStateImpl) clearScheduledChannelCounters() {
+	node, ok := ms.chasmTree.(*chasm.Node)
+	if !ok {
+		return
+	}
+	view := chasm.NewContext(context.Background(), node)
+	rootComponent, err := node.ComponentByPath(view, nil)
+	if err != nil {
+		return
+	}
+	if wf, ok := rootComponent.(*chasmworkflow.Workflow); !ok || !wf.HasScheduledChannelCounters(view) {
+		return
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return
+	}
+	wf.ClearScheduledChannelCounters(chasmCtx)
+}
+
+// takeChannelNotifications hands the pending channel notifications to a
+// WorkflowTaskScheduled event that is being written, and clears them. The
+// event is the acknowledgment: once History carries a notification nothing
+// redelivers it.
+//
+// Called for every scheduled event, almost none of which have anything to
+// carry, so the keys are checked through a read-only view first and the
+// component is only taken for writing when there is something to take.
+func (ms *MutableStateImpl) takeChannelNotifications() []*channelpb.Notification {
+	node, ok := ms.chasmTree.(*chasm.Node)
+	if !ok {
+		return nil
+	}
+	view := chasm.NewContext(context.Background(), node)
+	rootComponent, err := node.ComponentByPath(view, nil)
+	if err != nil {
+		return nil
+	}
+	if wf, ok := rootComponent.(*chasmworkflow.Workflow); !ok || !wf.HasPendingChannelNotifications(view) {
+		return nil
+	}
+	wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return nil
+	}
+	return wf.TakeChannelNotifications(chasmCtx)
 }
 
 func (ms *MutableStateImpl) IsWorkflow() bool {
@@ -7944,6 +8051,25 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTaskScheduling(
 				}
 			}
 			break
+		}
+	}
+
+	// Input only a workflow task delivers: a channel notification waiting for
+	// a scheduled event. Handled here rather than at workflow task completion
+	// so it also covers the transaction that hands the workflow a
+	// notification, which completes no workflow task of its own.
+	//
+	// The pending-task check comes first because it is cheap: a workflow that
+	// already owes a task needs no further reason to run, so the subscription
+	// state is only consulted when the answer could change something.
+	if !ms.HasPendingWorkflowTask() &&
+		!ms.IsWorkflowExecutionStatusPaused() &&
+		ms.hasPendingWorkflowTaskInput() {
+		if _, err := ms.AddWorkflowTaskScheduledEvent(
+			false,
+			enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+		); err != nil {
+			return err
 		}
 	}
 

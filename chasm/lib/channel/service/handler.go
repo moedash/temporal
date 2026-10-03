@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/channel"
 	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/headers"
@@ -27,6 +28,7 @@ type handler struct {
 	timeSource        clock.TimeSource
 	config            *channel.Config
 	limiters          *notifyLimiters
+	deliverer         *workflowDeliverer
 }
 
 func newHandler(
@@ -35,6 +37,7 @@ func newHandler(
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	config *channel.Config,
+	deliverer *workflowDeliverer,
 ) *handler {
 	return &handler{
 		namespaceRegistry: namespaceRegistry,
@@ -43,6 +46,7 @@ func newHandler(
 		timeSource:        timeSource,
 		config:            config,
 		limiters:          newNotifyLimiters(config),
+		deliverer:         deliverer,
 	}
 }
 
@@ -80,6 +84,14 @@ func channelKey(namespaceID, name string) chasm.ExecutionKey {
 
 func channelRef(namespaceID, name string) chasm.ComponentRef {
 	return chasm.NewComponentRef[*channel.Channel](channelKey(namespaceID, name))
+}
+
+func workflowRef(namespaceID, workflowID, runID string) chasm.ComponentRef {
+	return chasm.NewComponentRef[*chasmworkflow.Workflow](chasm.ExecutionKey{
+		NamespaceID: namespaceID,
+		BusinessID:  workflowID,
+		RunID:       runID,
+	})
 }
 
 func startChannel(mctx chasm.MutableContext, _ struct{}) (*channel.Channel, error) {
@@ -195,6 +207,7 @@ type repeatRead struct {
 	// it is.
 	repeat    bool
 	listeners int
+	workflows []*channelpb.WorkflowTarget
 	// Some callback listener does not hold the notification.
 	callbacksNeed bool
 }
@@ -215,6 +228,7 @@ func (h *handler) readRepeat(
 			return repeatRead{
 				repeat:        true,
 				listeners:     c.ListenerCount(),
+				workflows:     c.WorkflowTargets(cctx),
 				callbacksNeed: c.CallbacksNeed(cctx, counter),
 			}, nil
 		}, n.GetCounter())
@@ -225,7 +239,9 @@ func (h *handler) readRepeat(
 }
 
 // redeliver hands a notification that does not advance the channel to every
-// listener. The channel is written only when a callback listener needs it.
+// listener. The channel is written only when a callback listener needs it;
+// each workflow listener decides on its own shard, and one that holds it
+// pending writes nothing.
 func (h *handler) redeliver(
 	ctx context.Context,
 	namespaceID, ns string,
@@ -247,11 +263,11 @@ func (h *handler) redeliver(
 				int64(folded), metrics.NamespaceTag(ns), callbackKindTag)
 		}
 	}
-	if !read.callbacksNeed && read.listeners > 0 {
+	if holders := read.listeners - len(read.workflows); !read.callbacksNeed && holders > 0 {
 		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
-			int64(read.listeners), metrics.NamespaceTag(ns), callbackKindTag)
+			int64(holders), metrics.NamespaceTag(ns), callbackKindTag)
 	}
-	return nil
+	return h.deliverer.deliverAll(ctx, ref, ns, read.workflows, n)
 }
 
 // notify accepts the notification on the channel, creating it if absent. A
@@ -485,7 +501,152 @@ func (h *handler) DescribeChannel(
 	}, nil
 }
 
-var callbackKindTag = metrics.StringTag("listener_kind", channel.ListenerKindCallback)
+// RegisterWorkflowListener records a workflow run as a listener on the
+// channel's shard, creating the channel if it is absent.
+//
+// Internal. Called by the completion of the Workflow Task that subscribed,
+// which runs on the workflow's shard and cannot reach the channel itself.
+func (h *handler) RegisterWorkflowListener(
+	ctx context.Context,
+	req *channelpb.RegisterWorkflowListenerRequest,
+) (*channelpb.RegisterWorkflowListenerResponse, error) {
+	in := req.GetFrontendRequest()
+	ns := h.namespaceName(req.GetNamespaceId())
+	ctx = withCallerInfo(ctx, ns)
+	if err := channel.CheckChannelName(in.GetChannel(), 0); err != nil {
+		return nil, err
+	}
+	reg := channel.WorkflowRegistration{
+		NamespaceID:         req.GetNamespaceId(),
+		WorkflowID:          in.GetWorkflowId(),
+		RunID:               in.GetRunId(),
+		FirstExecutionRunID: in.GetFirstExecutionRunId(),
+		Limits:              h.limitsFor(ns),
+	}
+	latest, err := upsert(ctx, req.GetNamespaceId(), in.GetChannel(),
+		func(c *channel.Channel, mctx chasm.MutableContext) (*channelpb.Notification, error) {
+			return c.RegisterWorkflowListener(mctx, reg)
+		})
+	if err != nil {
+		return nil, err
+	}
+	return &channelpb.RegisterWorkflowListenerResponse{
+		FrontendResponse: &channelpb.RegisterWorkflowListenerOutput{Latest: latest},
+	}, nil
+}
+
+// listenerProbe is what one run says about a channel: whether it is still
+// open, whether it subscribed, and whether it already has this counter.
+type listenerProbe struct {
+	runID      string
+	closed     bool
+	subscribed bool
+	duplicate  bool
+}
+
+// probeListener reads a run without touching it. A run that is gone, or that
+// never had a Workflow component and so cannot have subscribed, reads as
+// closed: the fan-out only needs to know whether delivering can achieve
+// anything.
+func (h *handler) probeListener(
+	ctx context.Context,
+	namespaceID, workflowID, runID string,
+	n *channelpb.Notification,
+) (listenerProbe, error) {
+	probe, err := chasm.ReadComponent(ctx, workflowRef(namespaceID, workflowID, runID),
+		func(wf *chasmworkflow.Workflow, cctx chasm.Context, _ struct{}) (listenerProbe, error) {
+			p := listenerProbe{
+				runID:      cctx.ExecutionKey().RunID,
+				closed:     !cctx.ExecutionInfo().CloseTime.IsZero(),
+				subscribed: wf.SubscribedToChannel(n.GetChannel()),
+			}
+			if p.subscribed {
+				p.duplicate = wf.ChannelNotificationIsDuplicate(cctx, n.GetChannel(), n.GetCounter())
+			}
+			return p, nil
+		}, struct{}{})
+	if executionAbsent(err) {
+		return listenerProbe{runID: runID, closed: true}, nil
+	}
+	return probe, err
+}
+
+func (h *handler) accept(
+	ctx context.Context,
+	namespaceID, workflowID, runID string,
+	n *channelpb.Notification,
+) (bool, error) {
+	folded, _, err := chasm.UpdateComponent(ctx, workflowRef(namespaceID, workflowID, runID),
+		(*chasmworkflow.Workflow).AcceptChannelNotification, n)
+	return folded, err
+}
+
+// DeliverChannelNotification hands a notification to one workflow listener,
+// on the shard that owns it.
+//
+// Internal. Called by the channel's fan-out, which runs on the channel's shard.
+// The channel has a run on record, and a run ends: if it has, the current run
+// is asked instead, and the answer tells the channel to re-key the listener to
+// it or, when no run listens, to drop it.
+func (h *handler) DeliverChannelNotification(
+	ctx context.Context,
+	req *channelpb.DeliverChannelNotificationRequest,
+) (*channelpb.DeliverChannelNotificationResponse, error) {
+	in := req.GetFrontendRequest()
+	ns := h.namespaceName(req.GetNamespaceId())
+	ctx = withCallerInfo(ctx, ns)
+	namespaceID, workflowID, n := req.GetNamespaceId(), in.GetWorkflowId(), in.GetNotification()
+	if n.GetChannel() == "" || n.GetCounter() <= 0 {
+		return nil, serviceerror.NewInvalidArgument("notification needs a channel and a counter")
+	}
+
+	out := &channelpb.DeliverChannelNotificationOutput{}
+	target, err := h.probeListener(ctx, namespaceID, workflowID, in.GetRunId(), n)
+	if err != nil {
+		return nil, err
+	}
+	if target.closed {
+		pinned := target.runID
+		if target, err = h.probeListener(ctx, namespaceID, workflowID, "", n); err != nil {
+			return nil, err
+		}
+		if target.closed || target.runID == pinned || !target.subscribed {
+			out.ListenerClosed = true
+			return &channelpb.DeliverChannelNotificationResponse{FrontendResponse: out}, nil
+		}
+		out.SuccessorRunId = target.runID
+	} else if !target.subscribed {
+		out.ListenerClosed = true
+		return &channelpb.DeliverChannelNotificationResponse{FrontendResponse: out}, nil
+	}
+
+	// A duplicate leaves the run exactly as it was: reaching the component
+	// mutably is already a write. It is a fold that changed nothing.
+	if target.duplicate {
+		out.Duplicate = true
+		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
+			1, metrics.NamespaceTag(ns), workflowKindTag)
+		return &channelpb.DeliverChannelNotificationResponse{FrontendResponse: out}, nil
+	}
+	folded, err := h.accept(ctx, namespaceID, workflowID, target.runID, n)
+	if err != nil {
+		return nil, err
+	}
+	out.Folded = folded
+	tag := metrics.NamespaceTag(ns)
+	metrics.ChannelNotificationsDelivered.With(h.metricsHandler).Record(
+		1, tag, workflowKindTag)
+	if folded {
+		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
+			1, tag, workflowKindTag)
+	}
+	return &channelpb.DeliverChannelNotificationResponse{FrontendResponse: out}, nil
+}
+
+var (
+	workflowKindTag = metrics.StringTag("listener_kind", channel.ListenerKindWorkflow)
+	callbackKindTag = metrics.StringTag("listener_kind", channel.ListenerKindCallback)
+)
 
 // listenerKindTag derives the kind tag from the listener's callback variant.
 func listenerKindTag(cb *commonpb.Callback) metrics.Tag {
