@@ -99,6 +99,28 @@ func TestLinkedNotifyReachesTheOwnerInOneWrite(t *testing.T) {
 	require.Equal(t, "owner", polled[0].GetLinkedTo().GetBusinessId())
 }
 
+// A notify for the listeners alone joins the ring and reaches the callbacks,
+// and leaves the owner with nothing pending: the channel a stream drives
+// must not wake the run for its own stream.
+func TestLinkedNotifyListenersLeavesTheOwnerAlone(t *testing.T) {
+	c, mctx := newTestLinkedChannel(t)
+
+	result, err := c.NotifyLinkedListeners(mctx, note(1), Limits{})
+	require.NoError(t, err)
+	require.True(t, result.Advanced)
+	require.True(t, result.OwnerHeld, "nothing for the owner to take")
+	require.False(t, c.HasOwnerPending())
+	require.Equal(t, int64(1), c.LatestCounter())
+	polled, err := c.Poll(mctx, PollRequest{})
+	require.NoError(t, err)
+	require.Equal(t, []int64{1}, counters(polled))
+	require.Equal(t, "owner", polled[0].GetLinkedTo().GetBusinessId())
+
+	_, err = c.NotifyLinked(mctx, note(2), Limits{})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), c.State.GetOwnerPending().GetCounter(), "a plain notify still wakes")
+}
+
 // The owner folds like a subscribed listener: a repeat at or below what it
 // holds pending, or what its unstarted task carries, changes nothing; a
 // higher counter replaces the pending entry; and once the task has started

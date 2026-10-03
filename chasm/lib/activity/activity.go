@@ -83,9 +83,10 @@ type Activity struct {
 	Streams chasm.Map[string, *stream.Stream]
 
 	// Channels linked to this activity, keyed by channel name. Standalone
-	// only. The activity is not a listener of its own channels, since
-	// nothing like a Workflow Task would carry a notification to it, so they
-	// serve callbacks and pollers.
+	// only: an activity a workflow scheduled announces its streams on the
+	// workflow's channels. The activity is not a listener of its own
+	// channels, since nothing like a Workflow Task would carry a notification
+	// to it, so they serve callbacks and pollers.
 	LinkedChannels chasm.Map[string, *channel.Channel]
 }
 
@@ -312,7 +313,7 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	if err := applyFn(ctx); err != nil {
 		return err
 	}
-	if err := a.closeOwnedStreams(ctx); err != nil {
+	if err := a.closeOwnedStreams(ctx, a.streamLimits(ctx)); err != nil {
 		return err
 	}
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)

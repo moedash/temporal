@@ -906,7 +906,8 @@ func (ms *MutableStateImpl) closeActivityStreams(activityID string) error {
 	if err != nil {
 		return err
 	}
-	return wf.CloseActivityStreams(mutableCtx, activityID)
+	return wf.CloseActivityStreams(mutableCtx, activityID,
+		ms.config.Stream.LimitsFor(ms.GetNamespaceEntry().Name().String()))
 }
 
 // deleteTerminalActivity deletes an activity that reached a terminal status,

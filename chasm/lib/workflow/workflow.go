@@ -917,5 +917,9 @@ func (w *Workflow) AppendToOwnedStream(
 	key string,
 	req stream.AddMessagesRequest,
 ) (stream.AddMessagesResult, error) {
-	return w.ownedStreams().Append(mctx, key, req)
+	result, err := w.ownedStreams().Append(mctx, key, req)
+	if err != nil || result.Deduplicated {
+		return result, err
+	}
+	return result, w.notifyStreamChannel(mctx, key, w.ownedStreams().Get(mctx, key), req.Limits)
 }

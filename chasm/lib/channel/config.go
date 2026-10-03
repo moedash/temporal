@@ -92,7 +92,9 @@ ResourceExhausted.`,
 		true,
 		`Whether the public channel calls honour execution and reach the channel linked to
 that workflow or activity. Off, they ignore it and reach the independent channel of
-the name, so DescribeChannel on an untouched linked name answers NotFound.`,
+the name, so DescribeChannel on an untouched linked name answers NotFound. The
+channels a native stream drives in its owner's state are not affected: they are
+written by the server, not addressed through these calls.`,
 	)
 )
 
