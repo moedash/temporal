@@ -88,7 +88,11 @@ func (l LinkedChannels) GetOrNew(
 		*l.Channels = make(chasm.Map[string, *Channel])
 	}
 	c := NewLinkedChannel(mctx)
-	(*l.Channels)[name] = chasm.NewComponentField(mctx, c)
+	// Detached from the owner's lifecycle so a post handed over in the
+	// transaction that closes the owner still goes out. The close of a
+	// stream is the last change its channel announces, and it lands as the
+	// owner ends. The service still refuses calls on a closed owner.
+	(*l.Channels)[name] = chasm.NewComponentField(mctx, c, chasm.ComponentFieldDetached())
 	return c, nil
 }
 

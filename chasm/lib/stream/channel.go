@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
@@ -24,17 +25,38 @@ func ChannelName(streamID string) string {
 	return ChannelNamePrefix + streamID
 }
 
-// OwnedChannelName is the channel, linked to the owning run, that a stream a
-// workflow owns notifies.
+// OwnedChannelName is the channel, linked to the owning execution, that a
+// stream a workflow or a standalone activity owns notifies.
 func OwnedChannelName(name string) string {
 	return ChannelNamePrefix + name
 }
 
-// ActivityChannelName is the channel a stream an activity owns notifies: linked
-// to the workflow run for an activity a workflow scheduled, independent for a
-// standalone activity, which has no linked channels of its own.
+// ActivityChannelName is the channel, linked to the workflow run, that a
+// stream an activity of that workflow owns notifies. The activity has no
+// state of its own to hold a channel, so the name carries the activity id.
 func ActivityChannelName(activityID, name string) string {
 	return ChannelNamePrefix + activityID + "/" + name
+}
+
+// OwnedChannelAddress is where a stream an execution owns announces its
+// changes: the channel's name and the execution the channel is linked to. A
+// client derives it from the stream's owner alone, so the server and the
+// SDKs agree on it without asking.
+func OwnedChannelAddress(owner *streamlib.StreamOwner, name string) (string, *commonpb.Execution) {
+	linkedTo := &commonpb.Execution{
+		Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
+		BusinessId: owner.GetId(),
+		RunId:      owner.GetRunId(),
+	}
+	switch owner.GetKind() {
+	case streamlib.STREAM_OWNER_KIND_WORKFLOW_ACTIVITY:
+		return ActivityChannelName(owner.GetActivityId(), name), linkedTo
+	case streamlib.STREAM_OWNER_KIND_ACTIVITY:
+		linkedTo.Type = enumspb.EXECUTION_TYPE_ACTIVITY
+		return OwnedChannelName(name), linkedTo
+	default:
+		return OwnedChannelName(name), linkedTo
+	}
 }
 
 // ClosedMetadataKey is set, to true, on the notification for a close.
@@ -72,9 +94,8 @@ func EncodePosition(run string, offset int64) []byte {
 }
 
 // ScheduleChannelNotify arms a task to hand the latest change to the stream's
-// channel, for a stream whose channel is an execution of its own: a
-// standalone stream's, or that of a stream a standalone activity owns. One
-// task is outstanding at a time and reads the latest change when it runs.
+// channel, for a standalone stream, whose channel is an execution of its own.
+// One task is outstanding at a time and reads the latest change when it runs.
 // Tasks of one execution may run in any order, and a change arriving at the
 // channel below one it already holds is folded away, so a task per change
 // would lose the earlier ones from the ring; one task at a time keeps the

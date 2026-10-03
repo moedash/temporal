@@ -16,6 +16,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/channel"
+	"go.temporal.io/server/chasm/lib/stream"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -163,6 +165,49 @@ func TestActivityChannelCallbackListener(t *testing.T) {
 	desc, err = c.describeLinked(activityOwner(activityID, ""), name)
 	require.NoError(t, err)
 	require.Empty(t, desc.GetListeners())
+}
+
+// A stream a standalone activity owns notifies the channel of the stream's
+// name linked to the activity, one notification per append, and the
+// activity's completion closes the stream, which is the last change. The
+// channel goes with the activity, so the close reaches a callback registered
+// before it and no poller after it.
+func TestActivityChannelStreamNotifies(t *testing.T) {
+	c, s := newStreamChannelEnv(t)
+	activityID := "activity-stream-" + uuid.NewString()
+	runID, task := startStandaloneActivity(t, c, s, activityID)
+	owner := &streamlib.StreamOwner{Kind: streamlib.STREAM_OWNER_KIND_ACTIVITY, Id: activityID}
+	name, linkedTo := stream.OwnedChannelAddress(owner, "output")
+	require.Equal(t, stream.OwnedChannelName("output"), name)
+	requireActivityLinkedTo(t, linkedTo, activityID, "")
+	recorder, url := newCallbackRecorder(t)
+	c.registerCallback(name, url, linkedTo)
+
+	_, err := s.addOwned(t, owner, "output", &streamlib.AddWorkflowMessagesInput{
+		Records: attemptRecords(1, "token one", "token two"),
+	})
+	require.NoError(t, err)
+	polled, err := c.pollLinked(linkedTo, name, 0, 0, 0)
+	require.NoError(t, err)
+	require.Len(t, polled.GetNotifications(), 1)
+	requireChange(t, polled.GetNotifications()[0], name, runID, 1, 2, false)
+	requireActivityLinkedTo(t, polled.GetNotifications()[0].GetLinkedTo(), activityID, runID)
+	awaitCounters(t, recorder, "1")
+
+	completeActivityAttempt(t, c.env, s, task)
+	awaitCounters(t, recorder, "1", "2")
+	recorder.mu.Lock()
+	closeBody := recorder.bodies[1]
+	recorder.mu.Unlock()
+	metadata, _ := closeBody["metadata"].(map[string]any)
+	require.Contains(t, metadata, stream.ClosedMetadataKey, "the close is the last change")
+	linked, _ := closeBody["linkedTo"].(map[string]any)
+	require.Equal(t, "EXECUTION_TYPE_ACTIVITY", linked["type"])
+	await.Require(c.ctx(), t, func(t *await.T) {
+		_, err := c.pollLinked(linkedTo, name, 1, 0, 0)
+		var notFound *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFound, "the channel went with the activity")
+	}, 20*time.Second, 50*time.Millisecond)
 }
 
 // The HTTP activity route binds the business id alone and cannot set the

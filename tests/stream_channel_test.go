@@ -262,8 +262,9 @@ func TestStreamChannelWorkflowActivityStream(t *testing.T) {
 	requireChange(t, resp.GetNotifications()[0], name, runID, 2, 1, true)
 }
 
-// A stream a standalone activity owns has no linked channel to live in, so
-// it notifies the independent channel named by the activity and the stream.
+// A stream a standalone activity owns notifies the channel of the stream's
+// name linked to the activity. The activity cases in activity_channel_test.go
+// read it. Here the derived address is what a client would compute.
 func TestStreamChannelStandaloneActivityStream(t *testing.T) {
 	c, s := newStreamChannelEnv(t)
 	activityID := "stream-channel-saa-" + uuid.NewString()
@@ -279,15 +280,17 @@ func TestStreamChannelStandaloneActivityStream(t *testing.T) {
 	require.NoError(t, err)
 	pollActivityTask(t, c.env, s, activityID+"-tq")
 	owner := &streamlib.StreamOwner{Kind: streamlib.STREAM_OWNER_KIND_ACTIVITY, Id: activityID}
-	name := stream.ActivityChannelName(activityID, "output")
+	name, linkedTo := stream.OwnedChannelAddress(owner, "output")
 
 	_, err = s.addOwned(t, owner, "output", &streamlib.AddWorkflowMessagesInput{
 		Records: attemptRecords(1, "token one", "token two"),
 	})
 	require.NoError(t, err)
-	changes := c.awaitIndependent(name, 0, 1)
-	require.Len(t, changes, 1)
-	requireChange(t, changes[0], name, started.GetRunId(), 1, 2, false)
+	resp, err := c.pollLinked(linkedTo, name, 0, 0, 0)
+	require.NoError(t, err)
+	require.Len(t, resp.GetNotifications(), 1)
+	requireChange(t, resp.GetNotifications()[0], name, started.GetRunId(), 1, 2, false)
+	require.Equal(t, activityID, resp.GetNotifications()[0].GetLinkedTo().GetBusinessId())
 }
 
 // With the switch off, streams create no channel state at all.

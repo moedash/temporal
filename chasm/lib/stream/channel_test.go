@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/payload"
@@ -81,4 +82,33 @@ func TestStreamScheduleChannelNotify(t *testing.T) {
 	require.Equal(t, "s:2", string(n.GetPosition()))
 	s.ScheduleChannelNotify(ctx, "stream/s", "s", Limits{})
 	require.Len(t, ctx.Tasks, 2, "the flag is down, so the next change arms a task")
+}
+
+// The channel a stream announces on follows from its owner alone: a workflow's
+// own stream and a standalone activity's are linked to that execution under
+// the stream's name, a workflow activity's is linked to the workflow under the
+// activity's and the stream's names.
+func TestOwnedChannelAddress(t *testing.T) {
+	name, linkedTo := OwnedChannelAddress(&streamlib.StreamOwner{
+		Kind: streamlib.STREAM_OWNER_KIND_WORKFLOW, Id: "wf", RunId: "run-1",
+	}, "output")
+	require.Equal(t, "stream/output", name)
+	require.Equal(t, enumspb.EXECUTION_TYPE_WORKFLOW, linkedTo.GetType())
+	require.Equal(t, "wf", linkedTo.GetBusinessId())
+	require.Equal(t, "run-1", linkedTo.GetRunId())
+
+	name, linkedTo = OwnedChannelAddress(&streamlib.StreamOwner{
+		Kind: streamlib.STREAM_OWNER_KIND_WORKFLOW_ACTIVITY, Id: "wf", ActivityId: "model-call",
+	}, "output")
+	require.Equal(t, "stream/model-call/output", name)
+	require.Equal(t, enumspb.EXECUTION_TYPE_WORKFLOW, linkedTo.GetType())
+	require.Equal(t, "wf", linkedTo.GetBusinessId())
+	require.Empty(t, linkedTo.GetRunId())
+
+	name, linkedTo = OwnedChannelAddress(&streamlib.StreamOwner{
+		Kind: streamlib.STREAM_OWNER_KIND_ACTIVITY, Id: "act",
+	}, "output")
+	require.Equal(t, "stream/output", name)
+	require.Equal(t, enumspb.EXECUTION_TYPE_ACTIVITY, linkedTo.GetType())
+	require.Equal(t, "act", linkedTo.GetBusinessId())
 }

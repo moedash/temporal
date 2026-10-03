@@ -307,9 +307,13 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 }
 
 // RecordCompleted applies the provided function to record activity completion.
-// For standalone activities, it also triggers any registered completion callbacks.
+// For standalone activities, it also closes the streams the activity owns and
+// triggers any registered completion callbacks.
 func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
 	if err := applyFn(ctx); err != nil {
+		return err
+	}
+	if err := a.closeOwnedStreams(ctx, a.streamLimits(ctx)); err != nil {
 		return err
 	}
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
