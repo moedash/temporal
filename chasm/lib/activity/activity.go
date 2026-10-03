@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/channel"
+	"go.temporal.io/server/chasm/lib/stream"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
@@ -75,6 +76,11 @@ type Activity struct {
 	// Callbacks holds completion callbacks to be invoked when this standalone activity reaches a terminal state. Nil
 	// for workflow-embedded activities as the workflow handles its own callbacks.
 	Callbacks chasm.Map[string, *callback.Callback]
+
+	// Streams this activity owns, keyed by stream name. One map per execution
+	// rather than per attempt, so a retry keeps writing to the stream its
+	// earlier attempts wrote to.
+	Streams chasm.Map[string, *stream.Stream]
 
 	// Channels linked to this activity, keyed by channel name. Standalone
 	// only. The activity is not a listener of its own channels, since
@@ -300,9 +306,13 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 }
 
 // RecordCompleted applies the provided function to record activity completion.
-// For standalone activities, it also triggers any registered completion callbacks.
+// For standalone activities, it also closes the streams the activity owns and
+// triggers any registered completion callbacks.
 func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
 	if err := applyFn(ctx); err != nil {
+		return err
+	}
+	if err := a.closeOwnedStreams(ctx); err != nil {
 		return err
 	}
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
