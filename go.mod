@@ -236,3 +236,5 @@ require (
 )
 
 tool golang.org/x/perf/cmd/benchstat
+
+replace go.temporal.io/api => github.com/moedash/api-go v1.63.6-0.20261003080812-cc8cb1b67d9a

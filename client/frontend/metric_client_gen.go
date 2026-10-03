@@ -275,6 +275,20 @@ func (c *metricClient) DescribeBatchOperation(
 	return c.client.DescribeBatchOperation(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeChannel(
+	ctx context.Context,
+	request *workflowservice.DescribeChannelRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DescribeChannelResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDescribeChannel")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeChannel(ctx, request, opts...)
+}
+
 func (c *metricClient) DescribeDeployment(
 	ctx context.Context,
 	request *workflowservice.DescribeDeploymentRequest,
@@ -793,6 +807,20 @@ func (c *metricClient) ListWorkflowRules(
 	return c.client.ListWorkflowRules(ctx, request, opts...)
 }
 
+func (c *metricClient) NotifyChannel(
+	ctx context.Context,
+	request *workflowservice.NotifyChannelRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.NotifyChannelResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientNotifyChannel")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.NotifyChannel(ctx, request, opts...)
+}
+
 func (c *metricClient) PatchSchedule(
 	ctx context.Context,
 	request *workflowservice.PatchScheduleRequest,
@@ -875,6 +903,20 @@ func (c *metricClient) PollActivityTaskQueue(
 	}()
 
 	return c.client.PollActivityTaskQueue(ctx, request, opts...)
+}
+
+func (c *metricClient) PollChannel(
+	ctx context.Context,
+	request *workflowservice.PollChannelRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PollChannelResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPollChannel")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PollChannel(ctx, request, opts...)
 }
 
 func (c *metricClient) PollNexusOperationExecution(
@@ -1001,6 +1043,20 @@ func (c *metricClient) RecordWorkerHeartbeat(
 	}()
 
 	return c.client.RecordWorkerHeartbeat(ctx, request, opts...)
+}
+
+func (c *metricClient) RegisterChannelListener(
+	ctx context.Context,
+	request *workflowservice.RegisterChannelListenerRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.RegisterChannelListenerResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientRegisterChannelListener")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.RegisterChannelListener(ctx, request, opts...)
 }
 
 func (c *metricClient) RegisterNamespace(
@@ -1547,6 +1603,20 @@ func (c *metricClient) UnpauseWorkflowExecution(
 	}()
 
 	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) UnregisterChannelListener(
+	ctx context.Context,
+	request *workflowservice.UnregisterChannelListenerRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.UnregisterChannelListenerResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientUnregisterChannelListener")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UnregisterChannelListener(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateActivityExecutionOptions(
