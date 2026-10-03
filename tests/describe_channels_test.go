@@ -175,7 +175,7 @@ func TestDescribeWorkflowLinkedChannel(t *testing.T) {
 	c.mustNotifyLinked(id, name, 2)
 	info = c.channelSubscription(id, name, kindLinked)
 	requireStanding(t, info, 2, 2, 1)
-	require.Equal(t, id, info.GetPendingNotification().GetLinkedTo().GetWorkflowId())
+	require.Equal(t, id, info.GetPendingNotification().GetLinkedTo().GetBusinessId())
 	require.Equal(t, runID, info.GetPendingNotification().GetLinkedTo().GetRunId())
 	require.Equal(t, int32(2), info.GetRetainedCount())
 	require.Equal(t, int64(2), info.GetAcceptedCount())
@@ -204,9 +204,9 @@ func TestDescribeWorkflowLinkedChannel(t *testing.T) {
 			Callback: &commonpb.Callback{Variant: &commonpb.Callback_Nexus_{
 				Nexus: &commonpb.Callback_Nexus{Url: url},
 			}},
-			RequestId:         uuid.NewString(),
-			Identity:          "tester",
-			WorkflowExecution: linkedOwner(id, ""),
+			RequestId: uuid.NewString(),
+			Identity:  "tester",
+			Execution: linkedOwner(id, ""),
 		})
 	require.NoError(t, err)
 	require.Equal(t, int32(1), c.channelSubscription(id, name, kindLinked).GetListenerCount())
