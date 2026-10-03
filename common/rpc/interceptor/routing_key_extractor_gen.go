@@ -26,6 +26,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetActivityId()}
 	case *workflowservice.DescribeBatchOperationRequest:
 		return namespace.RoutingKey{ID: r.GetJobId()}
+	case *workflowservice.DescribeChannelRequest:
+		return namespace.RoutingKey{ID: r.GetChannel()}
 	case *workflowservice.DescribeScheduleRequest:
 		return namespace.RoutingKey{ID: r.GetScheduleId()}
 	case *workflowservice.DescribeTaskQueueRequest:
@@ -50,6 +52,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetScheduleId()}
 	case *workflowservice.ListTaskQueuePartitionsRequest:
 		return namespace.RoutingKey{ID: r.GetTaskQueue().GetName()}
+	case *workflowservice.NotifyChannelRequest:
+		return namespace.RoutingKey{ID: r.GetNotification().GetChannel()}
 	case *workflowservice.PatchScheduleRequest:
 		return namespace.RoutingKey{ID: r.GetScheduleId()}
 	case *workflowservice.PauseActivityExecutionRequest:
@@ -62,6 +66,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetActivityId()}
 	case *workflowservice.PollActivityTaskQueueRequest:
 		return namespace.RoutingKey{ID: r.GetPollerGroupId(), Strategy: namespace.RoutingStrategyPollerGroup}
+	case *workflowservice.PollChannelRequest:
+		return namespace.RoutingKey{ID: r.GetChannel()}
 	case *workflowservice.PollNexusTaskQueueRequest:
 		return namespace.RoutingKey{ID: r.GetPollerGroupId(), Strategy: namespace.RoutingStrategyPollerGroup}
 	case *workflowservice.PollWorkflowExecutionTimeSkippingRequest:
@@ -78,6 +84,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
 	case *workflowservice.RecordWorkerHeartbeatRequest:
 		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
+	case *workflowservice.RegisterChannelListenerRequest:
+		return namespace.RoutingKey{ID: r.GetChannel()}
 	case *workflowservice.RequestCancelActivityExecutionRequest:
 		return namespace.RoutingKey{ID: r.GetActivityId()}
 	case *workflowservice.RequestCancelWorkflowExecutionRequest:
@@ -142,6 +150,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetExecution().GetWorkflowId()}
 	case *workflowservice.UnpauseWorkflowExecutionRequest:
 		return namespace.RoutingKey{ID: r.GetWorkflowId()}
+	case *workflowservice.UnregisterChannelListenerRequest:
+		return namespace.RoutingKey{ID: r.GetChannel()}
 	case *workflowservice.UpdateActivityExecutionOptionsRequest:
 		return namespace.RoutingKey{ID: routingIDFromResourceID(r.GetResourceId())}
 	case *workflowservice.UpdateActivityOptionsRequest:
