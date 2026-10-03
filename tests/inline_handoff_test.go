@@ -15,6 +15,7 @@ import (
 // handed back with the response when the worker asks for it, the way a task
 // for a buffered Signal is, so scheduled and started are one write. Without
 // the request the task still goes through matching.
+
 // pendingTaskState is the state describe reports for the run's pending task.
 func (c *channelTestEnv) pendingTaskState(id string) enumspb.PendingWorkflowTaskState {
 	c.t.Helper()
