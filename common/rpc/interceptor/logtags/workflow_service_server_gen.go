@@ -100,10 +100,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.DescribeBatchOperationResponse:
 		return nil
 	case *workflowservice.DescribeChannelRequest:
-		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
-		}
+		return nil
 	case *workflowservice.DescribeChannelResponse:
 		return nil
 	case *workflowservice.DescribeDeploymentRequest:
@@ -269,10 +266,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.ListWorkflowRulesResponse:
 		return nil
 	case *workflowservice.NotifyChannelRequest:
-		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
-		}
+		return nil
 	case *workflowservice.NotifyChannelResponse:
 		return nil
 	case *workflowservice.PatchScheduleRequest:
@@ -318,10 +312,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
 		}
 	case *workflowservice.PollChannelRequest:
-		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
-		}
+		return nil
 	case *workflowservice.PollChannelResponse:
 		return nil
 	case *workflowservice.PollNexusOperationExecutionRequest:
@@ -385,10 +376,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.RecordWorkerHeartbeatResponse:
 		return nil
 	case *workflowservice.RegisterChannelListenerRequest:
-		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
-		}
+		return nil
 	case *workflowservice.RegisterChannelListenerResponse:
 		return nil
 	case *workflowservice.RegisterNamespaceRequest:
@@ -625,10 +613,7 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.UnpauseWorkflowExecutionResponse:
 		return nil
 	case *workflowservice.UnregisterChannelListenerRequest:
-		return []tag.Tag{
-			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
-			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
-		}
+		return nil
 	case *workflowservice.UnregisterChannelListenerResponse:
 		return nil
 	case *workflowservice.UpdateActivityExecutionOptionsRequest:
