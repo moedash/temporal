@@ -20,11 +20,12 @@ const LongPollBuffer = 3 * time.Second
 // The defaults below are also what component code falls back on when it is
 // driven without a config, as the unit tests do.
 const (
-	DefaultMaxListeners          = 1000
-	DefaultRetainedNotifications = 1000
-	DefaultMaxMetadataBytes      = 2048
-	DefaultRetention             = time.Hour
-	DefaultNotifyPerSecond       = 10000
+	DefaultMaxListeners                = 1000
+	DefaultRetainedNotifications       = 1000
+	DefaultMaxMetadataBytes            = 2048
+	DefaultRetention                   = time.Hour
+	DefaultNotifyPerSecond             = 10000
+	DefaultMaxSubscriptionsPerWorkflow = 32
 )
 
 var (
@@ -56,6 +57,12 @@ poll before it is deleted with what it retained.`,
 		DefaultNotifyPerSecond,
 		`Most NotifyChannel calls a namespace may make per second on one history host. Zero
 means no limit.`,
+	)
+	MaxSubscriptionsPerWorkflowSetting = dynamicconfig.NewNamespaceIntSetting(
+		"channel.maxSubscriptionsPerWorkflow",
+		DefaultMaxSubscriptionsPerWorkflow,
+		`Most notification channels one workflow run subscribes to. A subscribe command past
+it fails the workflow task.`,
 	)
 )
 
@@ -97,20 +104,22 @@ func (l Limits) withDefaults() Limits {
 }
 
 type Config struct {
-	MaxListeners          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RetainedNotifications dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxMetadataBytes      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	Retention             dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	NotifyPerSecond       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxListeners                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RetainedNotifications       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxMetadataBytes            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	Retention                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	NotifyPerSecond             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxSubscriptionsPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		MaxListeners:          MaxListenersSetting.Get(dc),
-		RetainedNotifications: RetainedNotificationsSetting.Get(dc),
-		MaxMetadataBytes:      MaxMetadataBytesSetting.Get(dc),
-		Retention:             RetentionSetting.Get(dc),
-		NotifyPerSecond:       NotifyPerSecondSetting.Get(dc),
+		MaxListeners:                MaxListenersSetting.Get(dc),
+		RetainedNotifications:       RetainedNotificationsSetting.Get(dc),
+		MaxMetadataBytes:            MaxMetadataBytesSetting.Get(dc),
+		Retention:                   RetentionSetting.Get(dc),
+		NotifyPerSecond:             NotifyPerSecondSetting.Get(dc),
+		MaxSubscriptionsPerWorkflow: MaxSubscriptionsPerWorkflowSetting.Get(dc),
 	}
 }
 
