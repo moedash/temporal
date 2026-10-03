@@ -704,6 +704,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 		"",
 		nil,
 		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		nil,
 	)
 	s.Equal(event, s.flush())
 	protorequire.ProtoEqual(s.T(), &historypb.HistoryEvent{
