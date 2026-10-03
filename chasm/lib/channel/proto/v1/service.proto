@@ -9,7 +9,8 @@ import "temporal/server/api/routing/v1/extension.proto";
 option go_package = "go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpb";
 
 // ChannelService is served by History. The frontend reaches it for the public
-// channel calls.
+// channel calls, and History reaches it to cross from a channel's shard to a
+// listener's shard and back.
 service ChannelService {
   rpc NotifyChannel(NotifyChannelRequest) returns (NotifyChannelResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.notification.channel";
@@ -33,6 +34,19 @@ service ChannelService {
 
   rpc DescribeChannel(DescribeChannelRequest) returns (DescribeChannelResponse) {
     option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.channel";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // Internal. The completion of a Workflow Task that subscribed calls this on
+  // the channel's shard, creating the channel if it is absent.
+  rpc RegisterWorkflowListener(RegisterWorkflowListenerRequest) returns (RegisterWorkflowListenerResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.channel";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  // Internal. The channel's fan-out calls this on the listener's shard.
+  rpc DeliverChannelNotification(DeliverChannelNotificationRequest) returns (DeliverChannelNotificationResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.workflow_id";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 }

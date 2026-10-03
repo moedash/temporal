@@ -132,3 +132,59 @@ message DescribeChannelRequest {
 message DescribeChannelResponse {
   DescribeChannelOutput frontend_response = 1;
 }
+
+message RegisterWorkflowListenerInput {
+  string namespace = 1;
+  string channel = 2;
+  string workflow_id = 3;
+  string run_id = 4;
+  string first_execution_run_id = 5;
+}
+
+message RegisterWorkflowListenerOutput {
+  // The channel's latest notification, when the run is new to the channel.
+  // The run takes it as pending, so a write that landed before the run was
+  // registered still wakes it.
+  Notification latest = 1;
+}
+
+message RegisterWorkflowListenerRequest {
+  string namespace_id = 1;
+  RegisterWorkflowListenerInput frontend_request = 2;
+}
+
+message RegisterWorkflowListenerResponse {
+  RegisterWorkflowListenerOutput frontend_response = 1;
+}
+
+message DeliverChannelNotificationInput {
+  string namespace = 1;
+  string workflow_id = 2;
+  // The run the channel has on record. If it is closed, the current run is
+  // asked instead.
+  string run_id = 3;
+  Notification notification = 4;
+}
+
+message DeliverChannelNotificationOutput {
+  // No run of the workflow listens to the channel any more, so the channel
+  // drops the listener.
+  bool listener_closed = 1;
+  // The run on record is closed and the current run listens, so the channel
+  // re-keys the listener to it.
+  string successor_run_id = 2;
+  // The notification joined one the run had not seen yet.
+  bool folded = 3;
+  // The run holds a pending notification at this counter or above, so
+  // nothing changed.
+  bool duplicate = 4;
+}
+
+message DeliverChannelNotificationRequest {
+  string namespace_id = 1;
+  DeliverChannelNotificationInput frontend_request = 2;
+}
+
+message DeliverChannelNotificationResponse {
+  DeliverChannelNotificationOutput frontend_response = 1;
+}
