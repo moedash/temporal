@@ -39,7 +39,7 @@ type Notification struct {
 	// The execution a linked channel belongs to, a workflow or a standalone
 	// activity, and the run that received the notification. Empty for an
 	// independent channel.
-	LinkedTo      *v1.Execution `protobuf:"bytes,6,opt,name=linked_to,json=linkedTo,proto3" json:"linked_to,omitempty"`
+	LinkedTo      *v1.Execution `protobuf:"bytes,5,opt,name=linked_to,json=linkedTo,proto3" json:"linked_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -323,16 +323,16 @@ var File_temporal_server_chasm_lib_channel_proto_v1_message_proto protoreflect.F
 
 const file_temporal_server_chasm_lib_channel_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"8temporal/server/chasm/lib/channel/proto/v1/message.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\xe6\x02\n" +
+	"8temporal/server/chasm/lib/channel/proto/v1/message.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\xe0\x02\n" +
 	"\fNotification\x12\x18\n" +
 	"\achannel\x18\x01 \x01(\tR\achannel\x12\x1a\n" +
 	"\bposition\x18\x02 \x01(\fR\bposition\x12\x18\n" +
 	"\acounter\x18\x03 \x01(\x03R\acounter\x12b\n" +
 	"\bmetadata\x18\x04 \x03(\v2F.temporal.server.chasm.lib.channel.proto.v1.Notification.MetadataEntryR\bmetadata\x12>\n" +
-	"\tlinked_to\x18\x06 \x01(\v2!.temporal.api.common.v1.ExecutionR\blinkedTo\x1a\\\n" +
+	"\tlinked_to\x18\x05 \x01(\v2!.temporal.api.common.v1.ExecutionR\blinkedTo\x1a\\\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
-	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01J\x04\b\x05\x10\x06\"\xfa\x04\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\"\xfa\x04\n" +
 	"\bListener\x12\x1f\n" +
 	"\vlistener_id\x18\x01 \x01(\tR\n" +
 	"listenerId\x12<\n" +

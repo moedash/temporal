@@ -34,7 +34,7 @@ type NotifyChannelInput struct {
 	// Set for a linked channel: the execution that holds it, a workflow or a
 	// standalone activity, whose run id may be empty for the current run. Unset
 	// for an independent channel.
-	Execution     *v1.Execution `protobuf:"bytes,6,opt,name=execution,proto3" json:"execution,omitempty"`
+	Execution     *v1.Execution `protobuf:"bytes,5,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -255,7 +255,7 @@ type RegisterChannelListenerInput struct {
 	// Set for a linked channel: the execution that holds it, a workflow or a
 	// standalone activity, whose run id may be empty for the current run. Unset
 	// for an independent channel.
-	Execution     *v1.Execution `protobuf:"bytes,7,opt,name=execution,proto3" json:"execution,omitempty"`
+	Execution     *v1.Execution `protobuf:"bytes,6,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -481,7 +481,7 @@ type UnregisterChannelListenerInput struct {
 	// Set for a linked channel: the execution that holds it, a workflow or a
 	// standalone activity, whose run id may be empty for the current run. Unset
 	// for an independent channel.
-	Execution     *v1.Execution `protobuf:"bytes,6,opt,name=execution,proto3" json:"execution,omitempty"`
+	Execution     *v1.Execution `protobuf:"bytes,5,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -697,7 +697,7 @@ type PollChannelInput struct {
 	// Set for a linked channel: the execution that holds it, a workflow or a
 	// standalone activity, whose run id may be empty for the current run. Unset
 	// for an independent channel.
-	Execution     *v1.Execution `protobuf:"bytes,7,opt,name=execution,proto3" json:"execution,omitempty"`
+	Execution     *v1.Execution `protobuf:"bytes,6,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -921,7 +921,7 @@ type DescribeChannelInput struct {
 	// Set for a linked channel: the execution that holds it, a workflow or a
 	// standalone activity, whose run id may be empty for the current run. Unset
 	// for an independent channel.
-	Execution     *v1.Execution `protobuf:"bytes,4,opt,name=execution,proto3" json:"execution,omitempty"`
+	Execution     *v1.Execution `protobuf:"bytes,3,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1083,7 +1083,7 @@ type DescribeChannelOutput struct {
 	RetainedCount int64                  `protobuf:"varint,3,opt,name=retained_count,json=retainedCount,proto3" json:"retained_count,omitempty"`
 	// The channel is linked to an execution, and which one.
 	Linked        bool          `protobuf:"varint,4,opt,name=linked,proto3" json:"linked,omitempty"`
-	LinkedTo      *v1.Execution `protobuf:"bytes,6,opt,name=linked_to,json=linkedTo,proto3" json:"linked_to,omitempty"`
+	LinkedTo      *v1.Execution `protobuf:"bytes,5,opt,name=linked_to,json=linkedTo,proto3" json:"linked_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1966,21 +1966,21 @@ var File_temporal_server_chasm_lib_channel_proto_v1_request_response_proto proto
 
 const file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Atemporal/server/chasm/lib/channel/proto/v1/request_response.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a8temporal/server/chasm/lib/channel/proto/v1/message.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xa6\x02\n" +
+	"Atemporal/server/chasm/lib/channel/proto/v1/request_response.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a8temporal/server/chasm/lib/channel/proto/v1/message.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\x8c\x02\n" +
 	"\x12NotifyChannelInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\\\n" +
 	"\fnotification\x18\x02 \x01(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\fnotification\x12\x1a\n" +
 	"\bidentity\x18\x03 \x01(\tR\bidentity\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x04 \x01(\tR\trequestId\x12?\n" +
-	"\texecution\x18\x06 \x01(\v2!.temporal.api.common.v1.ExecutionR\texecutionJ\x04\b\x05\x10\x06R\x12workflow_execution\"<\n" +
+	"\texecution\x18\x05 \x01(\v2!.temporal.api.common.v1.ExecutionR\texecution\"<\n" +
 	"\x13NotifyChannelOutput\x12%\n" +
 	"\x0elistener_count\x18\x01 \x01(\x03R\rlistenerCount\"\xa4\x01\n" +
 	"\x14NotifyChannelRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12i\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2>.temporal.server.chasm.lib.channel.proto.v1.NotifyChannelInputR\x0ffrontendRequest\"\x85\x01\n" +
 	"\x15NotifyChannelResponse\x12l\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2?.temporal.server.chasm.lib.channel.proto.v1.NotifyChannelOutputR\x10frontendResponse\"\xaa\x02\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2?.temporal.server.chasm.lib.channel.proto.v1.NotifyChannelOutputR\x10frontendResponse\"\x90\x02\n" +
 	"\x1cRegisterChannelListenerInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12<\n" +
@@ -1988,7 +1988,7 @@ const file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_raw
 	"\n" +
 	"request_id\x18\x04 \x01(\tR\trequestId\x12\x1a\n" +
 	"\bidentity\x18\x05 \x01(\tR\bidentity\x12?\n" +
-	"\texecution\x18\a \x01(\v2!.temporal.api.common.v1.ExecutionR\texecutionJ\x04\b\x06\x10\aR\x12workflow_execution\"@\n" +
+	"\texecution\x18\x06 \x01(\v2!.temporal.api.common.v1.ExecutionR\texecution\"@\n" +
 	"\x1dRegisterChannelListenerOutput\x12\x1f\n" +
 	"\vlistener_id\x18\x01 \x01(\tR\n" +
 	"listenerId\"\xb8\x01\n" +
@@ -1996,38 +1996,38 @@ const file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_raw
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12s\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2H.temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerInputR\x0ffrontendRequest\"\x99\x01\n" +
 	"\x1fRegisterChannelListenerResponse\x12v\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2I.temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerOutputR\x10frontendResponse\"\xf0\x01\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2I.temporal.server.chasm.lib.channel.proto.v1.RegisterChannelListenerOutputR\x10frontendResponse\"\xd6\x01\n" +
 	"\x1eUnregisterChannelListenerInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12\x1f\n" +
 	"\vlistener_id\x18\x03 \x01(\tR\n" +
 	"listenerId\x12\x1a\n" +
 	"\bidentity\x18\x04 \x01(\tR\bidentity\x12?\n" +
-	"\texecution\x18\x06 \x01(\v2!.temporal.api.common.v1.ExecutionR\texecutionJ\x04\b\x05\x10\x06R\x12workflow_execution\"!\n" +
+	"\texecution\x18\x05 \x01(\v2!.temporal.api.common.v1.ExecutionR\texecution\"!\n" +
 	"\x1fUnregisterChannelListenerOutput\"\xbc\x01\n" +
 	" UnregisterChannelListenerRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12u\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2J.temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerInputR\x0ffrontendRequest\"\x9d\x01\n" +
 	"!UnregisterChannelListenerResponse\x12x\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2K.temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutputR\x10frontendResponse\"\xa6\x02\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2K.temporal.server.chasm.lib.channel.proto.v1.UnregisterChannelListenerOutputR\x10frontendResponse\"\x8c\x02\n" +
 	"\x10PollChannelInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12#\n" +
 	"\rafter_counter\x18\x03 \x01(\x03R\fafterCounter\x12-\n" +
 	"\x04wait\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x04wait\x12+\n" +
 	"\x11max_notifications\x18\x05 \x01(\x05R\x10maxNotifications\x12?\n" +
-	"\texecution\x18\a \x01(\v2!.temporal.api.common.v1.ExecutionR\texecutionJ\x04\b\x06\x10\aR\x12workflow_execution\"s\n" +
+	"\texecution\x18\x06 \x01(\v2!.temporal.api.common.v1.ExecutionR\texecution\"s\n" +
 	"\x11PollChannelOutput\x12^\n" +
 	"\rnotifications\x18\x01 \x03(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\rnotifications\"\xa0\x01\n" +
 	"\x12PollChannelRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12g\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2<.temporal.server.chasm.lib.channel.proto.v1.PollChannelInputR\x0ffrontendRequest\"\x81\x01\n" +
 	"\x13PollChannelResponse\x12j\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2=.temporal.server.chasm.lib.channel.proto.v1.PollChannelOutputR\x10frontendResponse\"\xa9\x01\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2=.temporal.server.chasm.lib.channel.proto.v1.PollChannelOutputR\x10frontendResponse\"\x8f\x01\n" +
 	"\x14DescribeChannelInput\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12?\n" +
-	"\texecution\x18\x04 \x01(\v2!.temporal.api.common.v1.ExecutionR\texecutionJ\x04\b\x03\x10\x04R\x12workflow_execution\"\xf2\x02\n" +
+	"\texecution\x18\x03 \x01(\v2!.temporal.api.common.v1.ExecutionR\texecution\"\xf2\x02\n" +
 	"\x13ChannelListenerInfo\x12\x1f\n" +
 	"\vlistener_id\x18\x01 \x01(\tR\n" +
 	"listenerId\x12f\n" +
@@ -2038,13 +2038,13 @@ const file_temporal_server_chasm_lib_channel_proto_v1_request_response_proto_raw
 	"\vworkflow_id\x18\x01 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runIdB\t\n" +
-	"\avariant\"\xcd\x02\n" +
+	"\avariant\"\xc7\x02\n" +
 	"\x15DescribeChannelOutput\x12]\n" +
 	"\tlisteners\x18\x01 \x03(\v2?.temporal.server.chasm.lib.channel.proto.v1.ChannelListenerInfoR\tlisteners\x12P\n" +
 	"\x06latest\x18\x02 \x01(\v28.temporal.server.chasm.lib.channel.proto.v1.NotificationR\x06latest\x12%\n" +
 	"\x0eretained_count\x18\x03 \x01(\x03R\rretainedCount\x12\x16\n" +
 	"\x06linked\x18\x04 \x01(\bR\x06linked\x12>\n" +
-	"\tlinked_to\x18\x06 \x01(\v2!.temporal.api.common.v1.ExecutionR\blinkedToJ\x04\b\x05\x10\x06\"\xa8\x01\n" +
+	"\tlinked_to\x18\x05 \x01(\v2!.temporal.api.common.v1.ExecutionR\blinkedTo\"\xa8\x01\n" +
 	"\x16DescribeChannelRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12k\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2@.temporal.server.chasm.lib.channel.proto.v1.DescribeChannelInputR\x0ffrontendRequest\"\x89\x01\n" +
