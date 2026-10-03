@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
+	chasmchannel "go.temporal.io/server/chasm/lib/channel/service"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
@@ -157,6 +159,7 @@ var Module = fx.Options(
 	chasmworkflow.Module,
 	chasmcallback.Module,
 	activity.FrontendModule,
+	chasmchannel.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 )
@@ -990,6 +993,7 @@ func HandlerProvider(
 	matchingClient resource.MatchingClient,
 	workerDeploymentStoreClient workerdeployment.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
+	channelClient channelpb.ChannelServiceClient,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
 	payloadSerializer serialization.Serializer,
@@ -1032,6 +1036,7 @@ func HandlerProvider(
 		matchingClient,
 		workerDeploymentStoreClient,
 		schedulerClient,
+		channelClient,
 		archiverProvider,
 		payloadSerializer,
 		namespaceRegistry,
