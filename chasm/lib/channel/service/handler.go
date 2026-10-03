@@ -193,7 +193,7 @@ func (h *handler) NotifyChannel(
 		return nil, err
 	}
 	metrics.ChannelNotificationsAccepted.With(h.metricsHandler).Record(
-		1, metrics.NamespaceTag(ns))
+		1, metrics.NamespaceTag(ns), independentKindTag)
 	return &channelpb.NotifyChannelResponse{
 		FrontendResponse: &channelpb.NotifyChannelOutput{
 			ListenerCount: int64(count),
@@ -260,12 +260,12 @@ func (h *handler) redeliver(
 		}
 		if folded > 0 {
 			metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
-				int64(folded), metrics.NamespaceTag(ns), callbackKindTag)
+				int64(folded), metrics.NamespaceTag(ns), independentKindTag, callbackKindTag)
 		}
 	}
 	if holders := read.listeners - len(read.workflows); !read.callbacksNeed && holders > 0 {
 		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
-			int64(holders), metrics.NamespaceTag(ns), callbackKindTag)
+			int64(holders), metrics.NamespaceTag(ns), independentKindTag, callbackKindTag)
 	}
 	return h.deliverer.deliverAll(ctx, ref, ns, read.workflows, n)
 }
@@ -363,7 +363,7 @@ func (h *handler) PollChannel(
 	in := req.GetFrontendRequest()
 	ns := h.namespaceName(req.GetNamespaceId())
 	ctx = withCallerInfo(ctx, ns)
-	metrics.ChannelPollers.With(h.metricsHandler).Record(1, metrics.NamespaceTag(ns))
+	metrics.ChannelPollers.With(h.metricsHandler).Record(1, metrics.NamespaceTag(ns), independentKindTag)
 	ref := channelRef(req.GetNamespaceId(), in.GetChannel())
 	limits := h.limitsFor(ns)
 
@@ -625,7 +625,7 @@ func (h *handler) DeliverChannelNotification(
 	if target.duplicate {
 		out.Duplicate = true
 		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
-			1, metrics.NamespaceTag(ns), workflowKindTag)
+			1, metrics.NamespaceTag(ns), independentKindTag, workflowKindTag)
 		return &channelpb.DeliverChannelNotificationResponse{FrontendResponse: out}, nil
 	}
 	folded, err := h.accept(ctx, namespaceID, workflowID, target.runID, n)
@@ -635,10 +635,10 @@ func (h *handler) DeliverChannelNotification(
 	out.Folded = folded
 	tag := metrics.NamespaceTag(ns)
 	metrics.ChannelNotificationsDelivered.With(h.metricsHandler).Record(
-		1, tag, workflowKindTag)
+		1, tag, independentKindTag, workflowKindTag)
 	if folded {
 		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
-			1, tag, workflowKindTag)
+			1, tag, independentKindTag, workflowKindTag)
 	}
 	return &channelpb.DeliverChannelNotificationResponse{FrontendResponse: out}, nil
 }
