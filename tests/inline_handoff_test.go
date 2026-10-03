@@ -2,12 +2,17 @@ package tests
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	"go.temporal.io/server/common/testing/await"
+	"google.golang.org/protobuf/proto"
 )
 
 // A notification that lands while a task runs is carried by the next
@@ -15,6 +20,7 @@ import (
 // handed back with the response when the worker asks for it, the way a task
 // for a buffered Signal is, so scheduled and started are one write. Without
 // the request the task still goes through matching.
+
 // pendingTaskState is the state describe reports for the run's pending task.
 func (c *channelTestEnv) pendingTaskState(id string) enumspb.PendingWorkflowTaskState {
 	c.t.Helper()
@@ -111,6 +117,81 @@ func TestInlineHandoffLinkedChannel(t *testing.T) {
 	next := c.poll(id)
 	requireNotifications(t, c.scheduledNotifications(id, next), map[string]int64{name: 4})
 	c.complete(next, false)
+}
+
+// awaitKnownHead waits until the stream's push of its frontier reached the
+// run's cursor, which is what makes the cursor behind and the run owe a task.
+func (c *channelTestEnv) awaitKnownHead(id, streamID string, head int64) {
+	c.t.Helper()
+	await.Require(c.ctx(), c.t, func(t *await.T) {
+		nodes := c.persisted(id).GetDatabaseMutableState().GetChasmNodes()
+		node, ok := nodes["StreamCursors#"+streamID]
+		require.True(t, ok, "no cursor for %s yet", streamID)
+		var cursor streamlib.WorkflowStreamCursor
+		require.NoError(t, proto.Unmarshal(node.GetData().GetData(), &cursor))
+		require.Equal(t, head, cursor.GetKnownHead())
+	}, 20*time.Second, 50*time.Millisecond)
+}
+
+// sliceBodies are the record bodies of the live slice a task carries, apart
+// from the consumed ranges a non-sticky poll re-supplies for replay.
+func sliceBodies(t *testing.T, slices []*streampb.StreamSlice) []string {
+	t.Helper()
+	var out []string
+	for _, r := range currentSlice(t, slices).GetRecords() {
+		out = append(out, string(r.GetBody().GetData()))
+	}
+	return out
+}
+
+// A native stream's frontier moving past a subscription's cursor while the
+// task runs is the same case: the completion hands back the task that
+// carries the slice, for one state transition, and without the request the
+// task goes through matching.
+func TestInlineHandoffNativeStream(t *testing.T) {
+	c := newChannelTestEnv(t)
+	s := newStreamTestEnvFrom(t, c.env)
+	id := "handoff-native-" + uuid.NewString()
+	streamID := "handoff-stream-" + uuid.NewString()
+	s.create(s.ctx(), t, streamID)
+	c.startIdle(id)
+	_, err := s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: c.ns, WorkflowId: id, StreamId: streamID, StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+
+	appendBody := func(body string) {
+		t.Helper()
+		_, err := s.add(s.ctx(), t, streamID, &streamlib.AddMessagesInput{Records: streamMsgs("", body)})
+		require.NoError(t, err)
+	}
+	appendBody("a")
+	c.awaitKnownHead(id, streamID, 1)
+	open := c.poll(id)
+	require.Equal(t, []string{"a"}, sliceBodies(t, open.GetStreamSlices()))
+
+	appendBody("b")
+	c.awaitKnownHead(id, streamID, 2)
+	before := c.stateTransitions(id)
+	resp := c.complete(open, true)
+	handed := resp.GetWorkflowTask()
+	require.NotNil(t, handed, "the completion response carries the next task")
+	require.Positive(t, handed.GetStartedEventId())
+	require.Equal(t, []string{"b"}, sliceBodies(t, handed.GetStreamSlices()))
+	require.Equal(t, before+1, c.stateTransitions(id), "completion, schedule and start in one write")
+	require.Equal(t, enumspb.PENDING_WORKFLOW_TASK_STATE_STARTED, c.pendingTaskState(id))
+
+	appendBody("c")
+	c.awaitKnownHead(id, streamID, 3)
+	resp = c.complete(handed, false)
+	require.Nil(t, resp.GetWorkflowTask())
+	require.Equal(t, enumspb.PENDING_WORKFLOW_TASK_STATE_SCHEDULED, c.pendingTaskState(id))
+	next := c.poll(id)
+	require.Equal(t, []string{"c"}, sliceBodies(t, next.GetStreamSlices()))
+	c.complete(next, false)
+	require.False(t, c.hasPendingTask(id))
 }
 
 // A subscribe command whose channel already holds a notification is handed
