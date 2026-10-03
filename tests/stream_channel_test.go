@@ -22,6 +22,7 @@ import (
 // A change to a native stream notifies the channel named by the stream, so a
 // client learns of the stream the way it learns of an external one. These
 // cases write through the stream service and read the channel.
+
 // newStreamChannelEnv serves the channel calls and the stream calls from one
 // cluster, with activities on for the activity-owned cases.
 func newStreamChannelEnv(
