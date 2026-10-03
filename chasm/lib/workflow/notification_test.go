@@ -26,6 +26,48 @@ func subscribe(t *testing.T, w *Workflow, ctx chasm.MutableContext, channel stri
 	require.True(t, added)
 }
 
+// Unsubscribing forgets the subscription and the notification waiting on it,
+// reports the event that recorded the subscription, and refuses nothing a
+// second time. A delivery that arrives afterwards finds no subscription.
+func TestChannelSubscriptionRemoval(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	w := &Workflow{}
+	subscribe(t, w, ctx, "orders")
+	subscribe(t, w, ctx, "billing")
+	_, err := w.AcceptChannelNotification(ctx, channelNote("orders", 3))
+	require.NoError(t, err)
+
+	eventID, ok := w.RemoveChannelSubscription(ctx, "orders")
+	require.True(t, ok)
+	require.Equal(t, int64(5), eventID)
+	require.False(t, w.SubscribedToChannel("orders"))
+	require.True(t, w.SubscribedToChannel("billing"))
+	require.False(t, w.HasPendingChannelNotifications(ctx), "the pending entry went with it")
+	require.Equal(t, 1, w.ChannelSubscriptionCount())
+
+	_, ok = w.RemoveChannelSubscription(ctx, "orders")
+	require.False(t, ok, "nothing to remove twice")
+	_, ok = w.RemoveChannelSubscription(ctx, "never")
+	require.False(t, ok)
+
+	_, err = w.AcceptChannelNotification(ctx, channelNote("orders", 4))
+	var precondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &precondition, "a late delivery is refused")
+	require.True(t, w.ChannelNotificationIsDuplicate(ctx, "orders", 4), "and reads as nothing to do")
+
+	w.StageChannelDeregistration("orders")
+	require.Equal(t, []string{"orders"}, w.DrainChannelDeregistrations())
+	require.Empty(t, w.DrainChannelDeregistrations())
+
+	// Subscribing again starts over, at the new event.
+	added, err := w.RecordChannelSubscription(ctx, "orders", 9, 0)
+	require.NoError(t, err)
+	require.True(t, added)
+	_, err = w.AcceptChannelNotification(ctx, channelNote("orders", 1))
+	require.NoError(t, err)
+	require.True(t, w.HasPendingChannelNotifications(ctx))
+}
+
 // Notifications fold to the highest counter per channel, and a scheduled
 // event takes one per channel, sorted, and clears them.
 func TestChannelNotificationsFoldAndSnapshot(t *testing.T) {

@@ -62,6 +62,7 @@ type (
 
 		// internal state
 		stagedChannelRegistrations          []string
+		stagedChannelDeregistrations        []string
 		hasBufferedEventsOrMessages         bool
 		workflowTaskFailedCause             *workflowTaskFailedCause
 		activityNotStartedCancelled         bool
@@ -361,6 +362,8 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 				// registration that has to precede this task's commit.
 				handler.stagedChannelRegistrations = append(
 					handler.stagedChannelRegistrations, chasmWorkflow.DrainChannelRegistrations()...)
+				handler.stagedChannelDeregistrations = append(
+					handler.stagedChannelDeregistrations, chasmWorkflow.DrainChannelDeregistrations()...)
 				// Fall back to the HSM handler either when the command type is not supported by CHASM (disabled
 				// feature flag) or when the targeted entity is not owned by the CHASM tree (e.g. an operation
 				// scheduled in HSM before the flag was flipped on).

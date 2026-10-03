@@ -535,6 +535,34 @@ func (h *handler) RegisterWorkflowListener(
 	}, nil
 }
 
+// UnregisterWorkflowListener drops a run from the channel's listeners, for a
+// run that unsubscribed. Internal, called from the completion path on the
+// channel's shard. A channel that does not exist, or that has another run of
+// the workflow on record, has nothing to drop.
+func (h *handler) UnregisterWorkflowListener(
+	ctx context.Context,
+	req *channelpb.UnregisterWorkflowListenerRequest,
+) (*channelpb.UnregisterWorkflowListenerResponse, error) {
+	in := req.GetFrontendRequest()
+	ns := h.namespaceName(req.GetNamespaceId())
+	ctx = withCallerInfo(ctx, ns)
+	if err := channel.CheckChannelName(in.GetChannel(), 0); err != nil {
+		return nil, err
+	}
+	limits := h.limitsFor(ns)
+	_, _, err := chasm.UpdateComponent(ctx, channelRef(req.GetNamespaceId(), in.GetChannel()),
+		func(c *channel.Channel, mctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			c.ForgetWorkflowListener(mctx, in.GetWorkflowId(), in.GetRunId(), limits)
+			return struct{}{}, nil
+		}, struct{}{})
+	if err != nil && !executionAbsent(err) {
+		return nil, err
+	}
+	return &channelpb.UnregisterWorkflowListenerResponse{
+		FrontendResponse: &channelpb.UnregisterWorkflowListenerOutput{},
+	}, nil
+}
+
 // listenerProbe is what one run says about a channel: whether it is still
 // open, whether it subscribed, and whether it already has this counter.
 type listenerProbe struct {
