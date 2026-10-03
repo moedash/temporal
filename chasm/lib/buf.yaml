@@ -10,3 +10,13 @@ lint:
     - DEFAULT
   except:
     - PACKAGE_DIRECTORY_MATCH
+  # The linked channel calls take the independent requests on purpose: they
+  # differ only in routing by owner, and separate types would duplicate five
+  # request and response shapes.
+  ignore_only:
+    RPC_REQUEST_RESPONSE_UNIQUE:
+      - chasm/lib/channel/proto/v1/service.proto
+    RPC_REQUEST_STANDARD_NAME:
+      - chasm/lib/channel/proto/v1/service.proto
+    RPC_RESPONSE_STANDARD_NAME:
+      - chasm/lib/channel/proto/v1/service.proto

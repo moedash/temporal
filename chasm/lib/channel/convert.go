@@ -19,6 +19,7 @@ func FromAPINotification(n *notificationpb.Notification) *channelpb.Notification
 		Position: n.GetPosition(),
 		Counter:  n.GetCounter(),
 		Metadata: n.GetMetadata(),
+		LinkedTo: n.GetLinkedTo(),
 	}
 }
 
@@ -32,6 +33,7 @@ func ToAPINotification(n *channelpb.Notification) *notificationpb.Notification {
 		Position: n.GetPosition(),
 		Counter:  n.GetCounter(),
 		Metadata: n.GetMetadata(),
+		LinkedTo: n.GetLinkedTo(),
 	}
 }
 

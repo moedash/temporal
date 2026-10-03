@@ -2400,9 +2400,27 @@ func (wh *WorkflowHandler) validateCallerFields(identity, requestID string) erro
 	return nil
 }
 
+// linkedChannelOwner is the execution a channel call names, with its type
+// settled, or nil when the linked kind is off for the namespace: the call
+// then reaches the independent channel of that name, as it did before the
+// linked kind existed. The owner is dropped from the routed request too, so
+// the independent handlers see the call a client without the field would
+// make.
+func (wh *WorkflowHandler) linkedChannelOwner(
+	namespaceName string,
+	owner *commonpb.Execution,
+) (*commonpb.Execution, error) {
+	if owner == nil || !wh.config.LinkedChannelKindEnabled(namespaceName) {
+		return nil, nil
+	}
+	return resolveChannelExecution(owner, wh.config.MaxIDLengthLimit())
+}
+
 // NotifyChannel tells every listener of a channel that a source they consume
 // moved. The writer never learns who listens; the channel's shard wakes each
 // one. A channel with no listeners retains the notification for pollers.
+// With execution set the channel is the one linked to that workflow run,
+// which is the listener.
 func (wh *WorkflowHandler) NotifyChannel(
 	ctx context.Context,
 	request *workflowservice.NotifyChannelRequest,
@@ -2433,6 +2451,10 @@ func (wh *WorkflowHandler) NotifyChannel(
 		return nil, err
 	}
 
+	owner, err := wh.linkedChannelOwner(request.GetNamespace(), request.GetExecution())
+	if err != nil {
+		return nil, err
+	}
 	routed := &channelpb.NotifyChannelRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.NotifyChannelInput{
@@ -2440,9 +2462,15 @@ func (wh *WorkflowHandler) NotifyChannel(
 			Notification: channel.FromAPINotification(n),
 			Identity:     request.GetIdentity(),
 			RequestId:    request.GetRequestId(),
+			Execution:    owner,
 		},
 	}
-	resp, err := wh.channelClient.NotifyChannel(ctx, routed)
+	var resp *channelpb.NotifyChannelResponse
+	if owner != nil {
+		resp, err = wh.channelClient.NotifyLinkedChannel(ctx, routed)
+	} else {
+		resp, err = wh.channelClient.NotifyChannel(ctx, routed)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2488,6 +2516,10 @@ func (wh *WorkflowHandler) RegisterChannelListener(
 		requestID = uuid.NewString()
 	}
 
+	owner, err := wh.linkedChannelOwner(request.GetNamespace(), request.GetExecution())
+	if err != nil {
+		return nil, err
+	}
 	routed := &channelpb.RegisterChannelListenerRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.RegisterChannelListenerInput{
@@ -2496,9 +2528,15 @@ func (wh *WorkflowHandler) RegisterChannelListener(
 			Callback:  request.GetCallback(),
 			RequestId: requestID,
 			Identity:  request.GetIdentity(),
+			Execution: owner,
 		},
 	}
-	resp, err := wh.channelClient.RegisterChannelListener(ctx, routed)
+	var resp *channelpb.RegisterChannelListenerResponse
+	if owner != nil {
+		resp, err = wh.channelClient.RegisterLinkedChannelListener(ctx, routed)
+	} else {
+		resp, err = wh.channelClient.RegisterChannelListener(ctx, routed)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2535,6 +2573,10 @@ func (wh *WorkflowHandler) UnregisterChannelListener(
 		return nil, err
 	}
 
+	owner, err := wh.linkedChannelOwner(request.GetNamespace(), request.GetExecution())
+	if err != nil {
+		return nil, err
+	}
 	routed := &channelpb.UnregisterChannelListenerRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.UnregisterChannelListenerInput{
@@ -2542,9 +2584,14 @@ func (wh *WorkflowHandler) UnregisterChannelListener(
 			Channel:    request.GetChannel(),
 			ListenerId: request.GetListenerId(),
 			Identity:   request.GetIdentity(),
+			Execution:  owner,
 		},
 	}
-	_, err = wh.channelClient.UnregisterChannelListener(ctx, routed)
+	if owner != nil {
+		_, err = wh.channelClient.UnregisterLinkedChannelListener(ctx, routed)
+	} else {
+		_, err = wh.channelClient.UnregisterChannelListener(ctx, routed)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2576,6 +2623,10 @@ func (wh *WorkflowHandler) PollChannel(
 		return nil, err
 	}
 
+	owner, err := wh.linkedChannelOwner(request.GetNamespace(), request.GetExecution())
+	if err != nil {
+		return nil, err
+	}
 	routed := &channelpb.PollChannelRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.PollChannelInput{
@@ -2584,9 +2635,15 @@ func (wh *WorkflowHandler) PollChannel(
 			AfterCounter:     request.GetAfterCounter(),
 			Wait:             request.GetWait(),
 			MaxNotifications: request.GetMaxNotifications(),
+			Execution:        owner,
 		},
 	}
-	resp, err := wh.channelClient.PollChannel(ctx, routed)
+	var resp *channelpb.PollChannelResponse
+	if owner != nil {
+		resp, err = wh.channelClient.PollLinkedChannel(ctx, routed)
+	} else {
+		resp, err = wh.channelClient.PollChannel(ctx, routed)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2614,14 +2671,24 @@ func (wh *WorkflowHandler) DescribeChannel(
 		return nil, err
 	}
 
+	owner, err := wh.linkedChannelOwner(request.GetNamespace(), request.GetExecution())
+	if err != nil {
+		return nil, err
+	}
 	routed := &channelpb.DescribeChannelRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &channelpb.DescribeChannelInput{
 			Namespace: request.GetNamespace(),
 			Channel:   request.GetChannel(),
+			Execution: owner,
 		},
 	}
-	resp, err := wh.channelClient.DescribeChannel(ctx, routed)
+	var resp *channelpb.DescribeChannelResponse
+	if owner != nil {
+		resp, err = wh.channelClient.DescribeLinkedChannel(ctx, routed)
+	} else {
+		resp, err = wh.channelClient.DescribeChannel(ctx, routed)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2630,10 +2697,16 @@ func (wh *WorkflowHandler) DescribeChannel(
 	for _, l := range out.GetListeners() {
 		listeners = append(listeners, channel.ToAPIListener(l))
 	}
+	kind := notificationpb.CHANNEL_KIND_INDEPENDENT
+	if out.GetLinked() {
+		kind = notificationpb.CHANNEL_KIND_LINKED
+	}
 	return &workflowservice.DescribeChannelResponse{
 		Listeners:     listeners,
 		Latest:        channel.ToAPINotification(out.GetLatest()),
 		RetainedCount: int32(out.GetRetainedCount()),
+		Kind:          kind,
+		LinkedTo:      out.GetLinkedTo(),
 	}, nil
 }
 
