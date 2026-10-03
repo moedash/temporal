@@ -28,6 +28,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	streampb "go.temporal.io/api/stream/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -6313,6 +6314,89 @@ func TestConvertPollWorkflowTaskQueueResponse_FieldMapping(t *testing.T) {
 	assert.Equal(t, inputResp.BranchToken, result.BranchToken)
 	assert.Equal(t, inputResp.NextPageToken, result.NextPageToken)
 	assert.Equal(t, inputResp.History.Events[0].EventId, result.History.Events[0].EventId)
+}
+
+// A non-sticky query task asks History for the recorded stream ranges; a
+// sticky one does not, since its worker still holds the execution.
+func TestGetStreamSlicesForQueryTask(t *testing.T) {
+	t.Parallel()
+
+	nsID := namespace.ID("test-namespace-id")
+	task := &internalTask{
+		namespace: namespace.Name("test-namespace"),
+		event: &genericTaskInfo{
+			AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
+				Data: &persistencespb.TaskInfo{
+					NamespaceId: nsID.String(),
+					WorkflowId:  "test-workflow-id",
+					RunId:       "test-run-id",
+				},
+			},
+		},
+	}
+	resupplied := []*streampb.StreamSlice{{
+		StreamId: "output", RunId: "test-run-id", FromOffset: 0, ToOffset: 2,
+		WorkflowTaskCompletedEventId: 4,
+	}}
+
+	t.Run("sticky asks nothing", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
+		engine := &matchingEngineImpl{historyClient: mockHistoryClient, logger: log.NewNoopLogger()}
+
+		slices, err := engine.getStreamSlicesForQueryTask(
+			context.Background(), nsID.String(), task, true, true)
+		require.NoError(t, err)
+		require.Empty(t, slices)
+	})
+
+	t.Run("non-sticky carries what History re-supplies", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
+		mockHistoryClient.EXPECT().GetStreamReplaySlices(gomock.Any(),
+			&historyservice.GetStreamReplaySlicesRequest{
+				NamespaceId: nsID.String(),
+				Execution:   task.workflowExecution(),
+			}).Return(&historyservice.GetStreamReplaySlicesResponse{StreamSlices: resupplied}, nil).
+			Times(1)
+		engine := &matchingEngineImpl{historyClient: mockHistoryClient, logger: log.NewNoopLogger()}
+
+		slices, err := engine.getStreamSlicesForQueryTask(
+			context.Background(), nsID.String(), task, false, true)
+		require.NoError(t, err)
+		require.Len(t, slices, 1)
+		require.Equal(t, int64(4), slices[0].GetWorkflowTaskCompletedEventId())
+	})
+
+	// Almost no workflow consumes a stream, and the call takes a workflow lease
+	// on the history side before it discovers that. The mutable state matching
+	// already fetched says which ones do.
+	t.Run("a workflow that consumes nothing asks nothing", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
+		engine := &matchingEngineImpl{historyClient: mockHistoryClient, logger: log.NewNoopLogger()}
+
+		slices, err := engine.getStreamSlicesForQueryTask(
+			context.Background(), nsID.String(), task, false, false)
+		require.NoError(t, err)
+		require.Empty(t, slices)
+	})
+
+	t.Run("a refusal fails the query", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
+		mockHistoryClient.EXPECT().GetStreamReplaySlices(gomock.Any(), gomock.Any()).Return(
+			nil, serviceerror.NewFailedPrecondition("stream no longer holds the range")).Times(1)
+		engine := &matchingEngineImpl{historyClient: mockHistoryClient, logger: log.NewNoopLogger()}
+
+		_, err := engine.getStreamSlicesForQueryTask(
+			context.Background(), nsID.String(), task, false, true)
+		require.ErrorContains(t, err, "no longer holds")
+	})
 }
 
 func TestGetHistoryForQueryTask(t *testing.T) {

@@ -15,6 +15,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -66,6 +68,93 @@ func apiBodies(msgs []*streampb.StreamRecord) []string {
 		out[i] = string(m.GetBody().GetData())
 	}
 	return out
+}
+
+// completedEventsWithCursors returns the ids of every WorkflowTaskCompleted
+// event that recorded a consumed range, empty ones included.
+func completedEventsWithCursors(events []*historypb.HistoryEvent) []int64 {
+	var out []int64
+	for _, e := range events {
+		if len(e.GetWorkflowTaskCompletedEventAttributes().GetConsumedStreamRanges()) > 0 {
+			out = append(out, e.GetEventId())
+		}
+	}
+	return out
+}
+
+// The response to a started task carries one page of history. A consumer that
+// has run longer than a page recorded its ranges on the pages after it, and a
+// cold replay has to find every one of them or the worker replays against less
+// than the first run saw.
+func TestReplayFollowsHistoryPastTheFirstPage(t *testing.T) {
+	env := testcore.NewEnv(t,
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.HistoryMaxPageSize, 4),
+	)
+	s := newStreamTestEnvFrom(t, env)
+	execution, tq := startConsumer(t, s, "stream-wf-paged-replay-")
+
+	var delivered [][]*streampb.StreamSlice
+	//nolint:staticcheck // SA1019: only the deprecated poller can emit this command type.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
+			delivered = append(delivered, resp.GetStreamSlices())
+			if len(delivered) == 1 {
+				return publishCommand("page-1", "page-2"), nil
+			}
+			return nil, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	_, err := poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	_, err = s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(),
+			StreamName: chasmworkflow.DefaultStreamName, StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+
+	// One task consumes the range, then several idle tasks push the event that
+	// recorded it well behind the first page of history.
+	for range 4 {
+		signalWorkflow(t, s, execution.GetWorkflowId(), execution.GetRunId())
+		_, err = poller.PollAndProcessWorkflowTask()
+		require.NoError(t, err)
+	}
+	require.Len(t, currentSlice(t, delivered[1]).GetRecords(), 2)
+
+	events := env.GetHistory(s.ns, execution)
+	recordedAt := completedEventsWithCursors(events)
+	require.Len(t, recordedAt, 4, "every task since the subscription recorded a range")
+	consumedAt := completedEventWithCursors(t, events)
+	require.Greater(t, len(events), 8,
+		"the history has to span more than one page for this to mean anything")
+
+	env.CloseShard(env.NamespaceID().String(), execution.GetWorkflowId())
+	signalWorkflow(t, s, execution.GetWorkflowId(), execution.GetRunId())
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	replay := delivered[len(delivered)-1]
+	replayed := sliceForEvent(replay, consumedAt)
+	require.NotNil(t, replayed, "the range recorded on a later page must be re-supplied")
+	require.Equal(t, []string{"page-1", "page-2"}, apiBodies(replayed.GetRecords()))
+	require.Equal(t, execution.GetRunId(), replayed.GetRunId(),
+		"an owned stream's slice names the run that holds it")
+	for _, eventID := range recordedAt {
+		require.NotNil(t, sliceForEvent(replay, eventID),
+			"every recorded range, empty ones included, has to travel with its event")
+	}
 }
 
 // pollInBackground keeps a poller on the queue until the returned stop
@@ -191,4 +280,70 @@ func TestConsumerOfADeletedStreamFailsItsTaskLoudly(t *testing.T) {
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_STREAM_RANGE_UNAVAILABLE)
 	require.Contains(t, failed.GetFailure().GetMessage(), streamID,
 		"the failure names the stream so an operator knows where to look")
+}
+
+// A consumer whose recorded range can no longer be re-read cannot replay. The
+// replay runs after the task started, so the failure is a transaction of its
+// own, and it still has to end up in History with the cause.
+func TestReplayOfADeletedStreamFailsTheTaskLoudly(t *testing.T) {
+	env := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+	s := newStreamTestEnvFrom(t, env)
+
+	streamID := "gone-replay-" + uuid.NewString()
+	s.create(s.ctx(), t, streamID)
+	execution, tq := startConsumer(t, s, "stream-wf-gone-replay-")
+
+	var delivered [][]*streampb.StreamSlice
+	//nolint:staticcheck // SA1019: consistent with the other stream tests.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
+			delivered = append(delivered, resp.GetStreamSlices())
+			return nil, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+	_, err := poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	_, err = s.client.SubscribeWorkflow(s.ctx(), &streamlib.SubscribeWorkflowRequest{
+		FrontendRequest: &streamlib.SubscribeWorkflowInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(), StreamId: streamID, StartOffset: 0,
+		},
+	})
+	require.NoError(t, err)
+	_, err = s.client.AddMessages(s.ctx(), &streamlib.AddMessagesRequest{
+		FrontendRequest: &streamlib.AddMessagesInput{
+			Namespace: s.ns, StreamId: streamID, Records: streamMsgs("tokens", "consumed-once"),
+		},
+	})
+	require.NoError(t, err)
+
+	// Consumed and recorded, which is what a replay will have to reproduce.
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	require.Len(t, currentSlice(t, delivered[1]).GetRecords(), 1)
+
+	deleteStreamAndWait(t, s, streamID)
+
+	env.CloseShard(env.NamespaceID().String(), execution.GetWorkflowId())
+	signalWorkflow(t, s, execution.GetWorkflowId(), execution.GetRunId())
+
+	stop := pollInBackground(t, env, s.ns, tq)
+	defer stop()
+	await.RequireTrue(t, func() bool {
+		return workflowTaskFailedWith(env.GetHistory(s.ns, execution),
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_STREAM_RANGE_UNAVAILABLE) != nil
+	}, 30*time.Second, 200*time.Millisecond)
+
+	failed := workflowTaskFailedWith(env.GetHistory(s.ns, execution),
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_STREAM_RANGE_UNAVAILABLE)
+	require.Contains(t, failed.GetFailure().GetMessage(), "cannot replay")
+	require.Contains(t, failed.GetFailure().GetMessage(), streamID)
 }
