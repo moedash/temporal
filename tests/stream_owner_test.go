@@ -399,3 +399,75 @@ func TestStreamOwnerDefaultsToTheNamedWorkflow(t *testing.T) {
 	owner := &streamlib.StreamOwner{Kind: streamlib.STREAM_OWNER_KIND_WORKFLOW, Id: workflowID}
 	require.Equal(t, []string{"by id"}, bodies(s.pollOwned(t, owner, "", 0, false).GetRecords()))
 }
+
+// A workflow's activity keeps its streams across a retry and they end when the
+// activity reaches a terminal status, while the workflow is still running. A
+// reader tailing the activity is released then, not at workflow close.
+func TestStreamWorkflowActivityStreamsEndWithTheActivity(t *testing.T) {
+	env, s := newStreamActivityEnv(t)
+
+	workflowID := "stream-wfa-end-" + uuid.NewString()
+	scheduleStreamingActivity(t, env, s, workflowID, "model-call", streamActivityRetryPolicy)
+	owner := &streamlib.StreamOwner{
+		Kind:       streamlib.STREAM_OWNER_KIND_WORKFLOW_ACTIVITY,
+		Id:         workflowID,
+		ActivityId: "model-call",
+	}
+
+	first := pollActivityTask(t, env, s, workflowID+"-tq")
+	_, err := s.addOwned(t, owner, "", &streamlib.AddWorkflowMessagesInput{
+		Records: attemptRecords(1, "partial answer"), ProducerId: "worker#1", Sequence: 1,
+	})
+	require.NoError(t, err)
+	failActivityAttempt(t, env, s, first)
+	require.False(t, s.describeOwned(t, owner, "").GetClosed(),
+		"a failed attempt with a retry to come does not end the activity's stream")
+
+	second := pollActivityTask(t, env, s, workflowID+"-tq")
+	require.EqualValues(t, 2, second.GetAttempt())
+	_, err = s.addOwned(t, owner, "", &streamlib.AddWorkflowMessagesInput{
+		Records: attemptRecords(2, "full answer"), ProducerId: "worker#2", Sequence: 1,
+	})
+	require.NoError(t, err)
+	read := s.pollOwned(t, owner, "", 0, false)
+	require.Equal(t, []string{"partial answer", "full answer"}, bodies(read.GetRecords()),
+		"the retry inherits the stream")
+
+	type result struct {
+		out *streamlib.PollMessagesOutput
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		resp, err := s.client.PollWorkflowMessages(s.ctx(), &streamlib.PollWorkflowMessagesRequest{
+			FrontendRequest: &streamlib.PollWorkflowMessagesInput{
+				Namespace: s.ns, Owner: owner, FromOffset: read.GetNextOffset(), WaitNewMessages: true,
+			},
+		})
+		done <- result{resp.GetFrontendResponse(), err}
+	}()
+	// Give the reader time to park, so the wake is what releases it. Nothing
+	// observable marks a parked reader, so a wait is the only option.
+	time.Sleep(500 * time.Millisecond) //nolint:forbidigo
+	completeActivityAttempt(t, env, s, second)
+
+	select {
+	case r := <-done:
+		require.NoError(t, r.err)
+		require.True(t, r.out.GetClosed(), "the parked reader learns the activity ended")
+	case <-time.After(25 * time.Second):
+		t.Fatal("the parked reader was not released when the activity completed")
+	}
+
+	require.True(t, s.describeOwned(t, owner, "").GetClosed())
+	_, err = s.addOwned(t, owner, "", &streamlib.AddWorkflowMessagesInput{
+		Records: attemptRecords(2, "too late"),
+	})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err), "%v", err)
+
+	// The workflow is still running, so its own stream is not ended.
+	workflowOwner := &streamlib.StreamOwner{
+		Kind: streamlib.STREAM_OWNER_KIND_WORKFLOW, Id: workflowID,
+	}
+	require.False(t, s.describeOwned(t, workflowOwner, "").GetClosed())
+}

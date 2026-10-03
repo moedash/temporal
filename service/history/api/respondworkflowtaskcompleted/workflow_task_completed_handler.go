@@ -61,6 +61,9 @@ type (
 		workflowTaskDeployment  *deploymentpb.Deployment
 
 		// internal state
+		// Subscribe commands for streams in other executions, resolved before
+		// this workflow task commits.
+		stagedStreamSubscriptions           []chasmworkflow.PendingStreamSubscription
 		stagedChannelRegistrations          []string
 		stagedChannelDeregistrations        []string
 		hasBufferedEventsOrMessages         bool
@@ -356,10 +359,14 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 					return nil, chasmErr
 				}
 				err = chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
-				// A notification channel subscription stages its registration,
+				// A subscribe to a stream in another execution stages itself,
 				// since a command handler holds the state lock and has no
-				// context for the call it needs. Collect them for the
-				// registration that has to precede this task's commit.
+				// context for the lookup it needs. Collect them for the
+				// resolution that has to precede this task's commit.
+				handler.stagedStreamSubscriptions = append(
+					handler.stagedStreamSubscriptions, chasmWorkflow.DrainStreamSubscriptions()...)
+				// A notification channel subscription stages its registration
+				// for the same reason.
 				handler.stagedChannelRegistrations = append(
 					handler.stagedChannelRegistrations, chasmWorkflow.DrainChannelRegistrations()...)
 				handler.stagedChannelDeregistrations = append(

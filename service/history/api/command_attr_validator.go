@@ -662,6 +662,12 @@ func (v *CommandAttrValidator) ValidateCommandSequence(
 			enumspb.COMMAND_TYPE_PROTOCOL_MESSAGE,
 			enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
 			enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
+			// Publishing to a stream the workflow owns. Not a close command:
+			// it appends and returns, scheduling nothing further.
+			enumspb.COMMAND_TYPE_APPEND_STREAM_RECORDS,
+			// Subscribing to a stream. Also not closing: it records a cursor
+			// and the workflow carries on.
+			enumspb.COMMAND_TYPE_SUBSCRIBE_STREAM,
 			// Listening on a notification channel, and ending that. Not
 			// closing either: they record and remove a subscription for the
 			// run.

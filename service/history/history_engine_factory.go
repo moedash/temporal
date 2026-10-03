@@ -4,6 +4,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
 	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
+	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence"
@@ -54,6 +55,7 @@ type (
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
+		StreamClient                    streampb.StreamServiceClient
 		ChannelClient                   channelpb.ChannelServiceClient
 		VersionMembershipCache          worker_versioning.VersionMembershipAndReactivationStatusCache
 		WorkerDeploymentClient          workerdeployment.Client
@@ -99,6 +101,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.TestHooks,
 		f.ChasmEngine,
 		WithWorkflowResendScheduler(f.WorkflowResendScheduler),
+		WithStreamClient(f.StreamClient),
 		WithChannelClient(f.ChannelClient),
 	)
 }
