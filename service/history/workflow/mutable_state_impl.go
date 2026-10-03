@@ -693,6 +693,16 @@ func (ms *MutableStateImpl) hasPendingWorkflowTaskInput() bool {
 	return !ms.IsWorkflowPendingOnWorkflowTaskBackoff()
 }
 
+// HasPendingChannelNotifications reports whether a channel notification waits
+// for a scheduled event. Asked at workflow task completion, so that the task
+// which will carry it is created in the completion's write and handed to the
+// completing worker, the way a task for a buffered Signal is, rather than
+// scheduled by the transaction close and started through matching.
+func (ms *MutableStateImpl) HasPendingChannelNotifications() bool {
+	wf, chasmCtx, ok := ms.chasmWorkflowView()
+	return ok && wf.HasPendingChannelNotifications(chasmCtx)
+}
+
 // chasmWorkflowView resolves the Workflow component through a read-only
 // context, for checks that must leave the tree untouched.
 func (ms *MutableStateImpl) chasmWorkflowView() (*chasmworkflow.Workflow, chasm.Context, bool) {
