@@ -100,7 +100,7 @@ func (c *channelTestEnv) awaitIndependent(
 
 func (c *channelTestEnv) registerCallback(
 	name, url string,
-	owner *commonpb.WorkflowExecution,
+	owner *commonpb.Execution,
 ) string {
 	c.t.Helper()
 	resp, err := c.env.FrontendClient().RegisterChannelListener(c.ctx(),
@@ -110,9 +110,9 @@ func (c *channelTestEnv) registerCallback(
 			Callback: &commonpb.Callback{Variant: &commonpb.Callback_Nexus_{
 				Nexus: &commonpb.Callback_Nexus{Url: url},
 			}},
-			RequestId:         uuid.NewString(),
-			Identity:          "tester",
-			WorkflowExecution: owner,
+			RequestId: uuid.NewString(),
+			Identity:  "tester",
+			Execution: owner,
 		})
 	require.NoError(c.t, err)
 	return resp.GetListenerId()
@@ -146,7 +146,7 @@ func TestStreamChannelWorkflowOwnedStream(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.GetNotifications(), 1, "one notification per append call")
 	requireChange(t, resp.GetNotifications()[0], name, runID, 1, 2, false)
-	require.Equal(t, id, resp.GetNotifications()[0].GetLinkedTo().GetWorkflowId())
+	require.Equal(t, id, resp.GetNotifications()[0].GetLinkedTo().GetBusinessId())
 	require.False(t, c.hasPendingTask(id), "the owner is not woken by its own stream")
 
 	recorder, url := newCallbackRecorder(t)

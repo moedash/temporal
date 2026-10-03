@@ -102,7 +102,7 @@ func TestChannelSubscriptionInfos(t *testing.T) {
 	require.Zero(t, linked.GetSubscribedEventId())
 	require.Equal(t, int64(2), linked.GetLastCounter())
 	require.Equal(t, int64(2), linked.GetPendingNotification().GetCounter())
-	require.Equal(t, "owner", linked.GetPendingNotification().GetLinkedTo().GetWorkflowId())
+	require.Equal(t, "owner", linked.GetPendingNotification().GetLinkedTo().GetBusinessId())
 	require.Equal(t, "run-1", linked.GetPendingNotification().GetLinkedTo().GetRunId())
 	require.Zero(t, linked.GetScheduledCounter())
 	require.Zero(t, linked.GetListenerCount())
