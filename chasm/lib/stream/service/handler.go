@@ -370,7 +370,16 @@ func (h *handler) AddMessages(
 
 	result, _, err := chasm.UpdateComponent(ctx,
 		refForRun(req.GetNamespaceId(), in.GetStreamId(), in.GetRunId()),
-		(*stream.Stream).AddMessages, addReq)
+		func(
+			s *stream.Stream, mctx chasm.MutableContext, r stream.AddMessagesRequest,
+		) (stream.AddMessagesResult, error) {
+			out, err := s.AddMessages(mctx, r)
+			if err == nil && !out.Deduplicated {
+				s.ScheduleChannelNotify(mctx,
+					stream.ChannelName(in.GetStreamId()), in.GetStreamId(), limits)
+			}
+			return out, err
+		}, addReq)
 	if err != nil {
 		return nil, err
 	}
@@ -1170,11 +1179,19 @@ func (h *handler) CloseStream(
 ) (*streamlib.CloseStreamResponse, error) {
 	in := req.GetFrontendRequest()
 	ctx = h.withCallerInfo(ctx, req.GetNamespaceId())
+	limits := h.limitsFor(req.GetNamespaceId())
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		refFor(req.GetNamespaceId(), in.GetStreamId()),
 		func(s *stream.Stream, mctx chasm.MutableContext, reason *commonpb.Payload) (struct{}, error) {
-			return struct{}{}, s.CloseAndSchedule(mctx, reason)
+			if s.State.GetClosed() {
+				return struct{}{}, nil
+			}
+			if err := s.CloseAndSchedule(mctx, reason); err != nil {
+				return struct{}{}, err
+			}
+			s.ScheduleChannelNotify(mctx, stream.ChannelName(in.GetStreamId()), in.GetStreamId(), limits)
+			return struct{}{}, nil
 		},
 		in.GetReason(),
 	)
