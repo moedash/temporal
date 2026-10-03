@@ -36,9 +36,10 @@ type Notification struct {
 	// Set by the writer and expected to grow. Folding keeps the highest.
 	Counter  int64                  `protobuf:"varint,3,opt,name=counter,proto3" json:"counter,omitempty"`
 	Metadata map[string]*v1.Payload `protobuf:"bytes,4,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// The workflow a linked channel belongs to and the run that received the
-	// notification. Empty for an independent channel.
-	LinkedTo      *v1.WorkflowExecution `protobuf:"bytes,5,opt,name=linked_to,json=linkedTo,proto3" json:"linked_to,omitempty"`
+	// The execution a linked channel belongs to, a workflow or a standalone
+	// activity, and the run that received the notification. Empty for an
+	// independent channel.
+	LinkedTo      *v1.Execution `protobuf:"bytes,6,opt,name=linked_to,json=linkedTo,proto3" json:"linked_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -101,7 +102,7 @@ func (x *Notification) GetMetadata() map[string]*v1.Payload {
 	return nil
 }
 
-func (x *Notification) GetLinkedTo() *v1.WorkflowExecution {
+func (x *Notification) GetLinkedTo() *v1.Execution {
 	if x != nil {
 		return x.LinkedTo
 	}
@@ -322,16 +323,16 @@ var File_temporal_server_chasm_lib_channel_proto_v1_message_proto protoreflect.F
 
 const file_temporal_server_chasm_lib_channel_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"8temporal/server/chasm/lib/channel/proto/v1/message.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\xe8\x02\n" +
+	"8temporal/server/chasm/lib/channel/proto/v1/message.proto\x12*temporal.server.chasm.lib.channel.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\"\xe6\x02\n" +
 	"\fNotification\x12\x18\n" +
 	"\achannel\x18\x01 \x01(\tR\achannel\x12\x1a\n" +
 	"\bposition\x18\x02 \x01(\fR\bposition\x12\x18\n" +
 	"\acounter\x18\x03 \x01(\x03R\acounter\x12b\n" +
-	"\bmetadata\x18\x04 \x03(\v2F.temporal.server.chasm.lib.channel.proto.v1.Notification.MetadataEntryR\bmetadata\x12F\n" +
-	"\tlinked_to\x18\x05 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\blinkedTo\x1a\\\n" +
+	"\bmetadata\x18\x04 \x03(\v2F.temporal.server.chasm.lib.channel.proto.v1.Notification.MetadataEntryR\bmetadata\x12>\n" +
+	"\tlinked_to\x18\x06 \x01(\v2!.temporal.api.common.v1.ExecutionR\blinkedTo\x1a\\\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
-	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\"\xfa\x04\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01J\x04\b\x05\x10\x06\"\xfa\x04\n" +
 	"\bListener\x12\x1f\n" +
 	"\vlistener_id\x18\x01 \x01(\tR\n" +
 	"listenerId\x12<\n" +
@@ -372,7 +373,7 @@ var file_temporal_server_chasm_lib_channel_proto_v1_message_proto_goTypes = []an
 	(*Listener)(nil),              // 1: temporal.server.chasm.lib.channel.proto.v1.Listener
 	(*WorkflowTarget)(nil),        // 2: temporal.server.chasm.lib.channel.proto.v1.WorkflowTarget
 	nil,                           // 3: temporal.server.chasm.lib.channel.proto.v1.Notification.MetadataEntry
-	(*v1.WorkflowExecution)(nil),  // 4: temporal.api.common.v1.WorkflowExecution
+	(*v1.Execution)(nil),          // 4: temporal.api.common.v1.Execution
 	(*v1.Callback)(nil),           // 5: temporal.api.common.v1.Callback
 	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
 	(*v11.Failure)(nil),           // 7: temporal.api.failure.v1.Failure
@@ -380,7 +381,7 @@ var file_temporal_server_chasm_lib_channel_proto_v1_message_proto_goTypes = []an
 }
 var file_temporal_server_chasm_lib_channel_proto_v1_message_proto_depIdxs = []int32{
 	3, // 0: temporal.server.chasm.lib.channel.proto.v1.Notification.metadata:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification.MetadataEntry
-	4, // 1: temporal.server.chasm.lib.channel.proto.v1.Notification.linked_to:type_name -> temporal.api.common.v1.WorkflowExecution
+	4, // 1: temporal.server.chasm.lib.channel.proto.v1.Notification.linked_to:type_name -> temporal.api.common.v1.Execution
 	5, // 2: temporal.server.chasm.lib.channel.proto.v1.Listener.callback:type_name -> temporal.api.common.v1.Callback
 	6, // 3: temporal.server.chasm.lib.channel.proto.v1.Listener.registered_time:type_name -> google.protobuf.Timestamp
 	0, // 4: temporal.server.chasm.lib.channel.proto.v1.Listener.in_flight:type_name -> temporal.server.chasm.lib.channel.proto.v1.Notification

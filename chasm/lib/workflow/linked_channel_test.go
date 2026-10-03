@@ -47,7 +47,7 @@ func TestLinkedChannelsOnTheOwner(t *testing.T) {
 	require.Nil(t, taken[0].GetLinkedTo(), "a subscribed channel's notification names no owner")
 	require.Equal(t, "orders", taken[1].GetChannel())
 	require.Equal(t, int64(1), taken[1].GetCounter())
-	require.Equal(t, "owner", taken[1].GetLinkedTo().GetWorkflowId())
+	require.Equal(t, "owner", taken[1].GetLinkedTo().GetBusinessId())
 	require.Equal(t, "run-1", taken[1].GetLinkedTo().GetRunId())
 	require.False(t, w.HasPendingChannelNotifications(ctx))
 

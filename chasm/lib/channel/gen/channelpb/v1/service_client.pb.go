@@ -302,7 +302,7 @@ func (c *ChannelServiceLayeredClient) callNotifyLinkedChannelNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowExecution().GetWorkflowId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetExecution().GetBusinessId(), c.numShards)
 	op := func(ctx context.Context, client ChannelServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -345,7 +345,7 @@ func (c *ChannelServiceLayeredClient) callRegisterLinkedChannelListenerNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowExecution().GetWorkflowId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetExecution().GetBusinessId(), c.numShards)
 	op := func(ctx context.Context, client ChannelServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -388,7 +388,7 @@ func (c *ChannelServiceLayeredClient) callUnregisterLinkedChannelListenerNoRetry
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowExecution().GetWorkflowId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetExecution().GetBusinessId(), c.numShards)
 	op := func(ctx context.Context, client ChannelServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -431,7 +431,7 @@ func (c *ChannelServiceLayeredClient) callPollLinkedChannelNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowExecution().GetWorkflowId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetExecution().GetBusinessId(), c.numShards)
 	op := func(ctx context.Context, client ChannelServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -474,7 +474,7 @@ func (c *ChannelServiceLayeredClient) callDescribeLinkedChannelNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowExecution().GetWorkflowId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetExecution().GetBusinessId(), c.numShards)
 	op := func(ctx context.Context, client ChannelServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)

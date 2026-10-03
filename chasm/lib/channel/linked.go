@@ -7,16 +7,18 @@ import (
 	"go.temporal.io/server/common"
 )
 
-// A linked channel lives in the mutable state of one workflow, which is its
-// listener by construction: no subscription, no event and no registration
-// race. A notification reaches the owner in the write that accepts it and
-// rides the owner's next scheduled event, with linked_to naming the owner.
-// Callback listeners and pollers attach to a linked channel as they do to an
-// independent one. The channel dies with the run and nothing of it reaches a
-// successor: a continue-as-new successor starts with no linked channels, so
-// callbacks register again and pollers start over on an empty ring.
+// A linked channel lives in the state of one execution, a workflow run or a
+// standalone activity. A workflow run is its listener by construction: no
+// subscription, no event and no registration race. A notification reaches
+// the owner in the write that accepts it and rides the owner's next scheduled
+// event, with linked_to naming the owner. A standalone activity has no such
+// event, so it is not a listener of its own channels. Callback listeners and
+// pollers attach to a linked channel as they do to an independent one. The
+// channel dies with the execution and nothing of it reaches a successor: a
+// continue-as-new successor starts with no linked channels, so callbacks
+// register again and pollers start over on an empty ring.
 
-// NewLinkedChannel makes an empty channel linked to the workflow that holds
+// NewLinkedChannel makes an empty channel linked to the execution that holds
 // it.
 func NewLinkedChannel(mctx chasm.MutableContext) *Channel {
 	c := NewChannel(mctx)
@@ -24,17 +26,20 @@ func NewLinkedChannel(mctx chasm.MutableContext) *Channel {
 	return c
 }
 
-// Linked reports whether the channel lives in a workflow's mutable state.
+// Linked reports whether the channel lives in an execution's state.
 func (c *Channel) Linked() bool {
 	return c.State.GetLinked()
 }
 
 // LinkedNotifyResult is what a notify on a linked channel reports.
 type LinkedNotifyResult struct {
-	// The owner and the callback listeners.
+	// The owner, when it listens, and the callback listeners.
 	ListenerCount int
 	// The notification raised the latest counter and joined the ring.
 	Advanced bool
+	// The owner is among the listeners. The owner fields below mean nothing
+	// when it is not.
+	OwnerListens bool
 	// The owner already held it, pending or on a task that has not started,
 	// so nothing changed for the owner.
 	OwnerHeld bool
@@ -45,17 +50,17 @@ type LinkedNotifyResult struct {
 }
 
 // NotifyLinked accepts a notification on a linked channel. A counter above
-// the latest joins the ring. Any counter reaches the owner and the callback
-// listeners, each folding it against what it holds, since a repeat after the
-// owner's task ran is a new reason to run. The owner's part is the pending
-// entry here, on its own execution, which the transaction close turns into a
-// Workflow Task.
+// the latest joins the ring. Any counter reaches the owner, when it listens,
+// and the callback listeners, each folding it against what it holds, since a
+// repeat after the owner's task ran is a new reason to run. The owner's part
+// is the pending entry here, on its own execution, which the transaction
+// close turns into a Workflow Task.
 func (c *Channel) NotifyLinked(
 	mctx chasm.MutableContext,
 	n *channelpb.Notification,
 	limits Limits,
 ) (LinkedNotifyResult, error) {
-	return c.notifyLinked(mctx, n, limits, true)
+	return c.notifyLinked(mctx, n, limits, OwnerListens(mctx))
 }
 
 // NotifyLinkedListeners accepts a notification for the ring and the callback
@@ -82,7 +87,10 @@ func (c *Channel) notifyLinked(
 	}
 	n = common.CloneProto(n)
 	n.LinkedTo = c.LinkedTo(mctx)
-	out := LinkedNotifyResult{ListenerCount: c.LinkedListenerCount()}
+	out := LinkedNotifyResult{
+		ListenerCount: c.LinkedListenerCount(mctx),
+		OwnerListens:  OwnerListens(mctx),
+	}
 	if c.Advances(n.GetCounter()) {
 		c.retain(mctx, n, limits.LinkedRetainedNotifications)
 		c.State.AcceptedCount++
@@ -107,18 +115,21 @@ func (c *Channel) notifyLinked(
 	return out, nil
 }
 
-// LinkedTo names the owner: the workflow the channel lives in and the run
+// LinkedTo names the owner: the execution the channel lives in and the run
 // that holds it.
-func (c *Channel) LinkedTo(ctx chasm.Context) *commonpb.WorkflowExecution {
-	key := ctx.ExecutionKey()
-	return &commonpb.WorkflowExecution{WorkflowId: key.BusinessID, RunId: key.RunID}
+func (c *Channel) LinkedTo(ctx chasm.Context) *commonpb.Execution {
+	return ExecutionOf(ctx)
 }
 
-// LinkedListenerCount counts the owner and the callback listeners. The owner
-// is the one workflow listening and is not in the table, so the table holds
-// callbacks only.
-func (c *Channel) LinkedListenerCount() int {
-	return 1 + len(c.Listeners)
+// LinkedListenerCount counts the owner, when it listens, and the callback
+// listeners. The owner is never in the table, so the table holds callbacks
+// only.
+func (c *Channel) LinkedListenerCount(ctx chasm.Context) int {
+	count := len(c.Listeners)
+	if OwnerListens(ctx) {
+		count++
+	}
+	return count
 }
 
 // OwnerHolds reports whether the owner already has a notification at this
@@ -194,14 +205,17 @@ func (c *Channel) OwnerStanding() OwnerStanding {
 }
 
 // OwnerListenerInfo describes the owner as the linked channel's workflow
-// listener, for describe.
+// listener, for describe. Nil for an owner that does not listen.
 func (c *Channel) OwnerListenerInfo(ctx chasm.Context) *channelpb.ChannelListenerInfo {
+	if !OwnerListens(ctx) {
+		return nil
+	}
 	owner := c.LinkedTo(ctx)
 	return &channelpb.ChannelListenerInfo{
-		ListenerId: owner.GetWorkflowId(),
+		ListenerId: owner.GetBusinessId(),
 		Variant: &channelpb.ChannelListenerInfo_Workflow_{
 			Workflow: &channelpb.ChannelListenerInfo_Workflow{
-				WorkflowId: owner.GetWorkflowId(),
+				WorkflowId: owner.GetBusinessId(),
 				RunId:      owner.GetRunId(),
 			},
 		},

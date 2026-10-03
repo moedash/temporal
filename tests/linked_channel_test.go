@@ -94,6 +94,8 @@ func (c *channelTestEnv) startIdle(id string) string {
 func requireLinkedTo(t *testing.T, ns []*notificationpb.Notification, id, runID string) {
 	t.Helper()
 	for _, n := range ns {
+		require.Equal(t, enumspb.EXECUTION_TYPE_WORKFLOW, n.GetLinkedTo().GetType(),
+			"linked_to type of %q", n.GetChannel())
 		require.Equal(t, id, n.GetLinkedTo().GetBusinessId(), "linked_to of %q", n.GetChannel())
 		require.Equal(t, runID, n.GetLinkedTo().GetRunId(), "linked_to run of %q", n.GetChannel())
 	}
@@ -331,7 +333,8 @@ func TestLinkedChannelCallbackListener(t *testing.T) {
 	recorder.mu.Lock()
 	require.Equal(t, name, recorder.channels[0])
 	linkedTo, _ := recorder.bodies[0]["linkedTo"].(map[string]any)
-	require.Equal(t, id, linkedTo["workflowId"])
+	require.Equal(t, "EXECUTION_TYPE_WORKFLOW", linkedTo["type"])
+	require.Equal(t, id, linkedTo["businessId"])
 	recorder.mu.Unlock()
 	task := c.poll(id)
 	requireNotifications(t, c.scheduledNotifications(id, task), map[string]int64{name: 1})

@@ -4,41 +4,76 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/channel"
 	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/metrics"
 )
 
-// The linked kind is served on the shard of the workflow that holds the
-// channel. The requests are the independent kind's with workflow_execution
-// set; an empty run id means the chain's current run, as it does for a
-// Signal. A workflow that has closed took its linked channels with it, so a
-// call on one answers NotFound, and a name nobody has notified yet on a
-// running workflow is a linked channel with nothing in it rather than one
-// that does not exist, which is how a client probes for the linked kind.
+// The linked kind is served on the shard of the execution that holds the
+// channel, a workflow run or a standalone activity. The requests are the
+// independent kind's with execution set. An empty run id means the chain's
+// current run, as it does for a Signal. An execution that has closed took its
+// linked channels with it, so a call on one answers NotFound, and a name
+// nobody has notified yet on a running execution is a linked channel with
+// nothing in it rather than one that does not exist, which is how a client
+// probes for the linked kind.
+//
+// Each call is written once over the owner's component type and dispatched
+// on the execution's type, since the engine reads a component by its
+// archetype. An unset type is a workflow: the HTTP routes bind the business
+// id alone, and the frontend fills the type in where the route says.
 
 var (
 	independentKindTag = metrics.StringTag("kind", "independent")
 	linkedKindTag      = metrics.StringTag("kind", "linked")
 )
 
-func ownerRef(namespaceID string, owner *commonpb.WorkflowExecution) chasm.ComponentRef {
-	return workflowRef(namespaceID, owner.GetWorkflowId(), owner.GetRunId())
+func ownerRef[O channel.LinkedOwner](
+	namespaceID string,
+	owner *commonpb.Execution,
+) chasm.ComponentRef {
+	return chasm.NewComponentRef[O](chasm.ExecutionKey{
+		NamespaceID: namespaceID,
+		BusinessID:  owner.GetBusinessId(),
+		RunID:       owner.GetRunId(),
+	})
 }
 
-func checkOwner(owner *commonpb.WorkflowExecution) error {
-	if owner.GetWorkflowId() == "" {
-		return serviceerror.NewInvalidArgument("a linked channel call needs the owner's workflow id")
+func isActivity(owner *commonpb.Execution) bool {
+	return owner.GetType() == enumspb.EXECUTION_TYPE_ACTIVITY
+}
+
+// checkOwner refuses an execution the linked kind cannot serve.
+func checkOwner(owner *commonpb.Execution) error {
+	if owner.GetBusinessId() == "" {
+		return serviceerror.NewInvalidArgument("a linked channel call needs the owner's business id")
 	}
-	return nil
+	switch owner.GetType() {
+	case enumspb.EXECUTION_TYPE_UNSPECIFIED,
+		enumspb.EXECUTION_TYPE_WORKFLOW,
+		enumspb.EXECUTION_TYPE_ACTIVITY:
+		return nil
+	default:
+		return serviceerror.NewInvalidArgumentf(
+			"a channel cannot be linked to an execution of type %v", owner.GetType())
+	}
 }
 
-func ownerClosedError(owner *commonpb.WorkflowExecution) error {
-	return serviceerror.NewNotFoundf(
-		"workflow %q has closed and its linked channels are gone with it", owner.GetWorkflowId())
+func ownerKind(owner *commonpb.Execution) string {
+	if isActivity(owner) {
+		return "activity"
+	}
+	return "workflow"
+}
+
+func ownerClosedError(owner *commonpb.Execution) error {
+	return serviceerror.NewNotFoundf("%s %q has closed and its linked channels are gone with it",
+		ownerKind(owner), owner.GetBusinessId())
 }
 
 func ownerClosed(ctx chasm.Context) bool {
@@ -48,46 +83,52 @@ func ownerClosed(ctx chasm.Context) bool {
 // ownerRead is what a call learns from reading the owner first.
 type ownerRead struct {
 	closed bool
-	// The linked channel exists on the run.
+	// The linked channel exists on the execution.
 	exists bool
 	latest int64
-	// For a notify at the counter asked about.
+	// For a notify at the counter asked about. An owner that does not listen
+	// holds every counter: there is nothing to hand it.
 	advances      bool
 	ownerHolds    bool
 	callbacksNeed bool
 	listeners     int
 }
 
-// readOwner reads the owner without touching it. An absent workflow comes
+// readOwner reads the owner without touching it. An absent execution comes
 // back as NotFound.
-func (h *handler) readOwner(
+func readOwner[O channel.LinkedOwner](
 	ctx context.Context,
 	namespaceID string,
-	owner *commonpb.WorkflowExecution,
+	owner *commonpb.Execution,
 	name string,
 	counter int64,
 ) (ownerRead, error) {
-	return chasm.ReadComponent(ctx, ownerRef(namespaceID, owner),
-		func(wf *chasmworkflow.Workflow, cctx chasm.Context, _ struct{}) (ownerRead, error) {
-			r := ownerRead{closed: ownerClosed(cctx), advances: true, listeners: 1}
-			c, ok := wf.LinkedChannel(cctx, name)
+	return chasm.ReadComponent(ctx, ownerRef[O](namespaceID, owner),
+		func(o O, cctx chasm.Context, _ struct{}) (ownerRead, error) {
+			listens := channel.OwnerListens(cctx)
+			r := ownerRead{closed: ownerClosed(cctx), advances: true, ownerHolds: !listens}
+			if listens {
+				r.listeners = 1
+			}
+			c, ok := o.LinkedChannel(cctx, name)
 			if !ok {
 				return r, nil
 			}
 			r.exists = true
 			r.latest = c.LatestCounter()
 			r.advances = c.Advances(counter)
-			r.ownerHolds = c.OwnerHolds(counter)
+			r.ownerHolds = !listens || c.OwnerHolds(counter)
 			r.callbacksNeed = c.CallbacksNeed(cctx, counter)
-			r.listeners = c.LinkedListenerCount()
+			r.listeners = c.LinkedListenerCount(cctx)
 			return r, nil
 		}, struct{}{})
 }
 
-// NotifyLinkedChannel accepts a notification on a channel linked to a
-// workflow, creating the channel on the run on first use. The owner is the
-// listener: the notification waits on its run for the next scheduled event,
-// and the same write hands it to the callback listeners.
+// NotifyLinkedChannel accepts a notification on a channel linked to an
+// execution, creating the channel on the execution on first use. A workflow
+// owner is the listener: the notification waits on its run for the next
+// scheduled event, and the same write hands it to the callback listeners. An
+// activity owner is not, so the write reaches the callbacks and the ring.
 //
 // Read first, as the independent kind does. A notification the owner already
 // holds, pending or on a task that has not started, and that every callback
@@ -97,7 +138,7 @@ func (h *handler) NotifyLinkedChannel(
 	req *channelpb.NotifyChannelRequest,
 ) (*channelpb.NotifyChannelResponse, error) {
 	in := req.GetFrontendRequest()
-	owner := in.GetWorkflowExecution()
+	owner := in.GetExecution()
 	ns := h.namespaceName(req.GetNamespaceId())
 	ctx = withCallerInfo(ctx, ns)
 	limits := h.limitsFor(ns)
@@ -111,8 +152,21 @@ func (h *handler) NotifyLinkedChannel(
 	if err := h.limiters.allowNotify(ns, h.timeSource.Now()); err != nil {
 		return nil, err
 	}
+	if isActivity(owner) {
+		return notifyLinked[*activity.Activity](ctx, h, req.GetNamespaceId(), ns, owner, n, limits)
+	}
+	return notifyLinked[*chasmworkflow.Workflow](ctx, h, req.GetNamespaceId(), ns, owner, n, limits)
+}
 
-	read, err := h.readOwner(ctx, req.GetNamespaceId(), owner, n.GetChannel(), n.GetCounter())
+func notifyLinked[O channel.LinkedOwner](
+	ctx context.Context,
+	h *handler,
+	namespaceID, ns string,
+	owner *commonpb.Execution,
+	n *channelpb.Notification,
+	limits channel.Limits,
+) (*channelpb.NotifyChannelResponse, error) {
+	read, err := readOwner[O](ctx, namespaceID, owner, n.GetChannel(), n.GetCounter())
 	if err != nil {
 		return nil, err
 	}
@@ -128,16 +182,14 @@ func (h *handler) NotifyLinkedChannel(
 		}, nil
 	}
 
-	result, _, err := chasm.UpdateComponent(ctx, ownerRef(req.GetNamespaceId(), owner),
+	result, _, err := chasm.UpdateComponent(ctx, ownerRef[O](namespaceID, owner),
 		func(
-			wf *chasmworkflow.Workflow,
-			mctx chasm.MutableContext,
-			n *channelpb.Notification,
+			o O, mctx chasm.MutableContext, n *channelpb.Notification,
 		) (channel.LinkedNotifyResult, error) {
 			if ownerClosed(mctx) {
 				return channel.LinkedNotifyResult{}, ownerClosedError(owner)
 			}
-			return wf.NotifyLinkedChannel(mctx, n, limits)
+			return o.NotifyLinkedChannel(mctx, n, limits)
 		}, n)
 	if err != nil {
 		return nil, err
@@ -145,13 +197,15 @@ func (h *handler) NotifyLinkedChannel(
 	if result.Advanced {
 		metrics.ChannelNotificationsAccepted.With(h.metricsHandler).Record(1, nsTag, linkedKindTag)
 	}
-	if result.OwnerHeld || result.OwnerFolded {
-		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
-			1, nsTag, linkedKindTag, workflowKindTag)
-	}
-	if !result.OwnerHeld {
-		metrics.ChannelNotificationsDelivered.With(h.metricsHandler).Record(
-			1, nsTag, linkedKindTag, workflowKindTag)
+	if result.OwnerListens {
+		if result.OwnerHeld || result.OwnerFolded {
+			metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
+				1, nsTag, linkedKindTag, workflowKindTag)
+		}
+		if !result.OwnerHeld {
+			metrics.ChannelNotificationsDelivered.With(h.metricsHandler).Record(
+				1, nsTag, linkedKindTag, workflowKindTag)
+		}
 	}
 	if result.CallbackFolded > 0 {
 		metrics.ChannelNotificationsFolded.With(h.metricsHandler).Record(
@@ -163,14 +217,14 @@ func (h *handler) NotifyLinkedChannel(
 }
 
 // RegisterLinkedChannelListener adds a callback listener to a linked channel,
-// creating the channel on the run if it has none by that name. A new
+// creating the channel on the execution if it has none by that name. A new
 // listener is posted the latest notification, as on an independent channel.
 func (h *handler) RegisterLinkedChannelListener(
 	ctx context.Context,
 	req *channelpb.RegisterChannelListenerRequest,
 ) (*channelpb.RegisterChannelListenerResponse, error) {
 	in := req.GetFrontendRequest()
-	owner := in.GetWorkflowExecution()
+	owner := in.GetExecution()
 	ns := h.namespaceName(req.GetNamespaceId())
 	ctx = withCallerInfo(ctx, ns)
 	if err := checkOwner(owner); err != nil {
@@ -185,17 +239,15 @@ func (h *handler) RegisterLinkedChannelListener(
 		Callback:  in.GetCallback(),
 		Limits:    limits,
 	}
-	listenerID, _, err := chasm.UpdateComponent(ctx, ownerRef(req.GetNamespaceId(), owner),
-		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, name string) (string, error) {
-			if ownerClosed(mctx) {
-				return "", ownerClosedError(owner)
-			}
-			c, err := wf.LinkedChannelOrNew(mctx, name, limits.MaxLinkedChannelsPerWorkflow)
-			if err != nil {
-				return "", err
-			}
-			return c.RegisterCallbackListener(mctx, reg)
-		}, in.GetChannel())
+	var listenerID string
+	var err error
+	if isActivity(owner) {
+		listenerID, err = registerLinked[*activity.Activity](
+			ctx, req.GetNamespaceId(), owner, in.GetChannel(), reg)
+	} else {
+		listenerID, err = registerLinked[*chasmworkflow.Workflow](
+			ctx, req.GetNamespaceId(), owner, in.GetChannel(), reg)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -204,46 +256,87 @@ func (h *handler) RegisterLinkedChannelListener(
 	}, nil
 }
 
+func registerLinked[O channel.LinkedOwner](
+	ctx context.Context,
+	namespaceID string,
+	owner *commonpb.Execution,
+	name string,
+	reg channel.CallbackRegistration,
+) (string, error) {
+	listenerID, _, err := chasm.UpdateComponent(ctx, ownerRef[O](namespaceID, owner),
+		func(o O, mctx chasm.MutableContext, name string) (string, error) {
+			if ownerClosed(mctx) {
+				return "", ownerClosedError(owner)
+			}
+			c, err := o.LinkedChannelOrNew(mctx, name, reg.Limits.MaxLinkedChannelsPerWorkflow)
+			if err != nil {
+				return "", err
+			}
+			return c.RegisterCallbackListener(mctx, reg)
+		}, name)
+	return listenerID, err
+}
+
 // UnregisterLinkedChannelListener drops a callback listener from a linked
-// channel. A workflow, channel or listener that is already gone is not an
+// channel. An execution, channel or listener that is already gone is not an
 // error, so a retry succeeds.
 func (h *handler) UnregisterLinkedChannelListener(
 	ctx context.Context,
 	req *channelpb.UnregisterChannelListenerRequest,
 ) (*channelpb.UnregisterChannelListenerResponse, error) {
 	in := req.GetFrontendRequest()
-	owner := in.GetWorkflowExecution()
+	owner := in.GetExecution()
 	ns := h.namespaceName(req.GetNamespaceId())
 	ctx = withCallerInfo(ctx, ns)
 	if err := checkOwner(owner); err != nil {
 		return nil, err
 	}
 	limits := h.limitsFor(ns)
-	done := &channelpb.UnregisterChannelListenerResponse{
-		FrontendResponse: &channelpb.UnregisterChannelListenerOutput{},
-	}
-	read, err := h.readOwner(ctx, req.GetNamespaceId(), owner, in.GetChannel(), 0)
-	if executionAbsent(err) {
-		return done, nil
+	var err error
+	if isActivity(owner) {
+		err = unregisterLinked[*activity.Activity](
+			ctx, req.GetNamespaceId(), owner, in.GetChannel(), in.GetListenerId(), limits)
+	} else {
+		err = unregisterLinked[*chasmworkflow.Workflow](
+			ctx, req.GetNamespaceId(), owner, in.GetChannel(), in.GetListenerId(), limits)
 	}
 	if err != nil {
 		return nil, err
 	}
-	if read.closed || !read.exists {
-		return done, nil
+	return &channelpb.UnregisterChannelListenerResponse{
+		FrontendResponse: &channelpb.UnregisterChannelListenerOutput{},
+	}, nil
+}
+
+func unregisterLinked[O channel.LinkedOwner](
+	ctx context.Context,
+	namespaceID string,
+	owner *commonpb.Execution,
+	name, listenerID string,
+	limits channel.Limits,
+) error {
+	read, err := readOwner[O](ctx, namespaceID, owner, name, 0)
+	if executionAbsent(err) {
+		return nil
 	}
-	_, _, err = chasm.UpdateComponent(ctx, ownerRef(req.GetNamespaceId(), owner),
-		func(wf *chasmworkflow.Workflow, mctx chasm.MutableContext, id string) (struct{}, error) {
-			c, ok := wf.LinkedChannel(mctx, in.GetChannel())
+	if err != nil {
+		return err
+	}
+	if read.closed || !read.exists {
+		return nil
+	}
+	_, _, err = chasm.UpdateComponent(ctx, ownerRef[O](namespaceID, owner),
+		func(o O, mctx chasm.MutableContext, id string) (struct{}, error) {
+			c, ok := o.LinkedChannel(mctx, name)
 			if !ok {
 				return struct{}{}, nil
 			}
 			return struct{}{}, c.UnregisterListener(mctx, id, limits)
-		}, in.GetListenerId())
+		}, listenerID)
 	if err != nil && !executionAbsent(err) {
-		return nil, err
+		return err
 	}
-	return done, nil
+	return nil
 }
 
 // PollLinkedChannel returns the retained notifications of a linked channel
@@ -255,17 +348,29 @@ func (h *handler) PollLinkedChannel(
 	req *channelpb.PollChannelRequest,
 ) (*channelpb.PollChannelResponse, error) {
 	in := req.GetFrontendRequest()
-	owner := in.GetWorkflowExecution()
+	owner := in.GetExecution()
 	ns := h.namespaceName(req.GetNamespaceId())
 	ctx = withCallerInfo(ctx, ns)
 	if err := checkOwner(owner); err != nil {
 		return nil, err
 	}
 	metrics.ChannelPollers.With(h.metricsHandler).Record(1, metrics.NamespaceTag(ns), linkedKindTag)
-	ref := ownerRef(req.GetNamespaceId(), owner)
+	if isActivity(owner) {
+		return pollLinked[*activity.Activity](ctx, req.GetNamespaceId(), owner, in)
+	}
+	return pollLinked[*chasmworkflow.Workflow](ctx, req.GetNamespaceId(), owner, in)
+}
+
+func pollLinked[O channel.LinkedOwner](
+	ctx context.Context,
+	namespaceID string,
+	owner *commonpb.Execution,
+	in *channelpb.PollChannelInput,
+) (*channelpb.PollChannelResponse, error) {
+	ref := ownerRef[O](namespaceID, owner)
 	name := in.GetChannel()
 
-	read, err := h.readOwner(ctx, req.GetNamespaceId(), owner, name, 0)
+	read, err := readOwner[O](ctx, namespaceID, owner, name, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -276,10 +381,11 @@ func (h *handler) PollLinkedChannel(
 		pollCtx, cancel := pollBudget(ctx, wait)
 		defer cancel()
 		_, _, err := chasm.PollComponent(pollCtx, ref,
-			func(wf *chasmworkflow.Workflow, cctx chasm.Context, after int64) (struct{}, bool, error) {
+			func(o O, cctx chasm.Context, after int64) (struct{}, bool, error) {
 				// Monotonic, as PollComponent requires: a linked channel is
-				// never removed from a run, and its latest counter only grows.
-				c, ok := wf.LinkedChannel(cctx, name)
+				// never removed from its owner, and its latest counter only
+				// grows.
+				c, ok := o.LinkedChannel(cctx, name)
 				return struct{}{}, ok && c.LatestCounter() > after, nil
 			}, in.GetAfterCounter())
 		if err != nil && (pollCtx.Err() == nil || ctx.Err() != nil) {
@@ -288,8 +394,8 @@ func (h *handler) PollLinkedChannel(
 	}
 
 	notifications, err := chasm.ReadComponent(ctx, ref,
-		func(wf *chasmworkflow.Workflow, cctx chasm.Context, r channel.PollRequest) ([]*channelpb.Notification, error) {
-			c, ok := wf.LinkedChannel(cctx, name)
+		func(o O, cctx chasm.Context, r channel.PollRequest) ([]*channelpb.Notification, error) {
+			c, ok := o.LinkedChannel(cctx, name)
 			if !ok {
 				return nil, nil
 			}
@@ -303,31 +409,47 @@ func (h *handler) PollLinkedChannel(
 	}, nil
 }
 
-// DescribeLinkedChannel reports a linked channel: the owner and the callback
-// listeners, the latest notification and how many are retained. A name
-// nobody has notified yet on a running workflow answers as linked with
-// nothing in it.
+// DescribeLinkedChannel reports a linked channel: the owner when it listens,
+// the callback listeners, the latest notification and how many are retained.
+// A name nobody has notified yet on a running execution answers as linked
+// with nothing in it.
 func (h *handler) DescribeLinkedChannel(
 	ctx context.Context,
 	req *channelpb.DescribeChannelRequest,
 ) (*channelpb.DescribeChannelResponse, error) {
 	in := req.GetFrontendRequest()
-	owner := in.GetWorkflowExecution()
+	owner := in.GetExecution()
 	ctx = withCallerInfo(ctx, h.namespaceName(req.GetNamespaceId()))
 	if err := checkOwner(owner); err != nil {
 		return nil, err
 	}
-	out, err := chasm.ReadComponent(ctx, ownerRef(req.GetNamespaceId(), owner),
-		func(wf *chasmworkflow.Workflow, cctx chasm.Context, name string) (*channelpb.DescribeChannelOutput, error) {
+	var out *channelpb.DescribeChannelOutput
+	var err error
+	if isActivity(owner) {
+		out, err = describeLinked[*activity.Activity](ctx, req.GetNamespaceId(), owner, in.GetChannel())
+	} else {
+		out, err = describeLinked[*chasmworkflow.Workflow](
+			ctx, req.GetNamespaceId(), owner, in.GetChannel())
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &channelpb.DescribeChannelResponse{FrontendResponse: out}, nil
+}
+
+func describeLinked[O channel.LinkedOwner](
+	ctx context.Context,
+	namespaceID string,
+	owner *commonpb.Execution,
+	name string,
+) (*channelpb.DescribeChannelOutput, error) {
+	return chasm.ReadComponent(ctx, ownerRef[O](namespaceID, owner),
+		func(o O, cctx chasm.Context, name string) (*channelpb.DescribeChannelOutput, error) {
 			if ownerClosed(cctx) {
 				return nil, ownerClosedError(owner)
 			}
-			key := cctx.ExecutionKey()
-			res := &channelpb.DescribeChannelOutput{
-				Linked:   true,
-				LinkedTo: &commonpb.WorkflowExecution{WorkflowId: key.BusinessID, RunId: key.RunID},
-			}
-			c, ok := wf.LinkedChannel(cctx, name)
+			res := &channelpb.DescribeChannelOutput{Linked: true, LinkedTo: channel.ExecutionOf(cctx)}
+			c, ok := o.LinkedChannel(cctx, name)
 			if !ok {
 				return res, nil
 			}
@@ -335,14 +457,12 @@ func (h *handler) DescribeLinkedChannel(
 			if err != nil {
 				return nil, err
 			}
-			res.Listeners = append([]*channelpb.ChannelListenerInfo{c.OwnerListenerInfo(cctx)},
-				snapshot.Listeners...)
+			if ownerInfo := c.OwnerListenerInfo(cctx); ownerInfo != nil {
+				res.Listeners = append(res.Listeners, ownerInfo)
+			}
+			res.Listeners = append(res.Listeners, snapshot.Listeners...)
 			res.Latest = snapshot.Latest
 			res.RetainedCount = snapshot.RetainedCount
 			return res, nil
-		}, in.GetChannel())
-	if err != nil {
-		return nil, err
-	}
-	return &channelpb.DescribeChannelResponse{FrontendResponse: out}, nil
+		}, name)
 }

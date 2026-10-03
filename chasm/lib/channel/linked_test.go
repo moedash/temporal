@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 )
@@ -17,8 +18,59 @@ func newTestLinkedChannel(t *testing.T) (*Channel, *chasm.MockMutableContext) {
 		HandleExecutionKey: func() chasm.ExecutionKey {
 			return chasm.ExecutionKey{NamespaceID: "ns", BusinessID: "owner", RunID: "run-1"}
 		},
+		HandleExecutionInfo: func() chasm.ExecutionInfo {
+			return chasm.ExecutionInfo{ExecutionType: enumspb.EXECUTION_TYPE_WORKFLOW}
+		},
 	}}
 	return NewLinkedChannel(mctx), mctx
+}
+
+// newTestActivityLinkedChannel is a channel held by a standalone activity.
+func newTestActivityLinkedChannel(t *testing.T) (*Channel, *chasm.MockMutableContext) {
+	t.Helper()
+	now := time.Unix(1_700_000_000, 0).UTC()
+	mctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
+		HandleNow: func(chasm.Component) time.Time { return now },
+		HandleExecutionKey: func() chasm.ExecutionKey {
+			return chasm.ExecutionKey{NamespaceID: "ns", BusinessID: "act", RunID: "run-1"}
+		},
+		HandleExecutionInfo: func() chasm.ExecutionInfo {
+			return chasm.ExecutionInfo{ExecutionType: enumspb.EXECUTION_TYPE_ACTIVITY}
+		},
+	}}
+	return NewLinkedChannel(mctx), mctx
+}
+
+// A channel linked to a standalone activity has no owner among its listeners:
+// a notify joins the ring and reaches the callbacks, nothing waits for the
+// owner, the count is the callbacks alone, and describe lists no owner.
+func TestLinkedActivityOwnerIsNotAListener(t *testing.T) {
+	c, mctx := newTestActivityLinkedChannel(t)
+	require.False(t, OwnerListens(mctx))
+
+	result, err := c.NotifyLinked(mctx, note(1), Limits{})
+	require.NoError(t, err)
+	require.False(t, result.OwnerListens)
+	require.Zero(t, result.ListenerCount)
+	require.True(t, result.Advanced)
+	require.False(t, c.HasOwnerPending(), "nothing waits for an owner that cannot be woken")
+	linkedTo := c.State.GetLatest().GetLinkedTo()
+	require.Equal(t, enumspb.EXECUTION_TYPE_ACTIVITY, linkedTo.GetType())
+	require.Equal(t, "act", linkedTo.GetBusinessId())
+	require.Equal(t, "run-1", linkedTo.GetRunId())
+	require.Nil(t, c.OwnerListenerInfo(mctx))
+
+	id, err := c.RegisterCallbackListener(mctx, CallbackRegistration{
+		RequestID: "r1", Callback: testCallback(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, c.LinkedListenerCount(mctx), "the callback alone")
+	result, err = c.NotifyLinked(mctx, note(2), Limits{})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.ListenerCount)
+	require.Equal(t, int64(2), c.Listeners[id].Get(mctx).GetPending().GetCounter(),
+		"handed the latest on registration, the next one waits behind it")
+	require.False(t, c.HasOwnerPending())
 }
 
 // A notify on a linked channel names the owner, joins the ring, and waits for
@@ -38,12 +90,13 @@ func TestLinkedNotifyReachesTheOwnerInOneWrite(t *testing.T) {
 
 	require.True(t, c.HasOwnerPending())
 	pending := c.State.GetOwnerPending()
-	require.Equal(t, "owner", pending.GetLinkedTo().GetWorkflowId())
+	require.Equal(t, enumspb.EXECUTION_TYPE_WORKFLOW, pending.GetLinkedTo().GetType())
+	require.Equal(t, "owner", pending.GetLinkedTo().GetBusinessId())
 	require.Equal(t, "run-1", pending.GetLinkedTo().GetRunId())
 	polled, err := c.Poll(mctx, PollRequest{})
 	require.NoError(t, err)
 	require.Equal(t, []int64{1}, counters(polled))
-	require.Equal(t, "owner", polled[0].GetLinkedTo().GetWorkflowId())
+	require.Equal(t, "owner", polled[0].GetLinkedTo().GetBusinessId())
 }
 
 // A notify for the listeners alone joins the ring and reaches the callbacks,
@@ -61,7 +114,7 @@ func TestLinkedNotifyListenersLeavesTheOwnerAlone(t *testing.T) {
 	polled, err := c.Poll(mctx, PollRequest{})
 	require.NoError(t, err)
 	require.Equal(t, []int64{1}, counters(polled))
-	require.Equal(t, "owner", polled[0].GetLinkedTo().GetWorkflowId())
+	require.Equal(t, "owner", polled[0].GetLinkedTo().GetBusinessId())
 
 	_, err = c.NotifyLinked(mctx, note(2), Limits{})
 	require.NoError(t, err)
@@ -145,7 +198,7 @@ func TestLinkedCallbackListeners(t *testing.T) {
 	delivery, ok := c.CallbackDeliveryFor(mctx, &channelpb.ChannelCallbackTask{ListenerId: id, Sequence: 1})
 	require.True(t, ok)
 	require.True(t, delivery.Linked)
-	require.Equal(t, "owner", delivery.Notification.GetLinkedTo().GetWorkflowId())
+	require.Equal(t, "owner", delivery.Notification.GetLinkedTo().GetBusinessId())
 
 	result, err = c.NotifyLinked(mctx, note(2), Limits{})
 	require.NoError(t, err)
@@ -156,10 +209,10 @@ func TestLinkedCallbackListeners(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(2), c.Listeners[late].Get(mctx).GetInFlight().GetCounter(),
 		"handed the latest on registration")
-	require.Equal(t, 3, c.LinkedListenerCount())
+	require.Equal(t, 3, c.LinkedListenerCount(mctx))
 
 	require.NoError(t, c.UnregisterListener(mctx, id, Limits{}))
 	require.NoError(t, c.UnregisterListener(mctx, late, Limits{}))
-	require.Equal(t, 1, c.LinkedListenerCount())
+	require.Equal(t, 1, c.LinkedListenerCount(mctx))
 	require.Empty(t, tasksOf[*channelpb.ChannelIdleTask](mctx))
 }

@@ -44,8 +44,8 @@ type ChannelServiceClient interface {
 	UnregisterChannelListener(ctx context.Context, in *UnregisterChannelListenerRequest, opts ...grpc.CallOption) (*UnregisterChannelListenerResponse, error)
 	PollChannel(ctx context.Context, in *PollChannelRequest, opts ...grpc.CallOption) (*PollChannelResponse, error)
 	DescribeChannel(ctx context.Context, in *DescribeChannelRequest, opts ...grpc.CallOption) (*DescribeChannelResponse, error)
-	// The linked kind. Same requests, with workflow_execution set, routed to the
-	// shard of the workflow that holds the channel.
+	// The linked kind. Same requests, with execution set, routed to the shard
+	// of the execution that holds the channel.
 	NotifyLinkedChannel(ctx context.Context, in *NotifyChannelRequest, opts ...grpc.CallOption) (*NotifyChannelResponse, error)
 	RegisterLinkedChannelListener(ctx context.Context, in *RegisterChannelListenerRequest, opts ...grpc.CallOption) (*RegisterChannelListenerResponse, error)
 	UnregisterLinkedChannelListener(ctx context.Context, in *UnregisterChannelListenerRequest, opts ...grpc.CallOption) (*UnregisterChannelListenerResponse, error)
@@ -195,8 +195,8 @@ type ChannelServiceServer interface {
 	UnregisterChannelListener(context.Context, *UnregisterChannelListenerRequest) (*UnregisterChannelListenerResponse, error)
 	PollChannel(context.Context, *PollChannelRequest) (*PollChannelResponse, error)
 	DescribeChannel(context.Context, *DescribeChannelRequest) (*DescribeChannelResponse, error)
-	// The linked kind. Same requests, with workflow_execution set, routed to the
-	// shard of the workflow that holds the channel.
+	// The linked kind. Same requests, with execution set, routed to the shard
+	// of the execution that holds the channel.
 	NotifyLinkedChannel(context.Context, *NotifyChannelRequest) (*NotifyChannelResponse, error)
 	RegisterLinkedChannelListener(context.Context, *RegisterChannelListenerRequest) (*RegisterChannelListenerResponse, error)
 	UnregisterLinkedChannelListener(context.Context, *UnregisterChannelListenerRequest) (*UnregisterChannelListenerResponse, error)
