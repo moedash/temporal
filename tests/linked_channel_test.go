@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	notificationpb "go.temporal.io/api/notification/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -20,21 +21,21 @@ import (
 // call. These cases drive it with the raw client the way the independent
 // cases do, so each scheduled event can be inspected.
 
-func linkedOwner(id, runID string) *commonpb.WorkflowExecution {
-	return &commonpb.WorkflowExecution{WorkflowId: id, RunId: runID}
+func linkedOwner(id, runID string) *commonpb.Execution {
+	return &commonpb.Execution{Type: enumspb.EXECUTION_TYPE_WORKFLOW, BusinessId: id, RunId: runID}
 }
 
 func (c *channelTestEnv) notifyLinked(
-	owner *commonpb.WorkflowExecution,
+	owner *commonpb.Execution,
 	name string,
 	counter int64,
 ) (*workflowservice.NotifyChannelResponse, error) {
 	return c.env.FrontendClient().NotifyChannel(c.ctx(), &workflowservice.NotifyChannelRequest{
-		Namespace:         c.ns,
-		Notification:      channelNotification(name, counter),
-		Identity:          "tester",
-		RequestId:         uuid.NewString(),
-		WorkflowExecution: owner,
+		Namespace:    c.ns,
+		Notification: channelNotification(name, counter),
+		Identity:     "tester",
+		RequestId:    uuid.NewString(),
+		Execution:    owner,
 	})
 }
 
@@ -46,13 +47,13 @@ func (c *channelTestEnv) mustNotifyLinked(id, name string, counter int64) int32 
 }
 
 func (c *channelTestEnv) describeLinked(
-	owner *commonpb.WorkflowExecution,
+	owner *commonpb.Execution,
 	name string,
 ) (*workflowservice.DescribeChannelResponse, error) {
 	return c.env.FrontendClient().DescribeChannel(c.ctx(), &workflowservice.DescribeChannelRequest{
-		Namespace:         c.ns,
-		Channel:           name,
-		WorkflowExecution: owner,
+		Namespace: c.ns,
+		Channel:   name,
+		Execution: owner,
 	})
 }
 
@@ -64,19 +65,19 @@ func (c *channelTestEnv) mustDescribeLinked(id, name string) *workflowservice.De
 }
 
 func (c *channelTestEnv) pollLinked(
-	owner *commonpb.WorkflowExecution,
+	owner *commonpb.Execution,
 	name string,
 	after int64,
 	wait time.Duration,
 	limit int32,
 ) (*workflowservice.PollChannelResponse, error) {
 	return c.env.FrontendClient().PollChannel(c.ctx(), &workflowservice.PollChannelRequest{
-		Namespace:         c.ns,
-		Channel:           name,
-		AfterCounter:      after,
-		Wait:              durationpb.New(wait),
-		MaxNotifications:  limit,
-		WorkflowExecution: owner,
+		Namespace:        c.ns,
+		Channel:          name,
+		AfterCounter:     after,
+		Wait:             durationpb.New(wait),
+		MaxNotifications: limit,
+		Execution:        owner,
 	})
 }
 
@@ -93,7 +94,7 @@ func (c *channelTestEnv) startIdle(id string) string {
 func requireLinkedTo(t *testing.T, ns []*notificationpb.Notification, id, runID string) {
 	t.Helper()
 	for _, n := range ns {
-		require.Equal(t, id, n.GetLinkedTo().GetWorkflowId(), "linked_to of %q", n.GetChannel())
+		require.Equal(t, id, n.GetLinkedTo().GetBusinessId(), "linked_to of %q", n.GetChannel())
 		require.Equal(t, runID, n.GetLinkedTo().GetRunId(), "linked_to run of %q", n.GetChannel())
 	}
 }
@@ -117,7 +118,7 @@ func TestLinkedChannelNotifyCarriesOnScheduledEvent(t *testing.T) {
 
 	untouched := c.mustDescribeLinked(id, name)
 	require.Equal(t, notificationpb.CHANNEL_KIND_LINKED, untouched.GetKind())
-	require.Equal(t, id, untouched.GetLinkedTo().GetWorkflowId())
+	require.Equal(t, id, untouched.GetLinkedTo().GetBusinessId())
 	require.Equal(t, runID, untouched.GetLinkedTo().GetRunId())
 	require.Empty(t, untouched.GetListeners())
 	require.Nil(t, untouched.GetLatest())
@@ -137,7 +138,7 @@ func TestLinkedChannelNotifyCarriesOnScheduledEvent(t *testing.T) {
 	require.Equal(t, id, desc.GetListeners()[0].GetWorkflow().GetWorkflowId())
 	require.Equal(t, runID, desc.GetListeners()[0].GetWorkflow().GetRunId())
 	require.Equal(t, int64(1), desc.GetLatest().GetCounter())
-	require.Equal(t, id, desc.GetLatest().GetLinkedTo().GetWorkflowId())
+	require.Equal(t, id, desc.GetLatest().GetLinkedTo().GetBusinessId())
 	require.Equal(t, int32(1), desc.GetRetainedCount())
 
 	// The independent channel of the same name is untouched by all of this.
@@ -306,9 +307,9 @@ func TestLinkedChannelCallbackListener(t *testing.T) {
 				Callback: &commonpb.Callback{Variant: &commonpb.Callback_Nexus_{
 					Nexus: &commonpb.Callback_Nexus{Url: url},
 				}},
-				RequestId:         requestID,
-				Identity:          "tester",
-				WorkflowExecution: linkedOwner(id, ""),
+				RequestId: requestID,
+				Identity:  "tester",
+				Execution: linkedOwner(id, ""),
 			})
 		require.NoError(t, err)
 		return resp.GetListenerId()
@@ -351,7 +352,7 @@ func TestLinkedChannelCallbackListener(t *testing.T) {
 		_, err := c.env.FrontendClient().UnregisterChannelListener(c.ctx(),
 			&workflowservice.UnregisterChannelListenerRequest{
 				Namespace: c.ns, Channel: name, ListenerId: l, Identity: "tester",
-				WorkflowExecution: linkedOwner(id, ""),
+				Execution: linkedOwner(id, ""),
 			})
 		require.NoError(t, err)
 	}
@@ -368,7 +369,7 @@ func TestLinkedChannelClosedChainIsNotFound(t *testing.T) {
 	runID := c.start(id)
 	c.complete(c.poll(id), false, completeWorkflowCommand()...)
 
-	for _, owner := range []*commonpb.WorkflowExecution{linkedOwner(id, ""), linkedOwner(id, runID)} {
+	for _, owner := range []*commonpb.Execution{linkedOwner(id, ""), linkedOwner(id, runID)} {
 		_, err := c.describeLinked(owner, name)
 		requireNotFound(t, err)
 		_, err = c.notifyLinked(owner, name, 1)
