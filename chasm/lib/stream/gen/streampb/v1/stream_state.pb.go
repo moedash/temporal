@@ -67,8 +67,14 @@ type StreamState struct {
 	// schedule none of their own; the check re-arms itself while the stream
 	// holds records and lowers the flag when it holds none.
 	AgeTaskPending bool `protobuf:"varint,18,opt,name=age_task_pending,json=ageTaskPending,proto3" json:"age_task_pending,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// One per append and one per close, the counter of the notification each
+	// sends to the channel named by the stream. Grows for the life of the stream.
+	ChangeSequence int64 `protobuf:"varint,19,opt,name=change_sequence,json=changeSequence,proto3" json:"change_sequence,omitempty"`
+	// A task to notify the stream's channel is outstanding. Changes while it is
+	// set schedule none of their own; the task reads the latest when it runs.
+	ChannelNotifyPending bool `protobuf:"varint,20,opt,name=channel_notify_pending,json=channelNotifyPending,proto3" json:"channel_notify_pending,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *StreamState) Reset() {
@@ -195,6 +201,20 @@ func (x *StreamState) GetHeldBytes() int64 {
 func (x *StreamState) GetAgeTaskPending() bool {
 	if x != nil {
 		return x.AgeTaskPending
+	}
+	return false
+}
+
+func (x *StreamState) GetChangeSequence() int64 {
+	if x != nil {
+		return x.ChangeSequence
+	}
+	return 0
+}
+
+func (x *StreamState) GetChannelNotifyPending() bool {
+	if x != nil {
+		return x.ChannelNotifyPending
 	}
 	return false
 }
@@ -627,7 +647,7 @@ var File_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto protorefle
 
 const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc = "" +
 	"\n" +
-	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\xa4\b\n" +
+	"<temporal/server/chasm/lib/stream/proto/v1/stream_state.proto\x12)temporal.server.chasm.lib.stream.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\x83\t\n" +
 	"\vStreamState\x12\x1f\n" +
 	"\vhead_offset\x18\x01 \x01(\x03R\n" +
 	"headOffset\x12\x1f\n" +
@@ -647,7 +667,9 @@ const file_temporal_server_chasm_lib_stream_proto_v1_stream_state_proto_rawDesc 
 	"\x0enotify_pending\x18\x10 \x01(\bR\rnotifyPending\x12\x1d\n" +
 	"\n" +
 	"held_bytes\x18\x11 \x01(\x03R\theldBytes\x12(\n" +
-	"\x10age_task_pending\x18\x12 \x01(\bR\x0eageTaskPending\x1aw\n" +
+	"\x10age_task_pending\x18\x12 \x01(\bR\x0eageTaskPending\x12'\n" +
+	"\x0fchange_sequence\x18\x13 \x01(\x03R\x0echangeSequence\x124\n" +
+	"\x16channel_notify_pending\x18\x14 \x01(\bR\x14channelNotifyPending\x1aw\n" +
 	"\x0eProducersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12O\n" +
 	"\x05value\x18\x02 \x01(\v29.temporal.server.chasm.lib.stream.proto.v1.ProducerCursorR\x05value:\x028\x01\x1aw\n" +

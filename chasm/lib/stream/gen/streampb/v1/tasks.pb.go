@@ -141,6 +141,64 @@ func (*StreamAgeTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
 }
 
+// Fires after a change to a stream whose channel lives in another execution:
+// a standalone stream, or one a standalone activity owns. One is outstanding
+// at a time and reads the latest change when it runs, so changes reach the
+// channel in order and a burst reaches it as its newest change.
+type StreamNotifyChannelTask struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Channel string                 `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	// What a native position pairs the offset with: the owning run, or the
+	// stream's own id for a standalone stream.
+	Run           string `protobuf:"bytes,2,opt,name=run,proto3" json:"run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamNotifyChannelTask) Reset() {
+	*x = StreamNotifyChannelTask{}
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamNotifyChannelTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamNotifyChannelTask) ProtoMessage() {}
+
+func (x *StreamNotifyChannelTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamNotifyChannelTask.ProtoReflect.Descriptor instead.
+func (*StreamNotifyChannelTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *StreamNotifyChannelTask) GetChannel() string {
+	if x != nil {
+		return x.Channel
+	}
+	return ""
+}
+
+func (x *StreamNotifyChannelTask) GetRun() string {
+	if x != nil {
+		return x.Run
+	}
+	return ""
+}
+
 var File_temporal_server_chasm_lib_stream_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_rawDesc = "" +
@@ -148,7 +206,10 @@ const file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_rawDesc = "" +
 	"5temporal/server/chasm/lib/stream/proto/v1/tasks.proto\x12)temporal.server.chasm.lib.stream.proto.v1\"\x15\n" +
 	"\x13StreamRetentionTask\"\x1b\n" +
 	"\x19StreamNotifyConsumersTask\"\x0f\n" +
-	"\rStreamAgeTaskB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
+	"\rStreamAgeTask\"E\n" +
+	"\x17StreamNotifyChannelTask\x12\x18\n" +
+	"\achannel\x18\x01 \x01(\tR\achannel\x12\x10\n" +
+	"\x03run\x18\x02 \x01(\tR\x03runB>Z<go.temporal.io/server/chasm/lib/stream/gen/streampb;streampbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_rawDescOnce sync.Once
@@ -162,11 +223,12 @@ func file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_rawDescGZIP() []
 	return file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_goTypes = []any{
 	(*StreamRetentionTask)(nil),       // 0: temporal.server.chasm.lib.stream.proto.v1.StreamRetentionTask
 	(*StreamNotifyConsumersTask)(nil), // 1: temporal.server.chasm.lib.stream.proto.v1.StreamNotifyConsumersTask
 	(*StreamAgeTask)(nil),             // 2: temporal.server.chasm.lib.stream.proto.v1.StreamAgeTask
+	(*StreamNotifyChannelTask)(nil),   // 3: temporal.server.chasm.lib.stream.proto.v1.StreamNotifyChannelTask
 }
 var file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -187,7 +249,7 @@ func file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_stream_proto_v1_tasks_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
