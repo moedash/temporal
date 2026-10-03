@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	chasmchannel "go.temporal.io/server/chasm/lib/channel/service"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
@@ -127,6 +128,7 @@ var Module = fx.Options(
 	hsmnexusoperations.Module,
 	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
+	chasmchannel.HistoryModule,
 	scheduler.Module,
 	callback.Module,
 	chasmnexus.Module,

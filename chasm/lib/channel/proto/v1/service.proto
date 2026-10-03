@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.channel.proto.v1;
+
+import "chasm/lib/channel/proto/v1/request_response.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/channel/gen/channelpb;channelpb";
+
+// ChannelService is served by History. The frontend reaches it for the public
+// channel calls.
+service ChannelService {
+  rpc NotifyChannel(NotifyChannelRequest) returns (NotifyChannelResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.notification.channel";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc RegisterChannelListener(RegisterChannelListenerRequest) returns (RegisterChannelListenerResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.channel";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc UnregisterChannelListener(UnregisterChannelListenerRequest) returns (UnregisterChannelListenerResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.channel";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc PollChannel(PollChannelRequest) returns (PollChannelResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.channel";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
+  }
+
+  rpc DescribeChannel(DescribeChannelRequest) returns (DescribeChannelResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.channel";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+}
