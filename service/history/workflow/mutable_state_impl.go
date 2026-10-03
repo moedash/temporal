@@ -859,6 +859,31 @@ func (ms *MutableStateImpl) takeChannelNotifications() []*channelpb.Notification
 	return wf.TakeChannelNotifications(chasmCtx)
 }
 
+// ConsumesStreams reports whether this workflow holds a cursor into any
+// stream.
+//
+// Matching builds a query task without RecordWorkflowTaskStarted, so it has to
+// ask History separately for the ranges to re-supply, and that call takes a
+// workflow lease. Almost no workflow consumes a stream, so this rides the
+// mutable state matching already fetched and keeps the call off every other
+// query.
+func (ms *MutableStateImpl) ConsumesStreams() bool {
+	node, ok := ms.chasmTree.(*chasm.Node)
+	if !ok {
+		return false
+	}
+	chasmCtx := chasm.NewContext(context.Background(), node)
+	rootComponent, err := node.ComponentByPath(chasmCtx, nil)
+	if err != nil {
+		return false
+	}
+	wf, ok := rootComponent.(*chasmworkflow.Workflow)
+	if !ok {
+		return false
+	}
+	return wf.HasStreamCursors()
+}
+
 // closeActivityStreams ends the streams an activity owns once it reaches a
 // terminal status.
 //

@@ -141,6 +141,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		return nil
 	case *historyservice.GetShardResponse:
 		return nil
+	case *historyservice.GetStreamReplaySlicesRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
+		}
+	case *historyservice.GetStreamReplaySlicesResponse:
+		return nil
 	case *historyservice.GetWorkflowExecutionHistoryRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetRequest().GetExecution().GetWorkflowId()),

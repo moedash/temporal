@@ -3,10 +3,12 @@ package tests
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	streampb "go.temporal.io/api/stream/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	chasmstream "go.temporal.io/server/chasm/lib/stream"
 	streamlib "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
@@ -77,6 +79,84 @@ func TestOverLimitPublishFailsTheWorkflowTask(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"fits"}, bodies(poll.GetFrontendResponse().GetRecords()))
 	require.Equal(t, []int64{0}, offsets(poll.GetFrontendResponse().GetRecords()))
+}
+
+// A workflow reads a topic by name before anything has been written to it, so
+// the subscribe has to bring the owned stream into being rather than fail the
+// task. An outside producer that arrives later appends to that same stream,
+// and its records reach the workflow carrying the identity it wrote.
+func TestSubscribeToAnUnwrittenNameCreatesTheOwnedStream(t *testing.T) {
+	env := testcore.NewEnv(t)
+	s := newStreamTestEnvFrom(t, env)
+	execution, tq := startConsumer(t, s, "stream-wf-subscribe-first-")
+
+	name := "inputs-" + uuid.NewString()
+	var delivered [][]*streampb.StreamSlice
+	//nolint:staticcheck // SA1019: only the deprecated poller can emit this command type.
+	poller := &testcore.TaskPoller{
+		Client:    env.FrontendClient(),
+		Namespace: s.ns,
+		TaskQueue: tq,
+		Identity:  "tester",
+		WorkflowTaskHandler: func(
+			resp *workflowservice.PollWorkflowTaskQueueResponse,
+		) ([]*commandpb.Command, error) {
+			delivered = append(delivered, resp.GetStreamSlices())
+			if len(delivered) == 1 {
+				return subscribeCommand(name), nil
+			}
+			return nil, nil
+		},
+		Logger: env.Logger,
+		T:      t,
+	}
+
+	_, err := poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+
+	events := env.GetHistory(s.ns, execution)
+	require.Nil(t, workflowTaskFailedWith(events,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SUBSCRIBE_STREAM_ATTRIBUTES))
+	subscribed := subscribedEvents(events)
+	require.Len(t, subscribed, 1)
+	require.Equal(t, name, subscribed[0].GetStreamId())
+	require.Equal(t, int64(0), subscribed[0].GetStartOffset(), "the new stream starts empty")
+
+	_, err = s.client.AddWorkflowMessages(s.ctx(), &streamlib.AddWorkflowMessagesRequest{
+		FrontendRequest: &streamlib.AddWorkflowMessagesInput{
+			Namespace: s.ns, WorkflowId: execution.GetWorkflowId(), StreamName: name,
+			Records: []*streamlib.StreamRecord{
+				{
+					Body: &commonpb.Payload{Data: []byte("hello")}, Topic: name,
+					ProducerId: "model", Attempt: 2, Sequence: 0,
+				},
+				{
+					Kind: streampb.STREAM_RECORD_KIND_FINISH, Topic: name,
+					ProducerId: "model", Attempt: 2, Sequence: 1,
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = poller.PollAndProcessWorkflowTask()
+	require.NoError(t, err)
+	got := currentSlice(t, delivered[1])
+	require.Equal(t, name, got.GetStreamId())
+	require.Equal(t, int64(2), got.GetToOffset())
+
+	records := got.GetRecords()
+	require.Len(t, records, 2)
+	require.Equal(t, "hello", string(records[0].GetBody().GetData()))
+	require.Equal(t, streampb.STREAM_RECORD_KIND_DATA, records[0].GetKind(),
+		"a record with no kind is data")
+	require.Equal(t, "model", records[0].GetProducerId())
+	require.Equal(t, int64(2), records[0].GetAttempt())
+	require.Equal(t, int64(0), records[0].GetSequence())
+	require.Equal(t, streampb.STREAM_RECORD_KIND_FINISH, records[1].GetKind(),
+		"a finish record is delivered like any other")
+	require.Equal(t, "model", records[1].GetProducerId())
+	require.Equal(t, int64(1), records[1].GetSequence())
 }
 
 // The guarantee the design is sold on: a publish commits with the workflow

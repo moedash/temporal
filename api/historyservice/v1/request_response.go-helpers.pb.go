@@ -116,6 +116,80 @@ func (this *StartWorkflowExecutionResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type GetStreamReplaySlicesRequest to the protobuf v3 wire format
+func (val *GetStreamReplaySlicesRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetStreamReplaySlicesRequest from the protobuf v3 wire format
+func (val *GetStreamReplaySlicesRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetStreamReplaySlicesRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetStreamReplaySlicesRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetStreamReplaySlicesRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetStreamReplaySlicesRequest
+	switch t := that.(type) {
+	case *GetStreamReplaySlicesRequest:
+		that1 = t
+	case GetStreamReplaySlicesRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type GetStreamReplaySlicesResponse to the protobuf v3 wire format
+func (val *GetStreamReplaySlicesResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetStreamReplaySlicesResponse from the protobuf v3 wire format
+func (val *GetStreamReplaySlicesResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetStreamReplaySlicesResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetStreamReplaySlicesResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetStreamReplaySlicesResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetStreamReplaySlicesResponse
+	switch t := that.(type) {
+	case *GetStreamReplaySlicesResponse:
+		that1 = t
+	case GetStreamReplaySlicesResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type GetMutableStateRequest to the protobuf v3 wire format
 func (val *GetMutableStateRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
