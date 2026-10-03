@@ -17,6 +17,9 @@ var HistoryModule = fx.Module(
 		newHandler,
 		newRetentionTaskHandler,
 		newNotifyConsumersTaskHandler,
+		// Takes the channel service's routed client, which the channel module
+		// provides to the same History process.
+		newNotifyChannelTaskHandler,
 		newAgeTaskHandler,
 		newLibrary,
 	),

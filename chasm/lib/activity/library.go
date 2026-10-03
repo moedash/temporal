@@ -4,6 +4,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/chasm/lib/stream"
 	"google.golang.org/grpc"
 )
 
@@ -14,6 +15,10 @@ var ctxKeyActivityContext = ctxKeyActivityContextType{}
 // activityContext holds dependencies injected into the chasm.Context for use by Activity methods.
 type activityContext struct {
 	config *Config
+	// Stream limits of the namespace, for closing the streams a standalone
+	// activity owns when it ends. Nil where the library only registers the
+	// component, which runs no transition.
+	streamConfig *stream.Config
 }
 
 // activityContextFromChasm extracts the activityContext from a chasm.Context.
@@ -35,7 +40,8 @@ var (
 
 type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
-	config *Config
+	config       *Config
+	streamConfig *stream.Config
 }
 
 func newComponentOnlyLibrary(
@@ -64,7 +70,8 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 			chasm.WithBusinessIDAlias("ActivityId"),
 			chasm.WithContextValues(map[any]any{
 				ctxKeyActivityContext: &activityContext{
-					config: l.config,
+					config:       l.config,
+					streamConfig: l.streamConfig,
 				},
 			}),
 		),
@@ -98,9 +105,12 @@ func newLibrary(
 	startToCloseTimeoutTaskHandler *startToCloseTimeoutTaskHandler,
 	heartbeatTimeoutTaskHandler *heartbeatTimeoutTaskHandler,
 	config *Config,
+	streamConfig *stream.Config,
 ) *library {
+	components := newComponentOnlyLibrary(config)
+	components.streamConfig = streamConfig
 	return &library{
-		componentOnlyLibrary:              *newComponentOnlyLibrary(config),
+		componentOnlyLibrary:              *components,
 		handler:                           handler,
 		activityDispatchTaskHandler:       activityDispatchTaskHandler,
 		scheduleToStartTimeoutTaskHandler: scheduleToStartTimeoutTaskHandler,

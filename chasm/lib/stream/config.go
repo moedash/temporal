@@ -122,6 +122,11 @@ const (
 	// every single stream stays inside its own budget. Half the error limit,
 	// which leaves the rest of mutable state its own room.
 	OwnedStreamsMaxBytesPerWorkflow = 4 << 20
+
+	// ChannelRetainedNotifications bounds the ring of a channel a stream drives,
+	// well below a linked channel's default, since the stream holds the data a
+	// poller would otherwise need the ring for.
+	ChannelRetainedNotifications = 16
 )
 
 var (
@@ -134,6 +139,17 @@ var (
 		false,
 		`Whether the stream service and the workflow stream commands are available to a
 namespace. Off by default.`,
+	)
+	NotifyChannelSetting = dynamicconfig.NewNamespaceBoolSetting(
+		"stream.notifyChannel",
+		true,
+		`Whether a change to a native stream notifies the notification channel named by the
+stream. Off creates no channel state from streams.`,
+	)
+	ChannelRetainedNotificationsSetting = dynamicconfig.NewNamespaceIntSetting(
+		"stream.channelRetainedNotifications",
+		ChannelRetainedNotifications,
+		`How many notifications the channel named by a native stream retains for pollers.`,
 	)
 	MaxConsumeItemsPerTaskSetting = dynamicconfig.NewNamespaceIntSetting(
 		"stream.maxConsumeItemsPerTask",
@@ -284,10 +300,16 @@ type Config struct {
 	AppendRecordsPerSecond dynamicconfig.IntPropertyFnWithNamespaceFilter
 	AppendBytesPerSecond   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PollsPerSecond         dynamicconfig.IntPropertyFnWithNamespaceFilter
+
+	NotifyChannel                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ChannelRetainedNotifications dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
+		NotifyChannel:                NotifyChannelSetting.Get(dc),
+		ChannelRetainedNotifications: ChannelRetainedNotificationsSetting.Get(dc),
+
 		Enabled:                    EnabledSetting.Get(dc),
 		MaxIDLength:                dynamicconfig.MaxIDLengthLimit.Get(dc),
 		RetentionRecheckInterval:   RetentionRecheckIntervalSetting.Get(dc),
@@ -332,6 +354,12 @@ type Limits struct {
 	ReplayMaxRecords                int
 	ReplayMaxBytes                  int
 	ReplayMaxPages                  int
+
+	// ChannelNotifyOff stops a stream's changes from reaching the channel
+	// named by the stream. The zero value is on, so a Limits built by hand
+	// behaves as a namespace with the default setting.
+	ChannelNotifyOff             bool
+	ChannelRetainedNotifications int
 }
 
 // LimitsFor resolves the limits for a namespace. A nil Config, which is what
@@ -341,6 +369,9 @@ func (c *Config) LimitsFor(namespaceName string) Limits {
 		return DefaultLimits()
 	}
 	return Limits{
+		ChannelNotifyOff:             !c.NotifyChannel(namespaceName),
+		ChannelRetainedNotifications: c.ChannelRetainedNotifications(namespaceName),
+
 		MaxConsumeItemsPerTask:     c.MaxConsumeItemsPerTask(namespaceName),
 		MaxConsumeBytesPerTask:     c.MaxConsumeBytesPerTask(namespaceName),
 		MaxProducersPerStream:      c.MaxProducersPerStream(namespaceName),
@@ -404,5 +435,6 @@ func (l Limits) withDefaults() Limits {
 	fill(&l.ReplayMaxRecords, ReplayMaxRecords)
 	fill(&l.ReplayMaxBytes, ReplayMaxBytes)
 	fill(&l.ReplayMaxPages, ReplayMaxPages)
+	fill(&l.ChannelRetainedNotifications, ChannelRetainedNotifications)
 	return l
 }

@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	channelpb "go.temporal.io/server/chasm/lib/channel/gen/channelpb/v1"
 	"go.temporal.io/server/chasm/lib/stream"
 	streampb "go.temporal.io/server/chasm/lib/stream/gen/streampb/v1"
 	"go.temporal.io/server/common/headers"
@@ -293,6 +295,78 @@ func newNotifyConsumersTaskHandler(
 		namespaceRegistry: namespaceRegistry,
 		notifier:          consumerNotifier{logger: logger, routed: routed},
 	}
+}
+
+// notifyChannelTaskHandler tells the channel named for a stream about one
+// change. The channel is an execution of its own, so the notify goes out
+// through the channel service to be routed, as any writer's would.
+type notifyChannelTaskHandler struct {
+	chasm.SideEffectTaskHandlerBase[*streampb.StreamNotifyChannelTask]
+
+	namespaceRegistry namespace.Registry
+	logger            log.Logger
+	channels          channelpb.ChannelServiceClient
+}
+
+func newNotifyChannelTaskHandler(
+	namespaceRegistry namespace.Registry,
+	logger log.Logger,
+	channels channelpb.ChannelServiceClient,
+) *notifyChannelTaskHandler {
+	return &notifyChannelTaskHandler{
+		namespaceRegistry: namespaceRegistry,
+		logger:            logger,
+		channels:          channels,
+	}
+}
+
+// Validate accepts the task unconditionally, for the reason the consumer
+// notify does: the change that scheduled it raised the flag that keeps later
+// changes from scheduling their own, and Execute is what lowers it.
+func (h *notifyChannelTaskHandler) Validate(
+	_ chasm.Context,
+	_ *stream.Stream,
+	_ chasm.TaskInvocation,
+	_ *streampb.StreamNotifyChannelTask,
+) (bool, error) {
+	return true, nil
+}
+
+// Execute reads the latest change and notifies the channel. The request id
+// names the change, so a retry of the task after an ambiguous failure is
+// answered rather than accepted twice.
+func (h *notifyChannelTaskHandler) Execute(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	_ chasm.TaskAttributes,
+	task *streampb.StreamNotifyChannelTask,
+) error {
+	ctx, namespaceName := backgroundCallerContext(ctx, h.namespaceRegistry, ref.NamespaceID)
+	n, _, err := chasm.UpdateComponent(ctx, ref, (*stream.Stream).TakeChannelChange, task)
+	if err != nil {
+		return err
+	}
+	if n.GetCounter() == 0 {
+		return nil
+	}
+	callCtx, cancel := context.WithTimeout(ctx, stream.RoutedCallTimeout)
+	defer cancel()
+	_, err = h.channels.NotifyChannel(callCtx, &channelpb.NotifyChannelRequest{
+		NamespaceId: ref.NamespaceID,
+		FrontendRequest: &channelpb.NotifyChannelInput{
+			Namespace:    namespaceName,
+			Notification: n,
+			Identity:     "stream",
+			RequestId:    fmt.Sprintf("stream-change:%s:%d", n.GetChannel(), n.GetCounter()),
+		},
+	})
+	if err != nil {
+		h.logger.Error("failed to notify the channel named by a stream",
+			tag.NewStringTag("stream-id", ref.BusinessID),
+			tag.NewStringTag("channel", task.GetChannel()),
+			tag.Error(err))
+	}
+	return err
 }
 
 // Validate accepts the task unconditionally.

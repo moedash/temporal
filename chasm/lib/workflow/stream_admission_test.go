@@ -260,7 +260,7 @@ func TestCloseActivityStreamsEndsOnlyThatActivity(t *testing.T) {
 
 	require.True(t, w.HasOpenActivityStreams(ctx, "act"))
 	require.False(t, w.HasOpenActivityStreams(ctx, "never-wrote"))
-	require.NoError(t, w.CloseActivityStreams(ctx, "act"))
+	require.NoError(t, w.CloseActivityStreams(ctx, "act", stream.Limits{}))
 	require.False(t, w.HasOpenActivityStreams(ctx, "act"))
 
 	closed := func(key string) bool { return w.OwnedStream(ctx, key).State.GetClosed() }

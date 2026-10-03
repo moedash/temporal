@@ -40,22 +40,9 @@ func (a *Activity) AppendToOwnedStream(
 			"activity execution closed with status %v, so its streams take no more records",
 			InternalStatusToAPIStatus(a.GetStatus()))
 	}
-	return a.ownedStreams().Append(mctx, key, req)
-}
-
-// closeOwnedStreams ends every stream the activity owns. Called when the
-// activity reaches a terminal status, which is when a reader tailing it has to
-// be released. A retry is not terminal, so the next attempt keeps writing to
-// the same streams.
-func (a *Activity) closeOwnedStreams(mctx chasm.MutableContext) error {
-	for _, field := range a.Streams {
-		s := field.Get(mctx)
-		if s.State.GetClosed() {
-			continue
-		}
-		if err := s.CloseAndSchedule(mctx, nil); err != nil {
-			return err
-		}
+	result, err := a.ownedStreams().Append(mctx, key, req)
+	if err != nil || result.Deduplicated {
+		return result, err
 	}
-	return nil
+	return result, a.notifyStreamChannel(mctx, key, a.ownedStreams().Get(mctx, key), req.Limits)
 }
